@@ -1,8 +1,8 @@
 # iOS 16 on sweet (Redmi Note 10 Pro, SM7150) - working notes
 
-## a5xelte fork handoff (2026-10-19)
+## a5xelte fork handoff (2026-10-20)
 
-The Samsung SM-A510F branch has a separate dated record in `A5XELTE_PROGRESS.md` and a donor replacement map in `docs/a5xelte-migration-map.md`. An A5XELTE-configured 4 KiB XNU has reached its entry on the phone. The user physically saw the Exynos DECON loader text, five XNU-owned assembly blocks reaching the `arm_init` return point, and `XNU ENTRY` plus `XNU MMU ON` text drawn by XNU's own early assembly renderer. TWRP recovery logs confirm display state `5` and the XNU entry marker. C-stage text and dynamic `kprintf` output have not been seen. No iOS userland, root filesystem or interrupts are verified. Only BOOT p10 was written for these tests; recovery, EFS and USERDATA were preserved. The SWEET notes below are donor history, not Samsung device results.
+The Samsung SM-A510F branch has a separate dated record in `A5XELTE_PROGRESS.md` and a donor replacement map in `docs/a5xelte-migration-map.md`. Its 4 KiB XNU now shows dynamic `kprintf` text, CPU0 SGI1 and scheduler progress, and an HFS+ RAM disk root mounted on the physical phone. The latest screen reaches `/sbin/launchd` exec, then panics with `errno 2` because the test image is deliberately empty. This verifies the kernel's root mount, not iOS userland execution or eMMC. Only BOOT p10 was written for these trials; recovery, EFS and USERDATA were preserved. The SWEET notes below are donor history, not Samsung device results.
 
 ## Agent handoff / active work (2026-10-15, latest)
 
