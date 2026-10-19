@@ -15,6 +15,8 @@ def main():
     ap.add_argument("reference_boot", type=Path)
     ap.add_argument("probe_image", type=Path)
     ap.add_argument("output_boot", type=Path)
+    ap.add_argument("--ramdisk", type=Path,
+                    help="replace the reference ramdisk with an XNU payload")
     args = ap.parse_args()
     if args.output_boot.exists():
         raise SystemExit("output exists; choose a new private path")
@@ -35,7 +37,10 @@ def main():
     dt_off = ramdisk_off + align(ramdisk_size)
     if dt_off + dt_size > len(ref):
         raise SystemExit("reference image is truncated")
-    ramdisk = ref[ramdisk_off:ramdisk_off + ramdisk_size]
+    ramdisk = (args.ramdisk.read_bytes() if args.ramdisk else
+               ref[ramdisk_off:ramdisk_off + ramdisk_size])
+    if not ramdisk:
+        raise SystemExit("empty ramdisk")
     dt = ref[dt_off:dt_off + dt_size]
     if dt[:4] != b"DTBH" or struct.unpack_from("<I", dt, 4)[0] != 2:
         raise SystemExit("reference DTBH version is not the observed format")
@@ -47,6 +52,7 @@ def main():
         raise SystemExit("DTBH has no Exynos7580 hardware revision 4 entry")
     header = bytearray(ref[:page])
     struct.pack_into("<I", header, 8, len(probe))
+    struct.pack_into("<I", header, 16, len(ramdisk))
     digest = hashlib.sha1()
     for part in (probe, ramdisk, b"", dt):
         digest.update(part)

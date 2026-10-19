@@ -26,6 +26,10 @@ On 2026-10-19 the packaged probe was written to BOOT p10 after its ramdisk, DTBH
 
 `xnu/patches/0082-a5xelte-4k-entry.patch` is a first XNU entry variant: it removes the donor's 16 KiB page selection, limits initial SMP to one CPU, skips the donor framebuffer writes and places an XNU-owned physical entry marker in reserved log RAM. Patch application passed against the donor's patched XNU source. **It has not been compiled or run.** The donor GICv3, timer, UFS and framebuffer paths are still incompatible with Exynos7580; the marker is only an entry checkpoint.
 
+`shim/a5xelte/build-xnu-boot.sh` builds a separate 6 KiB Samsung Image loader. It reads the bootloader's `/chosen/linux,initrd-*` payload range, checks the `SWEETXNU` container and an isolated 512 MiB RAM window at `0x80000000`, copies Mach-O segments and the ADT, creates 4 KiB-aligned boot arguments, and jumps to the XNU physical entry. Failures request TWRP; the successful jump leaves a reserved-RAM marker for later recovery. The loader compiled with the VM's ARMv8-A cross toolchain and has no ELF relocations. It has **not** been run on the device.
+
+`tools/mkadt_a5xelte.py` generates an entry-only ADT. It omits the donor GIC and storage nodes because they are incompatible. `tools/a5xelte-pack-probe.py --ramdisk` can package an XNU payload in a Samsung BOOT image while keeping the reference DTBH. An offline package with the donor 16 KiB XNU was 16.7 MB and fit BOOT, but that donor kernel cannot execute its MMU setup on this CPU and **must not be flashed**. Build the 4 KiB XNU variant first, then use the same payload/packer path.
+
 ## Board map from the existing Linux port
 
 These are Linux-source facts, not XNU runtime proof. References: `mainline/exynos7580-a5xelte-minimal.dts`, `mainline/exynos7580-a5xelte-native.dts` and `mainline/package-boot.py` in the sma510fpmos workspace.
