@@ -6,7 +6,7 @@ Target: SM-A510F, Exynos 7580. Donor: this repository's sweet XNU 8796 and iOS 1
 
 Keep the working postmarketOS BOOT checkpoint and private backups. Use a separate a5xelte configuration. First prove that one CPU enters a Samsung-specific shim and XNU and produces recoverable text diagnostics. Do not prepare the iOS root or change USERDATA for this milestone.
 
-Run `python3 tools/a5xelte-preflight.py` on the existing Linux installation. It reads the live device tree and the CPU feature register if Linux exposes it. Unknown 16 KiB granule support remains a gate.
+Run `python3 tools/a5xelte-preflight.py` on the existing Linux installation. It reads the live device tree. The CPU feature value is useful only when supplied from a trusted raw EL1 capture: Linux masks the TGran16 field in its EL0 CPU register emulation, so a userspace `MRS` result of zero does not prove the hardware value. Arm's Cortex-A53 TRM specifies TGran16=0, meaning no 16 KiB translation granule. This is a major compatibility gate for the donor's 16 KiB XNU configuration. An EL1 measurement on this SoC should confirm the implementation before changing any BOOT image.
 
 The Linux port already captured a Samsung handoff at EL1 (CurrentEL 0x4), wrapper load 0x40205000 and FDT 0x48000000 in its attempt3 recovery log. Recheck these against the selected working BOOT before building the XNU shim; do not treat them as universal firmware constants. Samsung uses a 2048-byte Android BOOT header with DTBH; the donor's Xiaomi boot.img v2 and `fastboot boot` path do not apply. Use the existing port's guarded BOOT packaging and recovery route only after a candidate passes offline checks.
 
@@ -28,7 +28,7 @@ The diagnostic DTS explicitly calls itself a scaffold. Check addresses against t
 
 ## Implementation order
 
-1. A5xelte shim: validated RAM bounds, MMU-off entry, exception report and safe stop. Verify 16 KiB granule before using the donor page tables. Compile for baseline ARMv8-A rather than the donor's ARMv8.2 target until CPU features are measured.
+1. A5xelte shim: validated RAM bounds, MMU-off entry, exception report and safe stop. Capture raw `ID_AA64MMFR0_EL1` at EL1 before using the donor page tables. If TGran16 is zero as specified for Cortex-A53, investigate a 4 KiB XNU configuration and userland page-size assumptions; do not attempt the donor's 16 KiB MMU setup. Compile for baseline ARMv8-A rather than the donor's ARMv8.2 target until CPU features are measured.
 2. A5xelte XNU machine config: GICv2 interrupt acknowledgement, timer PPI and one CPU. Then test PSCI secondaries.
 3. Recoverable panic log, eMMC read-only and root-device identification.
 4. Exynos display, touch and keys using downstream Linux and Lineage source as hardware references.
