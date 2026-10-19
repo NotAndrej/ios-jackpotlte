@@ -1,0 +1,244 @@
+--- a/bsd/conf/files
++++ b/bsd/conf/files
+@@ -105,6 +105,7 @@
+ 
+ bsd/dev/memdev.c			standard
+ bsd/dev/sweet_ufs.c			standard
++bsd/dev/a5xelte_emmc.c			standard
+ bsd/dev/sweet_sample.c			standard
+ bsd/dev/sweet_keys.c			standard
+ bsd/dev/sweet_touch.c			standard
+--- a/iokit/bsddev/IOKitBSDInit.cpp
++++ b/iokit/bsddev/IOKitBSDInit.cpp
+@@ -67,6 +67,9 @@
+ extern void di_root_ramfile(IORegistryEntry * entry);
+ extern int IODTGetDefault(const char *key, void *infoAddr, unsigned int infoSize);
+ extern boolean_t cpuid_vmm_present(void);
++#if defined(ARM64_BOARD_CONFIG_A5XELTE)
++extern void a5xelte_emmc_probe(void);
++#endif
+ 
+ #define ROUNDUP(a, b) (((a) + ((b) - 1)) & (~((b) - 1)))
+ 
+@@ -765,6 +768,16 @@
+ 			regEntry->release();                                                            /* Toss the entry */
+ 		}
+ 	}
++
++#if defined(ARM64_BOARD_CONFIG_A5XELTE)
++	{
++	uint32_t emmcprobe = 0;
++	PE_parse_boot_argn("emmcprobe", &emmcprobe, sizeof(emmcprobe));
++	if (emmcprobe == 1) {
++		a5xelte_emmc_probe();
++	}
++	}
++#endif
+ 
+ #if defined(ARM64_BOARD_CONFIG_SWEET)
+ //
+--- /dev/null
++++ b/bsd/dev/a5xelte_emmc.c
+@@ -0,0 +1,202 @@
++/*
++ * Exynos7580 DesignWare eMMC read-only bring-up.
++ *
++ * The Samsung bootloader has already selected the eMMC user area and set up
++ * its clocks and pads. Do not reset that state or send any write command.
++ * This first stage reads only LBA 1 and validates the GPT signature. The
++ * host register map and FIFO width rules follow the working downstream
++ * dw_mmc / dw_mmc-exynos driver for the SM-A510F.
++ */
++#if defined(ARM64_BOARD_CONFIG_A5XELTE)
++#include <sys/param.h>
++#include <sys/systm.h>
++#include <sys/errno.h>
++#include <pexpert/pexpert.h>
++#include <pexpert/device_tree.h>
++#include <libkern/libkern.h>
++
++extern vm_offset_t ml_io_map(vm_offset_t phys_addr, vm_size_t size);
++
++#define EMMC_CTRL       0x000u
++#define EMMC_PWREN      0x004u
++#define EMMC_CLKENA     0x010u
++#define EMMC_TMOUT      0x014u
++#define EMMC_BLKSIZ     0x01cu
++#define EMMC_BYTCNT     0x020u
++#define EMMC_INTMASK    0x024u
++#define EMMC_CMDARG     0x028u
++#define EMMC_CMD        0x02cu
++#define EMMC_RINTSTS    0x044u
++#define EMMC_STATUS     0x048u
++#define EMMC_TCBCNT     0x05cu
++#define EMMC_TBBCNT     0x060u
++#define EMMC_VERID      0x06cu
++#define EMMC_HCON       0x070u
++#define EMMC_CLKSEL     0x0a8u /* Exynos7580 64-bit IDMAC register map */
++
++#define CTRL_INT_ENABLE (1u << 4)
++#define CTRL_DMA_ENABLE (1u << 5)
++#define CTRL_USE_IDMAC  (1u << 25)
++#define CTRL_FIFO_RESET (1u << 1)
++#define CMD_START       (1u << 31)
++#define CMD_HOLD        (1u << 29)
++#define CMD_WAIT_DATA   (1u << 13)
++#define CMD_DATA        (1u << 9)
++#define CMD_RESP_CRC    (1u << 8)
++#define CMD_RESP       (1u << 6)
++#define INT_DATA_OVER   (1u << 3)
++#define INT_CMD_DONE    (1u << 2)
++#define INT_RXDR        (1u << 5)
++#define INT_ERRORS      ((1u << 12) | (1u << 11) | (1u << 10) | (1u << 9) | \
++                         (1u << 8) | (1u << 7) | (1u << 6) | (1u << 1))
++
++static vm_offset_t emmc_regs;
++
++static inline uint32_t
++emmc_rd(uint32_t off)
++{
++	return *(volatile uint32_t *)(emmc_regs + off);
++}
++
++static inline void
++emmc_wr(uint32_t off, uint32_t value)
++{
++	*(volatile uint32_t *)(emmc_regs + off) = value;
++}
++
++static int
++emmc_read_gpt_header(void)
++{
++	uint64_t data[64] = { 0 };
++	uint32_t hcon = emmc_rd(EMMC_HCON);
++	uint32_t width = (hcon >> 7) & 7u;
++	uint32_t ver = emmc_rd(EMMC_VERID) & 0xffffu;
++	uint32_t data_off = ver < 0x240au ? 0x100u : 0x200u;
++	uint32_t unit, words, read_words = 0;
++	uint32_t ctrl = emmc_rd(EMMC_CTRL);
++	uint32_t ints = emmc_rd(EMMC_INTMASK);
++	int error = 0;
++
++	if (width > 2 || ver == 0 || ver == 0xffff ||
++	    !(emmc_rd(EMMC_PWREN) & 1u) || !(emmc_rd(EMMC_CLKENA) & 1u)) {
++		printf("A5XELTE eMMC: host unavailable (ver=%x hcon=%x clk=%x)\n",
++		    ver, hcon, emmc_rd(EMMC_CLKENA));
++		return ENXIO;
++	}
++	unit = 2u << width;
++	words = 512u / unit;
++	if (emmc_rd(EMMC_STATUS) & (1u << 9)) {
++		printf("A5XELTE eMMC: data path busy; skipping probe\n");
++		return EBUSY;
++	}
++
++	/* Polled PIO, preserving the bootloader's clock, pads and bus timing. */
++	emmc_wr(EMMC_INTMASK, 0);
++	emmc_wr(EMMC_CTRL, (ctrl & ~(CTRL_INT_ENABLE | CTRL_DMA_ENABLE |
++	    CTRL_USE_IDMAC)) | CTRL_FIFO_RESET);
++	for (unsigned i = 0; i < 1000000; i++) {
++		if (!(emmc_rd(EMMC_CTRL) & CTRL_FIFO_RESET)) {
++			break;
++		}
++		if (i == 999999) {
++			error = ETIMEDOUT;
++			goto out;
++		}
++	}
++	/* Known-good Linux attempt23 encoding: counter [31:11], extension [10:8]. */
++	emmc_wr(EMMC_TMOUT, 0x573177ffu);
++	emmc_wr(EMMC_BLKSIZ, 512);
++	emmc_wr(EMMC_BYTCNT, 512);
++	emmc_wr(EMMC_RINTSTS, 0xffffffffu);
++	emmc_wr(EMMC_CMDARG, 1); /* eMMC high-capacity sector address, GPT LBA 1 */
++	uint32_t command = CMD_START | CMD_WAIT_DATA | CMD_DATA |
++	    CMD_RESP_CRC | CMD_RESP | 17u;
++	if ((emmc_rd(EMMC_CLKSEL) >> 16) & 7u) {
++		command |= CMD_HOLD;
++	}
++	emmc_wr(EMMC_CMD, command);
++	for (unsigned i = 0; i < 4000000; i++) {
++		uint32_t pending = emmc_rd(EMMC_RINTSTS);
++		if (pending & INT_ERRORS) {
++			printf("A5XELTE eMMC: CMD17 error rint=%x status=%x words=%u/%u first=%llx tcbc=%u tbbc=%u\n",
++			    pending, emmc_rd(EMMC_STATUS), read_words, words, data[0],
++			    emmc_rd(EMMC_TCBCNT), emmc_rd(EMMC_TBBCNT));
++			error = EIO;
++			goto out;
++		}
++		uint32_t fifo = (emmc_rd(EMMC_STATUS) >> 17) & 0x1fffu;
++		while (fifo && read_words < words) {
++			if (unit == 8) {
++				/* Exynos7580 requires paired 32-bit SFR accesses for a 64-bit FIFO unit. */
++				uint32_t lo = emmc_rd(data_off);
++				uint32_t hi = emmc_rd(data_off + 4);
++				data[read_words] = (uint64_t)lo | ((uint64_t)hi << 32);
++			} else if (unit == 4) {
++				((uint32_t *)data)[read_words] = emmc_rd(data_off);
++			} else {
++				((uint16_t *)data)[read_words] =
++				    *(volatile uint16_t *)(emmc_regs + data_off);
++			}
++			read_words++;
++			fifo--;
++		}
++		/* The downstream PIO handler acknowledges RXDR after each FIFO drain. */
++		if (pending & INT_RXDR) {
++			emmc_wr(EMMC_RINTSTS, INT_RXDR);
++		}
++		if (read_words == words &&
++		    (pending & INT_DATA_OVER) && (pending & INT_CMD_DONE)) {
++			break;
++		}
++		if (i == 3999999) {
++			printf("A5XELTE eMMC: CMD17 timeout rint=%x words=%u/%u first=%llx tcbc=%u tbbc=%u\n",
++			    pending, read_words, words, data[0],
++			    emmc_rd(EMMC_TCBCNT), emmc_rd(EMMC_TBBCNT));
++			error = ETIMEDOUT;
++			goto out;
++		}
++	}
++	if (memcmp(data, "EFI PART", 8) != 0) {
++		printf("A5XELTE eMMC: LBA1 is not GPT (first=%llx)\n", data[0]);
++		error = ENXIO;
++		goto out;
++	}
++	uint32_t entries;
++	memcpy(&entries, (const char *)data + 80, sizeof(entries));
++	printf("A5XELTE eMMC: read-only GPT LBA1 OK, entries=%u, ver=%x, fifo=%u-bit\n",
++	    entries, ver, unit * 8);
++out:
++	emmc_wr(EMMC_RINTSTS, 0xffffffffu);
++	emmc_wr(EMMC_INTMASK, ints);
++	/* Keep DMA disabled: this probe does not own the bootloader's descriptors. */
++	return error;
++}
++
++void
++a5xelte_emmc_probe(void)
++{
++	DTEntry node;
++	uintptr_t const *reg = NULL;
++	unsigned int size = 0;
++	static bool attempted;
++	if (attempted) {
++		return;
++	}
++	attempted = true;
++	if (SecureDTLookupEntry(NULL, "/a5xelte-emmc", &node) != kSuccess ||
++	    SecureDTGetProperty(node, "reg", (void const **)&reg, &size) != kSuccess ||
++	    size < 2 * sizeof(uintptr_t) || reg[0] != 0x13540000u || reg[1] < 0x2000u) {
++		printf("A5XELTE eMMC: missing or unexpected ADT register window\n");
++		return;
++	}
++	emmc_regs = ml_io_map(reg[0], reg[1]);
++	if (!emmc_regs) {
++		printf("A5XELTE eMMC: MMIO map failed\n");
++		return;
++	}
++	printf("A5XELTE eMMC: host ctrl=%x status=%x clk=%x hcon=%x\n",
++	    emmc_rd(EMMC_CTRL), emmc_rd(EMMC_STATUS),
++	    emmc_rd(EMMC_CLKENA), emmc_rd(EMMC_HCON));
++	(void)emmc_read_gpt_header();
++}
++#endif /* ARM64_BOARD_CONFIG_A5XELTE */

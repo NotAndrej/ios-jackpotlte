@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Build an entry-only a5xelte ADT from the donor's minimal schema.
 
-This includes the Exynos7580 GICv2 but omits storage until a native driver exists.
-It can reach the XNU entry marker; it is not an iOS root/device tree.
+This includes the Exynos7580 GICv2 and eMMC MMIO window for a read-only
+GPT probe. It is not yet an iOS root/device tree.
 """
 import argparse
 import os
@@ -60,6 +60,9 @@ def build():
         ('width', mkadt.u32(1080)),
         ('height', mkadt.u32(1920)),
         ('stride', mkadt.u32(4320)),
+    ]))
+    root.children.append(mkadt.node('a5xelte-emmc', [
+        ('reg', mkadt.u64(0x13540000, 0x2000)),
     ]))
     return root
 
