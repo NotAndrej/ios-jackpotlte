@@ -88,10 +88,12 @@ Patch `0103` enables the same no-IOStorageFamily RAM disk guards for A5XELTE. On
 
 ## IPSW source selection
 
-The user chose iPhone 8 Plus as the userland source because its display class is closer to the A5XELTE panel. The donor's `tools/mkadt.py`, `tools/mkiosroot.sh` instructions and several userland-facing services still assume iPhone X / `D22AP`; no iPhone 8 Plus identity has been applied to the A5XELTE boot tree yet. Once the IPSW is available locally, inspect it without extracting or writing to the phone:
+The user chose iPhone 8 Plus as the userland source because its display class is closer to the A5XELTE panel. The downloaded IPSW was moved into ignored `research/ipsw/` and inspected without extracting or writing to the phone:
 
 ```sh
-python3 tools/a5xelte-inspect-ipsw.py /private/path/to/firmware.ipsw
+python3 tools/a5xelte-inspect-ipsw.py research/ipsw/iPhone_5.5_P3_16.7.16_20H392_Restore.ipsw
 ```
 
-Select the BuildManifest identity that matches the downloaded product and record its actual device class, OS/SystemOS/AppOS and DeviceTree paths. Then measure the extracted root size, adapt the A5XELTE device identity and display service, and construct a private root image within a verified storage budget. Do not copy the donor's `D22AP` device tree, 16 GiB image size, UFS path or Xiaomi flashing command into the Samsung procedure.
+BuildManifest reports iOS 16.7.16 (20H392), `iPhone10,5`/`iPhone10,2`, and both `d211ap` and `d21ap` erase/upgrade identities. Each references OS `087-86694-044.dmg` (4,723,392,522 bytes), `Cryptex1,SystemOS` `087-86588-047.dmg` (2,743,074,816 bytes), and `Cryptex1,AppOS` `087-86715-047.dmg` (10,485,760 bytes). The DeviceTree paths are `Firmware/all_flash/DeviceTree.d211ap.im4p` and `Firmware/all_flash/DeviceTree.d21ap.im4p`. These are ZIP member sizes, not the installed root size. The donor `tools/mkadt.py` and userland services still assume iPhone X / `D22AP`; no iPhone 8 Plus identity has been applied to the A5XELTE boot tree.
+
+Next, choose and validate one actual iPhone 8 Plus identity, measure the extracted root privately, adapt the A5XELTE device identity and display service, and construct a root within a verified storage budget. An XNU eMMC reader is required before an on-device HFS system disk can replace `md0`. Keep the working Linux SYSTEM and USERDATA partitions intact. Do not copy the donor's `D22AP` device tree, 16 GiB image size, UFS path or Xiaomi flashing command into the Samsung procedure.

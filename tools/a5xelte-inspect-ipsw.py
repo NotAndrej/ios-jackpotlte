@@ -8,7 +8,12 @@ import zipfile
 from pathlib import Path
 
 
-ROOT_KEYS = ("OS", "SystemOS", "AppOS", "DeviceTree")
+ROOT_KEYS = {
+    "OS": ("OS",),
+    "SystemOS": ("SystemOS", "Cryptex1,SystemOS"),
+    "AppOS": ("AppOS", "Cryptex1,AppOS"),
+    "DeviceTree": ("DeviceTree",),
+}
 
 
 def member_path(entry):
@@ -37,16 +42,18 @@ def inspect(path, device_class=None):
             matches += 1
             print(f"\nIdentity {index}: {board} — {info.get('Variant', '?')}")
             items = identity.get("Manifest", {})
-            for key in ROOT_KEYS:
-                member = member_path(items.get(key))
+            for label, keys in ROOT_KEYS.items():
+                key = next((key for key in keys if member_path(items.get(key))), None)
+                member = member_path(items[key]) if key else None
                 if not member:
-                    print(f"  {key}: absent")
+                    print(f"  {label}: absent")
                     continue
+                name = label if key == label else f"{label} [{key}]"
                 if member in names:
                     size = archive.getinfo(member).file_size
-                    print(f"  {key}: {member} ({size} bytes)")
+                    print(f"  {name}: {member} ({size} bytes)")
                 else:
-                    print(f"  {key}: {member} (not found in archive)")
+                    print(f"  {name}: {member} (not found in archive)")
         if not matches:
             raise ValueError(f"no build identity for {device_class or 'this IPSW'}")
 
