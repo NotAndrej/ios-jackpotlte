@@ -28,7 +28,7 @@ The diagnostic DTS explicitly calls itself a scaffold. Check addresses against t
 
 ## Implementation order
 
-1. A5xelte shim: validated RAM bounds, MMU-off entry, exception report and safe stop. Verify 16 KiB granule before using the donor page tables.
+1. A5xelte shim: validated RAM bounds, MMU-off entry, exception report and safe stop. Verify 16 KiB granule before using the donor page tables. Compile for baseline ARMv8-A rather than the donor's ARMv8.2 target until CPU features are measured.
 2. A5xelte XNU machine config: GICv2 interrupt acknowledgement, timer PPI and one CPU. Then test PSCI secondaries.
 3. Recoverable panic log, eMMC read-only and root-device identification.
 4. Exynos display, touch and keys using downstream Linux and Lineage source as hardware references.
