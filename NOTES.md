@@ -1,5 +1,9 @@
 # iOS 16 on sweet (Redmi Note 10 Pro, SM7150) - working notes
 
+## a5xelte fork handoff (2026-10-19)
+
+This branch also carries a separate Samsung SM-A510F entry experiment; see `A5XELTE_PROGRESS.md` for its own dated status and `docs/a5xelte-bringup.md` for the technical record. Xcode 27.1 on macOS 27.2 locally built a 4 KiB `kernel.development.sweet` with patches 0082–0084. Build SHA-256: `f093a6bc0d8f9c060f6dc4429810f768e00ec3f093ca624f1cd2694bd9a9b444`. The 19,990,544-byte Samsung BOOT candidate (SHA-256 `8dff262ad0934b71396900eefef2ce34b681f0574e5e37ba065fc7482cff5921`) was written to BOOT p10 from TWRP and read back with the same hash. After `adb reboot`, the user saw the Samsung logo and returned to TWRP by keys. `/proc/last_kmsg` contains the loader's `A5XNU002` marker and the XNU-owned `XNUELTE1` marker at the expected `+0x100` offset: **XNU entry on the phone is verified**. There is no evidence yet of a successful XNU MMU transition or iOS userland. The A5XELTE-named kernel has linked but has not yet been device-tested. USERDATA, recovery and EFS were not written.
+
 ## Agent handoff / active work (2026-10-15, latest)
 
 ### >>> UPDATE 2026-10-18 (read first, then the 10-17 handoff below) <<<
