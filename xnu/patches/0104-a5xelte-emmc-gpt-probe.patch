@@ -38,7 +38,7 @@
 +		OSSafeReleaseNULL(matching);
 +		int emmc_error = a5xelte_emmc_rootdev(root);
 +		if (emmc_error) {
-+			panic("IOFindBSDRoot: A5XELTE eMMC SYSTEM unavailable: %d", emmc_error);
++			panic("IOFindBSDRoot: A5XELTE eMMC root unavailable: %d", emmc_error);
 +		}
 +		strlcpy(rootName, rdBootVar, rootNameSize);
 +		IOLog("BSD root: %s, major %d, minor %d\n", rootName, major(*root), minor(*root));
@@ -51,13 +51,13 @@
  //
 --- /dev/null
 +++ b/bsd/dev/a5xelte_emmc.c
-@@ -0,0 +1,480 @@
+@@ -0,0 +1,492 @@
 +/*
 + * Exynos7580 DesignWare eMMC read-only bring-up.
 + *
 + * The Samsung bootloader has already selected the eMMC user area and set up
 + * its clocks and pads. Do not reset that state or send any write command.
-+ * Only the named GPT SYSTEM partition is exposed as a read-only BSD disk.
++ * Only a selected GPT SYSTEM or USERDATA partition is exposed as a read-only BSD disk.
 + * The host register map and FIFO width rules follow the working downstream
 + * dw_mmc / dw_mmc-exynos driver for the SM-A510F.
 + */
@@ -113,6 +113,7 @@
 +
 +static vm_offset_t emmc_regs;
 +static uint64_t emmc_first_lba, emmc_nsectors;
++static char emmc_partition_name[16] = "SYSTEM";
 +static dev_t emmc_bdev;
 +static bool emmc_ready;
 +static LCK_GRP_DECLARE(a5xelte_emmc_grp, "a5xelte_emmc");
@@ -256,9 +257,19 @@
 +}
 +
 +static int
-+emmc_find_system(void)
++emmc_find_root_partition(void)
 +{
 +	uint8_t hdr[512], entry[512];
++	(void)PE_parse_boot_argn("emmcroot", emmc_partition_name,
++	    sizeof(emmc_partition_name));
++	emmc_partition_name[sizeof(emmc_partition_name) - 1] = '\0';
++	if (strcmp(emmc_partition_name, "SYSTEM") &&
++	    strcmp(emmc_partition_name, "USERDATA")) {
++		printf("A5XELTE eMMC: emmcroot must be SYSTEM or USERDATA\n");
++		return EINVAL;
++	}
++	emmc_first_lba = 0;
++	emmc_nsectors = 0;
 +	int error = emmc_read_sector(1, hdr);
 +	if (error) {
 +		return error;
@@ -296,10 +307,10 @@
 +		crc = emmc_crc32(crc, entry, 512);
 +		for (uint32_t j = 0; j < 4; j++) {
 +			const uint8_t *p = entry + j * 128;
-+			static const char name[] = "SYSTEM";
 +			bool match = true;
-+			for (unsigned k = 0; k < sizeof(name); k++) {
-+				if (p[56 + k * 2] != (uint8_t)name[k] || p[57 + k * 2] != 0) {
++			for (unsigned k = 0; k <= strlen(emmc_partition_name); k++) {
++				if (p[56 + k * 2] != (uint8_t)emmc_partition_name[k] ||
++				    p[57 + k * 2] != 0) {
 +					match = false;
 +					break;
 +				}
@@ -320,11 +331,11 @@
 +		return EIO;
 +	}
 +	if (!emmc_nsectors) {
-+		printf("A5XELTE eMMC: SYSTEM partition not found\n");
++		printf("A5XELTE eMMC: %s partition not found\n", emmc_partition_name);
 +		return ENXIO;
 +	}
-+	printf("A5XELTE eMMC: GPT SYSTEM first=%llu sectors=%llu read-only\n",
-+	    emmc_first_lba, emmc_nsectors);
++	printf("A5XELTE eMMC: GPT %s first=%llu sectors=%llu read-only\n",
++	    emmc_partition_name, emmc_first_lba, emmc_nsectors);
 +	return 0;
 +}
 +
@@ -358,7 +369,7 @@
 +a5xelte_emmc_probe(void)
 +{
 +	if (!emmc_map_host()) {
-+		(void)emmc_find_system();
++		(void)emmc_find_root_partition();
 +	}
 +}
 +
@@ -510,7 +521,7 @@
 +		if (error) {
 +			return error;
 +		}
-+		error = emmc_find_system();
++		error = emmc_find_root_partition();
 +		if (error) {
 +			return error;
 +		}
@@ -526,7 +537,8 @@
 +		devfs_make_node(emmc_bdev, DEVFS_BLOCK, UID_ROOT, GID_OPERATOR, 0640, "emmcroot0");
 +		devfs_make_node(makedev(cmajor, 0), DEVFS_CHAR, UID_ROOT, GID_OPERATOR, 0640, "remmcroot0");
 +		emmc_ready = true;
-+		printf("A5XELTE eMMC: /dev/emmcroot0 ready, GPT SYSTEM read-only\n");
++		printf("A5XELTE eMMC: /dev/emmcroot0 ready, GPT %s read-only\n",
++		    emmc_partition_name);
 +	}
 +	*dev = emmc_bdev;
 +	return 0;
