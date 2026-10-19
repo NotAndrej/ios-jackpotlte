@@ -22,7 +22,7 @@ The reproducible register probe is in `tools/a5xelte-mmfr0/`. Build it with `mak
 
 `shim/a5xelte/build-probe4k.sh` builds a Samsung Image for a single-core EL1 test. It verifies 4 KiB granule support, constructs 4 KiB L1/L2/L3 identity tables, enables the MMU, records TCR/SCTLR and a result code in the reserved ramoops page, then requests TWRP recovery through the Exynos7580 PMU reset-mode registers. The probe itself does not access block devices. The host packer and flash operation are separate.
 
-On 2026-10-19 the packaged probe was written to BOOT p10 after its ramdisk, DTBH and header digest were checked against the working image. Readback matched the candidate. The ordinary `reboot` command did not restart the shell-based Linux system; `reboot -f` did. The phone entered TWRP automatically. The TWRP `/proc/last_kmsg` capture contained `A5XNU001` with CurrentEL `0x4`, SCTLR before `0x30c5183e`, FDT `0x48000000`, Image `0x40205000`, `ID_AA64MMFR0_EL1=0x1122`, result `4`, TCR after `0x80a03520`, and SCTLR after `0x30c5183f`. This is a **live 4 KiB MMU result**, not XNU execution. The captured `CNTFRQ_EL0` was zero; the Exynos timer path needs separate attention. At the user's request the Linux BOOT image was not restored, and the phone remains in TWRP for XNU work. No USERDATA, EFS or recovery partition was written.
+On 2026-10-19 the packaged probe was written to BOOT p10 after its ramdisk, DTBH and header digest were checked against the working image. Readback matched the candidate. The ordinary `reboot` command did not restart the shell-based Linux system; `reboot -f` did. The phone entered TWRP automatically. The TWRP `/proc/last_kmsg` capture contained `A5XNU001` with CurrentEL `0x4`, SCTLR before `0x30c5183e`, FDT `0x48000000`, Image `0x40205000`, `ID_AA64MMFR0_EL1=0x1122`, result `4`, TCR after `0x80a03520`, and SCTLR after `0x30c5183f`. This is a **live 4 KiB MMU result**, not XNU execution. The captured `CNTFRQ_EL0` was zero; the Exynos timer path needs separate attention. At the user's request the Linux BOOT image was not restored. No USERDATA, EFS or recovery partition was written.
 
 `xnu/patches/0082-a5xelte-4k-entry.patch` is a first XNU entry variant: it removes the donor's 16 KiB page selection, limits initial SMP to one CPU, skips the donor framebuffer writes and places an XNU-owned physical entry marker in reserved log RAM. `0083` accommodates Xcode 27's generated `IORPC.kernelContent` references, and `0084` selects the 36-bit device user VA limit so the 4 KiB commpage nesting assertion holds. The donor GICv3, timer, UFS and framebuffer paths are still incompatible with Exynos7580; the marker is only an entry checkpoint.
 
@@ -62,12 +62,18 @@ The diagnostic DTS explicitly calls itself a scaffold. Check addresses against t
 
 Build output, kernel observations and user-verified screen/input behavior must be recorded separately. The only partition operation in this branch's live test was the explicitly authorized diagnostic BOOT p10 write.
 
-## Console boot argument for the next C-stage test
+## C console and Cortex-A53 build
 
-The current early assembly renderer prints fixed XNU-owned strings before C initialization. The donor's DEVELOPMENT `kprintf` path is disabled by default, even with `debug=0xc`; the donor notes require `-enable_kprintf_spam` once `serial_init` can run. For a future A5XELTE payload, pass an explicit command line to `tools/mkpayload.py`:
+The early assembly renderer prints fixed XNU-owned strings before C initialization. The A5XELTE framebuffer serial node is `a5xelte-fbcon` at physical `0x67000000`. With the 39-bit kernel VA fix, the phone displayed dynamic XNU C startup and a panic on `ldadd` after `cpu_bootstrap`. The donor's DEVELOPMENT `kprintf` path is disabled by default, even with `debug=0xc`; the donor notes require `-enable_kprintf_spam` once `serial_init` runs. Pass an explicit command line to `tools/mkpayload.py`:
 
 ```sh
 --cmdline 'debug=0xc serial=3 cpus=1 keepsyms=1 -enable_kprintf_spam -noprogress'
 ```
 
-This flag does not fix a failure before `arm_init` or make the fixed assembly strings into dynamic `kprintf` output. The A5XELTE framebuffer serial node is `a5xelte-fbcon` at physical `0x67000000`; it must be verified on the phone after C startup. Do not use the donor's `rd=ufsroot0`, `sweetfb_*`, UFS or USERDATA arguments on this device.
+The A5's Cortex-A53 requires `-mcpu=cortex-a53` for *all* kernel C and C++ objects; `-march=armv8-a` alone leaves Xcode's Apple M1 default CPU and emits unsupported LSE atomics. Patches `0094`–`0096` also disable PAN and replace the commpage's `casa` operations with ARMv8.0 LL/SC trylocks. The independently built libdispatch firehose archive must be rebuilt before the final XNU link:
+
+```sh
+tools/a5xelte-build-firehose.sh /path/to/darwin-xnu-build
+```
+
+The helper uses the already staged libdispatch and fakeroot, verifies the resulting arm64 archive contains no LSE instructions, and installs it into that local build tree. Remove the old `kernel.development.a5xelte.unstripped` output before relinking so XNU includes the replacement archive. The local build may still fail at `dsymutil` on `/dev/fd` after successfully linking the unstripped Mach-O. Do not use the donor's `rd=ufsroot0`, `sweetfb_*`, UFS or USERDATA arguments on this device.
