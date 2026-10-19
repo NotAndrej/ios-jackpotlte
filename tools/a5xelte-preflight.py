@@ -47,7 +47,8 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--dt-root", type=Path, default=Path("/proc/device-tree"))
     ap.add_argument("--cpu-reg", type=Path, default=Path(
-        "/sys/devices/system/cpu/cpu0/regs/identification/id_aa64mmfr0_el1"))
+        "/sys/devices/system/cpu/cpu0/regs/identification/id_aa64mmfr0_el1"),
+        help="Only use a trusted raw EL1 register value; Linux may hide this field from EL0")
     args = ap.parse_args()
     dt = args.dt_root
     ac_raw = cells(prop(dt / "#address-cells"), 1)
@@ -74,7 +75,7 @@ def main():
         compatible = strings(prop(node / "compatible"))
         if node.name.startswith("memory@") or strings(prop(node / "device_type")) == ["memory"]:
             report["memory"].append({"node": node.name, "reg": reg(prop(node / "reg"), ac, sc)})
-        if prop(node / "interrupt-controller") is not None:
+        if prop(node / "interrupt-controller") is not None and any("gic" in item for item in compatible):
             report["gic"].append({"node": str(node.relative_to(dt)), "compatible": compatible,
                                   "reg": reg(prop(node / "reg"), ac, sc) if node.parent == dt else None})
         if "arm,armv8-timer" in compatible or "arm,armv7-timer" in compatible:
@@ -85,7 +86,7 @@ def main():
     if cpus.is_dir():
         report["cpu_count"] = sum(1 for node in cpus.iterdir()
                                   if node.is_dir() and node.name.startswith("cpu@"))
-    raw = prop(args.cpu_reg)
+    # A userspace MRS can be Linux-emulated with TGran16 masked to zero.\n    # Treat this file as meaningful only if its producer captured raw EL1 data.\n    raw = prop(args.cpu_reg)
     if raw:
         try:
             mmfr0 = int(raw.strip(), 0)
@@ -94,7 +95,7 @@ def main():
         else:
             report["id_aa64mmfr0_el1"] = hex(mmfr0)
             report["tgran16"] = (mmfr0 >> 20) & 0xf
-            report["supports_16k_granule"] = report["tgran16"] == 0
+            report["supports_16k_granule"] = report["tgran16"] == 1
     print(json.dumps(report, indent=2, sort_keys=True))
 
 
