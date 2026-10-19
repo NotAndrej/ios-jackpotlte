@@ -10,6 +10,14 @@ Run `python3 tools/a5xelte-preflight.py` on the existing Linux installation. It 
 
 The Linux port already captured a Samsung handoff at EL1 (CurrentEL 0x4), wrapper load 0x40205000 and FDT 0x48000000 in its attempt3 recovery log. Recheck these against the selected working BOOT before building the XNU shim; do not treat them as universal firmware constants. Samsung uses a 2048-byte Android BOOT header with DTBH; the donor's Xiaomi boot.img v2 and `fastboot boot` path do not apply. Use the existing port's guarded BOOT packaging and recovery route only after a candidate passes offline checks.
 
+## Live CPU granule result (2026-10-19)
+
+The running 7.2.8 a5xelte Linux kernel reported MIDR_EL1 `0x410fd033` (Cortex-A53 r0p3). A temporary GPL module built against that exact kernel read `ID_AA64MMFR0_EL1=0x00000000001122` at EL1; `TGran16[23:20]=0`. The module was unloaded and its tmpfs copy removed. This is a device-side register observation, not an XNU boot. Arm's Cortex-A53 TRM defines zero as no 16 KiB translation granule.
+
+The donor's `shim/mmu.c` uses `PG_SHIFT=14`, `TG0=16K`, `TG1=16K` and 2048-entry page tables; `SWEET.h` defines `__ARM_16K_PG__`. These cannot be reused on this CPU. The a5xelte path must use 4 KiB tables and a distinct XNU board configuration compiled for ARMv8-A. Apple's XNU 8796 BCM2837 board config demonstrates an ARM64 target without `__ARM_16K_PG__`, but the donor's GICv3, timer and storage paths still require Exynos-specific replacements. iOS 16 userland operation on a 4 KiB XNU kernel remains unverified.
+
+The reproducible register probe is in `tools/a5xelte-mmfr0/`. Build it with `make -C "$KDIR" M="$PWD/tools/a5xelte-mmfr0" modules` against the exact running kernel. Loading a module is a live kernel operation; run it only on the lab device and remove it immediately afterward.
+
 ## Board map from the existing Linux port
 
 These are Linux-source facts, not XNU runtime proof. References: `mainline/exynos7580-a5xelte-minimal.dts`, `mainline/exynos7580-a5xelte-native.dts` and `mainline/package-boot.py` in the sma510fpmos workspace.
