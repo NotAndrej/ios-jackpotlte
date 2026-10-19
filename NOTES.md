@@ -2,7 +2,7 @@
 
 ## a5xelte fork handoff (2026-10-19)
 
-The Samsung SM-A510F branch has a separate dated record in `A5XELTE_PROGRESS.md` and a donor replacement map in `docs/a5xelte-migration-map.md`. An A5XELTE-configured 4 KiB XNU has reached its entry on the phone. The user physically saw the Exynos DECON loader text, an XNU-owned green entry block and a blue block written after the XNU MMU enable. The TWRP recovery log confirms display state `5` and the XNU entry marker. A first `arm_init`/framebuffer-console build did not show C-stage text; assembly checkpoints between MMU enable and C entry are prepared for the next device test. No iOS userland, root filesystem, interrupts or general XNU console output is verified. Only BOOT p10 was written for these tests; recovery, EFS and USERDATA were preserved. The SWEET notes below are donor history, not Samsung device results.
+The Samsung SM-A510F branch has a separate dated record in `A5XELTE_PROGRESS.md` and a donor replacement map in `docs/a5xelte-migration-map.md`. An A5XELTE-configured 4 KiB XNU has reached its entry on the phone. The user physically saw the Exynos DECON loader text, five XNU-owned assembly blocks reaching the `arm_init` return point, and `XNU ENTRY` plus `XNU MMU ON` text drawn by XNU's own early assembly renderer. TWRP recovery logs confirm display state `5` and the XNU entry marker. C-stage text and dynamic `kprintf` output have not been seen. No iOS userland, root filesystem or interrupts are verified. Only BOOT p10 was written for these tests; recovery, EFS and USERDATA were preserved. The SWEET notes below are donor history, not Samsung device results.
 
 ## Agent handoff / active work (2026-10-15, latest)
 

@@ -61,3 +61,13 @@ The diagnostic DTS explicitly calls itself a scaffold. Check addresses against t
 5. iOS 16 root/userland only after memory and storage sizing: this board has 2 GiB RAM and about 11.5 GiB USERDATA, so the donor's 16 GiB root-image command is unsuitable as written.
 
 Build output, kernel observations and user-verified screen/input behavior must be recorded separately. The only partition operation in this branch's live test was the explicitly authorized diagnostic BOOT p10 write.
+
+## Console boot argument for the next C-stage test
+
+The current early assembly renderer prints fixed XNU-owned strings before C initialization. The donor's DEVELOPMENT `kprintf` path is disabled by default, even with `debug=0xc`; the donor notes require `-enable_kprintf_spam` once `serial_init` can run. For a future A5XELTE payload, pass an explicit command line to `tools/mkpayload.py`:
+
+```sh
+--cmdline 'debug=0xc serial=3 cpus=1 keepsyms=1 -enable_kprintf_spam -noprogress'
+```
+
+This flag does not fix a failure before `arm_init` or make the fixed assembly strings into dynamic `kprintf` output. The A5XELTE framebuffer serial node is `a5xelte-fbcon` at physical `0x67000000`; it must be verified on the phone after C startup. Do not use the donor's `rd=ufsroot0`, `sweetfb_*`, UFS or USERDATA arguments on this device.
