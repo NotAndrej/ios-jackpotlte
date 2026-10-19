@@ -68,18 +68,18 @@ def main():
     }
     if not dt.is_dir():
         raise SystemExit(f"missing device tree: {dt}")
-    for node in dt.iterdir():
+    for node in dt.rglob("*"):
         if not node.is_dir():
             continue
         compatible = strings(prop(node / "compatible"))
         if node.name.startswith("memory@") or strings(prop(node / "device_type")) == ["memory"]:
             report["memory"].append({"node": node.name, "reg": reg(prop(node / "reg"), ac, sc)})
         if prop(node / "interrupt-controller") is not None:
-            report["gic"].append({"node": node.name, "compatible": compatible,
-                                  "reg": reg(prop(node / "reg"), ac, sc)})
+            report["gic"].append({"node": str(node.relative_to(dt)), "compatible": compatible,
+                                  "reg": reg(prop(node / "reg"), ac, sc) if node.parent == dt else None})
         if "arm,armv8-timer" in compatible or "arm,armv7-timer" in compatible:
             freq = cells(prop(node / "clock-frequency"), 1)
-            report["timer"].append({"node": node.name, "clock_hz": freq[0] if freq else None,
+            report["timer"].append({"node": str(node.relative_to(dt)), "clock_hz": freq[0] if freq else None,
                                     "interrupts_be32": (prop(node / "interrupts") or b"").hex()})
     cpus = dt / "cpus"
     if cpus.is_dir():
