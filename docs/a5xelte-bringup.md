@@ -8,7 +8,7 @@ Keep the working postmarketOS BOOT checkpoint and private backups. Use a separat
 
 Run `python3 tools/a5xelte-preflight.py` on the existing Linux installation. It reads the live device tree and the CPU feature register if Linux exposes it. Unknown 16 KiB granule support remains a gate.
 
-Capture the installed BOOT header, DTBH hardware-revision entry, load addresses and handoff exception level before building the shim. Samsung uses a 2048-byte Android BOOT header with DTBH; the donor's Xiaomi boot.img v2 and `fastboot boot` path do not apply. Use the existing port's guarded BOOT packaging and recovery route only after a candidate passes offline checks.
+The Linux port already captured a Samsung handoff at EL1 (CurrentEL 0x4), wrapper load 0x40205000 and FDT 0x48000000 in its attempt3 recovery log. Recheck these against the selected working BOOT before building the XNU shim; do not treat them as universal firmware constants. Samsung uses a 2048-byte Android BOOT header with DTBH; the donor's Xiaomi boot.img v2 and `fastboot boot` path do not apply. Use the existing port's guarded BOOT packaging and recovery route only after a candidate passes offline checks.
 
 ## Board map from the existing Linux port
 
@@ -21,7 +21,7 @@ These are Linux-source facts, not XNU runtime proof. References: `mainline/exyno
 | Timer | 26 MHz; virtual timer PPI 11, INTID 27 | 19.2 MHz; INTID 19 |
 | RAM | Starts 0x40000000; excludes firmware and multimedia reservations | Upper bank at 0x100000000 |
 | Storage | DesignWare eMMC at 0x13540000, SPI 245 | Qualcomm UFS and ufsroot0 |
-| Boot | Android BOOT plus DTBH rev3 for hardware rev4; BOOT p10 | Temporary Xiaomi fastboot boot |
+| Boot | Android BOOT plus DTBH rev3 for hardware rev4; BOOT p10; observed EL1 handoff | Temporary Xiaomi fastboot boot |
 | Data | Linux USERDATA is in use; EFS p3 and recovery p11 preserved | HFS+ root in USERDATA |
 
 The diagnostic DTS explicitly calls itself a scaffold. Check addresses against the installed BOOT DTB and read-only runtime evidence before hard-coding them.
