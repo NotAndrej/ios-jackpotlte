@@ -77,3 +77,9 @@ tools/a5xelte-build-firehose.sh /path/to/darwin-xnu-build
 ```
 
 The helper uses the already staged libdispatch and fakeroot, verifies the resulting arm64 archive contains no LSE instructions, and installs it into that local build tree. Remove the old `kernel.development.a5xelte.unstripped` output before relinking so XNU includes the replacement archive. The local build may still fail at `dsymutil` on `/dev/fd` after successfully linking the unstripped Mach-O. Do not use the donor's `rd=ufsroot0`, `sweetfb_*`, UFS or USERDATA arguments on this device.
+
+## RAM disk root probe (2026-10-20)
+
+The first A5XELTE build with the built-in libpthread provider passed its earlier panic and reached the BSD root wait for `IOMedia` with `Content=Apple_HFS`. To test the in-memory path without partitioning USERDATA, format an empty 8 MiB HFS+ file in a private temporary directory and pass it to `tools/mkpayload.py --ramdisk` with `rd=md0` in the command line. The packer adds `/chosen/memory-map/RAMDisk` to the ADT; `tools/a5xelte-pack-probe.py --ramdisk` then embeds the resulting XNU payload in the Samsung BOOT image. Keep the stock BOOT reference and generated images outside Git, check the 32 MiB BOOT size limit, and compare the exact p10 readback before reboot.
+
+On the physical phone the kernel printed `Added memory device md0/rmd0` and `BSD root: md0`. It then panicked at `IOService.cpp:5200` because `IOBlockStorageDriverClass` is absent. The donor already permits its RAM disk boot without IOStorageFamily under `ARM64_BOARD_CONFIG_SWEET`; the A5XELTE build did not select that guard. This is a class-availability assertion, not evidence that the empty HFS+ volume mounted. No disk partition other than BOOT p10 was written.
