@@ -1,6 +1,6 @@
 # XNU build targets
 
-The A5XELTE fork builds XNU 8796 locally with `MACHINE_CONFIG=A5XELTE` and 4 KiB pages. Its Samsung-specific changes begin at `patches/0082-a5xelte-4k-entry.patch`; the earlier SWEET patches still supply shared XNU and userland scaffolding. The current physical milestone is five XNU assembly checkpoints plus XNU-rendered early text at entry and after MMU enable. C/`kprintf` output and iOS boot remain unverified. See [the A5XELTE progress log](../A5XELTE_PROGRESS.md) and [migration map](../docs/a5xelte-migration-map.md).
+The A5XELTE fork builds XNU 8796 locally with `MACHINE_CONFIG=A5XELTE` and 4 KiB pages. Its Samsung-specific changes begin at `patches/0082-a5xelte-4k-entry.patch`; the earlier SWEET patches still supply shared XNU and userland scaffolding. The physical phone has displayed dynamic C/`kprintf` output, passed CPU0 SGI1, registered pthread and HFS, and selected an in-memory `md0` root. The next observed panic was the absent `IOBlockStorageDriverClass` assertion; patch `0103` is under device test. HFS root mount and iOS userland remain unverified. See [the A5XELTE progress log](../A5XELTE_PROGRESS.md) and [migration map](../docs/a5xelte-migration-map.md).
 
 ## Original SWEET build notes
 
