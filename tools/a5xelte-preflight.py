@@ -86,7 +86,9 @@ def main():
     if cpus.is_dir():
         report["cpu_count"] = sum(1 for node in cpus.iterdir()
                                   if node.is_dir() and node.name.startswith("cpu@"))
-    # A userspace MRS can be Linux-emulated with TGran16 masked to zero.\n    # Treat this file as meaningful only if its producer captured raw EL1 data.\n    raw = prop(args.cpu_reg)
+    # A userspace MRS can be Linux-emulated with TGran16 masked to zero.
+    # Treat this file as meaningful only if its producer captured raw EL1 data.
+    raw = prop(args.cpu_reg)
     if raw:
         try:
             mmfr0 = int(raw.strip(), 0)
