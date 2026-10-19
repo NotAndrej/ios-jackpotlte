@@ -84,4 +84,14 @@ The first A5XELTE build with the built-in libpthread provider passed its earlier
 
 On the physical phone the kernel printed `Added memory device md0/rmd0` and `BSD root: md0`. It then panicked at `IOService.cpp:5200` because `IOBlockStorageDriverClass` is absent. The donor already permits its RAM disk boot without IOStorageFamily under `ARM64_BOARD_CONFIG_SWEET`; the A5XELTE build did not select that guard. This is a class-availability assertion, not evidence that the empty HFS+ volume mounted. No disk partition other than BOOT p10 was written.
 
-Patch `0103` enables the same no-IOStorageFamily RAM disk guards for A5XELTE. On the next phone boot the kernel printed `hfs: mounted A5XNU on device ... (st: 0)` and attempted `/sbin/launchd`. The empty test volume has no executable at that path, so process 1 panicked with `errno 2` at `kern_exec.c:6929`. This is a verified root mount and userland exec attempt, not an iOS userland boot. An actual iOS root will require the donor's iPhone X iOS 16.7.16 OS/SystemOS/AppOS contents and an A5XELTE storage path larger than BOOT's 32 MiB limit; the donor's 16 GiB image cannot fit this phone's roughly 11.5 GiB USERDATA as-is. Prepare and size that root privately only after the XNU storage path is established. The current test still writes only BOOT p10.
+Patch `0103` enables the same no-IOStorageFamily RAM disk guards for A5XELTE. On the next phone boot the kernel printed `hfs: mounted A5XNU on device ... (st: 0)` and attempted `/sbin/launchd`. The empty test volume has no executable at that path, so process 1 panicked with `errno 2` at `kern_exec.c:6929`. This is a verified root mount and userland exec attempt, not an iOS userland boot. An actual iOS root will require OS/SystemOS/AppOS contents and an A5XELTE storage path larger than BOOT's 32 MiB limit; the donor's 16 GiB image cannot fit this phone's roughly 11.5 GiB USERDATA as-is. Prepare and size that root privately only after the XNU storage path is established. The current test still writes only BOOT p10.
+
+## IPSW source selection
+
+The user chose iPhone 8 Plus as the userland source because its display class is closer to the A5XELTE panel. The donor's `tools/mkadt.py`, `tools/mkiosroot.sh` instructions and several userland-facing services still assume iPhone X / `D22AP`; no iPhone 8 Plus identity has been applied to the A5XELTE boot tree yet. Once the IPSW is available locally, inspect it without extracting or writing to the phone:
+
+```sh
+python3 tools/a5xelte-inspect-ipsw.py /private/path/to/firmware.ipsw
+```
+
+Select the BuildManifest identity that matches the downloaded product and record its actual device class, OS/SystemOS/AppOS and DeviceTree paths. Then measure the extracted root size, adapt the A5XELTE device identity and display service, and construct a private root image within a verified storage budget. Do not copy the donor's `D22AP` device tree, 16 GiB image size, UFS path or Xiaomi flashing command into the Samsung procedure.
