@@ -10,6 +10,12 @@ The verified native driver is `mainline/drivers/exynos7580-drm-handoff.c` in the
 
 The driver's `pipe_enable()` waits for the current command-mode frame, stops and resets DECON, disables only the display SysMMU after DMA stops, sets window format/stride/size/trigger registers, prepares DSIM while retaining firmware panel power, restores the panel's DCS column and page ranges, sets the scanout DMA address, then starts DECON and the software trigger. It checks the power domain and DSIM state before touching the display. The Samsung logo can remain in panel GRAM while there is no active scanout; this is an inference from the failed RAM-write test and the driver sequence.
 
+## Device-verified DECON handoff
+
+The A5XELTE loader now checks the powered display domain and DSIM dimensions, enables the six gates used by the Linux driver, stops and resets DECON with bounded waits, and disables the display SysMMU only after stopping DMA. It programs a new 1080×1920 XRGB8888 scanout at physical `0x67000000`, restores DCS column/page/address mode, then starts DECON. These steps are in `shim/a5xelte/display_console.c` and are independent of iOS userland.
+
+On 2026-10-19 the user saw `A5XELTE XNU`, `DECON DISPLAY READY`, `XNU ENTRY:`, `MMU ON:`, a green XNU entry block and a blue XNU post-MMU block on the physical SM-A510F. TWRP's recovered reserved log recorded display state `5`, DECON `0x8010010f`, FB_START `0x67000000`, and the XNU-owned entry marker. This verifies scanout and XNU execution after enabling the 4 KiB MMU. The subsequently built ADT framebuffer console has not yet shown text on the phone.
+
 ## Next implementation boundary
 
-First capture the boot handoff's DECON `VIDCON0`, `FB_START`, display SysMMU control, DSIM status/configuration and power-domain status into the existing reserved RAM log, without modifying display registers. Compare those values with the Linux driver's checks. An early XNU console must then use a bounded Exynos7580 DECON/DSIM handoff with a known physical scanout buffer and the actual clock state. Keep display support independent of the iOS userland and record physical screen confirmation separately from build and RAM-marker evidence.
+The loader already captures DECON, DSIM, SysMMU and power status in reserved RAM and performs the bounded handoff. The immediate task is locating the stop between the visible post-MMU XNU assembly block and `arm_init` with preprinted stage labels and assembly-owned status blocks. Once XNU reaches C initialization, confirm `a5xelte-fbcon` actually maps the scanout buffer and displays `kprintf` output. Keep screen confirmation, recovered log contents, build success and iOS userland claims separate.

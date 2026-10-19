@@ -55,6 +55,12 @@ def build():
     ]))
     root.children = [n for n in root.children if n.prop('name') not in
                      (mkadt.cstr('sweet-fbcon'), mkadt.cstr('sweet-ufs'))]
+    root.children.append(mkadt.node('a5xelte-fbcon', [
+        ('reg', mkadt.u64(0x67000000, 1080 * 1920 * 4)),
+        ('width', mkadt.u32(1080)),
+        ('height', mkadt.u32(1920)),
+        ('stride', mkadt.u32(4320)),
+    ]))
     return root
 
 

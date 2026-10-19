@@ -4,6 +4,7 @@
  */
 #include <stdint.h>
 #include "../fdt.h"
+#include "display_console.h"
 
 #define LOG_BASE 0x469ff000UL
 #define RAM_BASE 0x80000000UL
@@ -150,6 +151,7 @@ uintptr_t a5_prepare_xnu(uintptr_t fdt, volatile uint64_t *log)
     log[16] = p->nsegs;
     log[17] = ba_pa;
     log[10] = 5;
+    log[77] = (int64_t)a5_display_console_start(log);
     clean_bytes(LOG_BASE, LOG_BASE + PAGE_SIZE);
     __asm__ volatile("ic iallu; dsb sy; isb" : : : "memory");
     return entry_pa;
