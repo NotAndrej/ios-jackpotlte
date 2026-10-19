@@ -20,7 +20,7 @@
  
  #define ROUNDUP(a, b) (((a) + ((b) - 1)) & (~((b) - 1)))
  
-@@ -765,6 +768,16 @@
+@@ -765,6 +768,28 @@
  			regEntry->release();                                                            /* Toss the entry */
  		}
  	}
@@ -33,26 +33,45 @@
 +		a5xelte_emmc_probe();
 +	}
 +	}
++	if (strcmp(rdBootVar, "emmcroot0") == 0) {
++		extern int a5xelte_emmc_rootdev(dev_t *dev);
++		OSSafeReleaseNULL(matching);
++		int emmc_error = a5xelte_emmc_rootdev(root);
++		if (emmc_error) {
++			panic("IOFindBSDRoot: A5XELTE eMMC SYSTEM unavailable: %d", emmc_error);
++		}
++		strlcpy(rootName, rdBootVar, rootNameSize);
++		IOLog("BSD root: %s, major %d, minor %d\n", rootName, major(*root), minor(*root));
++		*oflags = 0;
++		goto iofrootx;
++	}
 +#endif
  
  #if defined(ARM64_BOARD_CONFIG_SWEET)
  //
 --- /dev/null
 +++ b/bsd/dev/a5xelte_emmc.c
-@@ -0,0 +1,202 @@
+@@ -0,0 +1,480 @@
 +/*
 + * Exynos7580 DesignWare eMMC read-only bring-up.
 + *
 + * The Samsung bootloader has already selected the eMMC user area and set up
 + * its clocks and pads. Do not reset that state or send any write command.
-+ * This first stage reads only LBA 1 and validates the GPT signature. The
-+ * host register map and FIFO width rules follow the working downstream
++ * Only the named GPT SYSTEM partition is exposed as a read-only BSD disk.
++ * The host register map and FIFO width rules follow the working downstream
 + * dw_mmc / dw_mmc-exynos driver for the SM-A510F.
 + */
 +#if defined(ARM64_BOARD_CONFIG_A5XELTE)
 +#include <sys/param.h>
 +#include <sys/systm.h>
++#include <sys/buf.h>
++#include <sys/conf.h>
++#include <sys/disk.h>
 +#include <sys/errno.h>
++#include <sys/proc.h>
++#include <sys/uio.h>
++#include <miscfs/devfs/devfs.h>
++#include <kern/locks.h>
 +#include <pexpert/pexpert.h>
 +#include <pexpert/device_tree.h>
 +#include <libkern/libkern.h>
@@ -93,6 +112,11 @@
 +                         (1u << 8) | (1u << 7) | (1u << 6) | (1u << 1))
 +
 +static vm_offset_t emmc_regs;
++static uint64_t emmc_first_lba, emmc_nsectors;
++static dev_t emmc_bdev;
++static bool emmc_ready;
++static LCK_GRP_DECLARE(a5xelte_emmc_grp, "a5xelte_emmc");
++static LCK_MTX_DECLARE(a5xelte_emmc_lock, &a5xelte_emmc_grp);
 +
 +static inline uint32_t
 +emmc_rd(uint32_t off)
@@ -107,7 +131,7 @@
 +}
 +
 +static int
-+emmc_read_gpt_header(void)
++emmc_read_sector(uint32_t lba, uint8_t *sector)
 +{
 +	uint64_t data[64] = { 0 };
 +	uint32_t hcon = emmc_rd(EMMC_HCON);
@@ -150,7 +174,7 @@
 +	emmc_wr(EMMC_BLKSIZ, 512);
 +	emmc_wr(EMMC_BYTCNT, 512);
 +	emmc_wr(EMMC_RINTSTS, 0xffffffffu);
-+	emmc_wr(EMMC_CMDARG, 1); /* eMMC high-capacity sector address, GPT LBA 1 */
++	emmc_wr(EMMC_CMDARG, lba); /* high-capacity eMMC sector address */
 +	uint32_t command = CMD_START | CMD_WAIT_DATA | CMD_DATA |
 +	    CMD_RESP_CRC | CMD_RESP | 17u;
 +	if ((emmc_rd(EMMC_CLKSEL) >> 16) & 7u) {
@@ -198,15 +222,7 @@
 +			goto out;
 +		}
 +	}
-+	if (memcmp(data, "EFI PART", 8) != 0) {
-+		printf("A5XELTE eMMC: LBA1 is not GPT (first=%llx)\n", data[0]);
-+		error = ENXIO;
-+		goto out;
-+	}
-+	uint32_t entries;
-+	memcpy(&entries, (const char *)data + 80, sizeof(entries));
-+	printf("A5XELTE eMMC: read-only GPT LBA1 OK, entries=%u, ver=%x, fifo=%u-bit\n",
-+	    entries, ver, unit * 8);
++	memcpy(sector, data, 512);
 +out:
 +	emmc_wr(EMMC_RINTSTS, 0xffffffffu);
 +	emmc_wr(EMMC_INTMASK, ints);
@@ -214,31 +230,305 @@
 +	return error;
 +}
 +
-+void
-+a5xelte_emmc_probe(void)
++static uint32_t
++emmc_le32(const uint8_t *p)
++{
++	return (uint32_t)p[0] | (uint32_t)p[1] << 8 |
++	    (uint32_t)p[2] << 16 | (uint32_t)p[3] << 24;
++}
++
++static uint64_t
++emmc_le64(const uint8_t *p)
++{
++	return emmc_le32(p) | (uint64_t)emmc_le32(p + 4) << 32;
++}
++
++static uint32_t
++emmc_crc32(uint32_t crc, const uint8_t *data, size_t len)
++{
++	for (size_t i = 0; i < len; i++) {
++		crc ^= data[i];
++		for (unsigned bit = 0; bit < 8; bit++) {
++			crc = (crc >> 1) ^ (0xedb88320u & -(crc & 1u));
++		}
++	}
++	return crc;
++}
++
++static int
++emmc_find_system(void)
++{
++	uint8_t hdr[512], entry[512];
++	int error = emmc_read_sector(1, hdr);
++	if (error) {
++		return error;
++	}
++	uint32_t header_size = emmc_le32(hdr + 12);
++	if (memcmp(hdr, "EFI PART", 8) ||
++	    (header_size != 92 && header_size != 512) ||
++	    emmc_le64(hdr + 24) != 1) {
++		printf("A5XELTE eMMC: invalid GPT header\n");
++		return ENXIO;
++	}
++	uint32_t expected_header_crc = emmc_le32(hdr + 16);
++	memset(hdr + 16, 0, 4);
++	if ((emmc_crc32(~0u, hdr, header_size) ^ ~0u) != expected_header_crc) {
++		printf("A5XELTE eMMC: GPT header CRC mismatch\n");
++		return EIO;
++	}
++	uint64_t first_usable = emmc_le64(hdr + 40);
++	uint64_t last_usable = emmc_le64(hdr + 48);
++	uint64_t entry_lba = emmc_le64(hdr + 72);
++	uint32_t nentries = emmc_le32(hdr + 80);
++	uint32_t entry_size = emmc_le32(hdr + 84);
++	if (entry_lba < 2 || entry_lba > 1024 || nentries == 0 ||
++	    nentries > 128 || (nentries & 3u) || entry_size != 128 ||
++	    first_usable > last_usable || last_usable > UINT32_MAX) {
++		printf("A5XELTE eMMC: unsupported GPT layout\n");
++		return ENXIO;
++	}
++	uint32_t crc = ~0u;
++	for (uint32_t s = 0; s < nentries / 4; s++) {
++		error = emmc_read_sector((uint32_t)entry_lba + s, entry);
++		if (error) {
++			return error;
++		}
++		crc = emmc_crc32(crc, entry, 512);
++		for (uint32_t j = 0; j < 4; j++) {
++			const uint8_t *p = entry + j * 128;
++			static const char name[] = "SYSTEM";
++			bool match = true;
++			for (unsigned k = 0; k < sizeof(name); k++) {
++				if (p[56 + k * 2] != (uint8_t)name[k] || p[57 + k * 2] != 0) {
++					match = false;
++					break;
++				}
++			}
++			if (match) {
++				uint64_t first = emmc_le64(p + 32);
++				uint64_t last = emmc_le64(p + 40);
++				if (first < first_usable || last > last_usable || first > last) {
++					return EINVAL;
++				}
++				emmc_first_lba = first;
++				emmc_nsectors = last - first + 1;
++			}
++		}
++	}
++	if ((crc ^ ~0u) != emmc_le32(hdr + 88)) {
++		printf("A5XELTE eMMC: GPT entries CRC mismatch\n");
++		return EIO;
++	}
++	if (!emmc_nsectors) {
++		printf("A5XELTE eMMC: SYSTEM partition not found\n");
++		return ENXIO;
++	}
++	printf("A5XELTE eMMC: GPT SYSTEM first=%llu sectors=%llu read-only\n",
++	    emmc_first_lba, emmc_nsectors);
++	return 0;
++}
++
++static int
++emmc_map_host(void)
 +{
 +	DTEntry node;
 +	uintptr_t const *reg = NULL;
 +	unsigned int size = 0;
-+	static bool attempted;
-+	if (attempted) {
-+		return;
++	if (emmc_regs) {
++		return 0;
 +	}
-+	attempted = true;
 +	if (SecureDTLookupEntry(NULL, "/a5xelte-emmc", &node) != kSuccess ||
 +	    SecureDTGetProperty(node, "reg", (void const **)&reg, &size) != kSuccess ||
 +	    size < 2 * sizeof(uintptr_t) || reg[0] != 0x13540000u || reg[1] < 0x2000u) {
 +		printf("A5XELTE eMMC: missing or unexpected ADT register window\n");
-+		return;
++		return ENXIO;
 +	}
 +	emmc_regs = ml_io_map(reg[0], reg[1]);
 +	if (!emmc_regs) {
 +		printf("A5XELTE eMMC: MMIO map failed\n");
-+		return;
++		return ENOMEM;
 +	}
 +	printf("A5XELTE eMMC: host ctrl=%x status=%x clk=%x hcon=%x\n",
 +	    emmc_rd(EMMC_CTRL), emmc_rd(EMMC_STATUS),
 +	    emmc_rd(EMMC_CLKENA), emmc_rd(EMMC_HCON));
-+	(void)emmc_read_gpt_header();
++	return 0;
++}
++
++void
++a5xelte_emmc_probe(void)
++{
++	if (!emmc_map_host()) {
++		(void)emmc_find_system();
++	}
++}
++
++static int
++emmc_open(__unused dev_t dev, int flags, __unused int devtype, __unused struct proc *p)
++{
++	return !emmc_ready ? ENXIO : ((flags & FWRITE) ? EROFS : 0);
++}
++
++static int
++emmc_close(__unused dev_t dev, __unused int flags, __unused int devtype, __unused struct proc *p)
++{
++	return 0;
++}
++
++static uint32_t emmc_secsize = 512;
++static uint8_t emmc_bounce[512];
++
++static void
++emmc_strategy(buf_t bp)
++{
++	int error = 0;
++	caddr_t vaddr = NULL;
++	uint32_t count = buf_count(bp);
++	uint64_t bytes = emmc_nsectors * 512u;
++	uint64_t off = 0;
++	buf_setresid(bp, count);
++	if (!emmc_ready) {
++		error = ENXIO;
++	} else if (!(buf_flags(bp) & B_READ)) {
++		error = EROFS;
++	} else if (buf_blkno(bp) < 0) {
++		error = EINVAL;
++	} else {
++		off = (uint64_t)buf_blkno(bp) * emmc_secsize;
++		if (off > bytes || count > bytes - off) {
++			error = EINVAL;
++		}
++	}
++	if (error || count == 0) {
++		goto done;
++	}
++	if (buf_map(bp, &vaddr)) {
++		error = EIO;
++		goto done;
++	}
++	lck_mtx_lock(&a5xelte_emmc_lock);
++	for (uint32_t n = 0; n < count;) {
++		uint64_t pos = off + n;
++		uint32_t skip = pos & 511u;
++		uint32_t take = MIN(count - n, 512u - skip);
++		error = emmc_read_sector((uint32_t)(emmc_first_lba + pos / 512u), emmc_bounce);
++		if (error) {
++			break;
++		}
++		memcpy(vaddr + n, emmc_bounce + skip, take);
++		n += take;
++		buf_setresid(bp, count - n);
++	}
++	lck_mtx_unlock(&a5xelte_emmc_lock);
++	buf_unmap(bp);
++done:
++	if (error) {
++		buf_seterror(bp, error);
++	}
++	buf_biodone(bp);
++}
++
++static int
++emmc_ioctl(__unused dev_t dev, u_long cmd, caddr_t data, __unused int flag,
++    __unused struct proc *p)
++{
++	switch (cmd) {
++	case DKIOCGETBLOCKSIZE:
++		*(uint32_t *)data = emmc_secsize;
++		return 0;
++	case DKIOCSETBLOCKSIZE: {
++		uint32_t requested = *(uint32_t *)data;
++		if (requested < 512 || requested > 4096 || (requested & (requested - 1))) {
++			return EINVAL;
++		}
++		emmc_secsize = requested;
++		return 0;
++	}
++	case DKIOCGETPHYSICALBLOCKSIZE:
++		*(uint32_t *)data = 512;
++		return 0;
++	case DKIOCGETBLOCKCOUNT:
++		*(uint64_t *)data = emmc_nsectors * 512u / emmc_secsize;
++		return 0;
++	case DKIOCISWRITABLE:
++		*(uint32_t *)data = 0;
++		return 0;
++	case DKIOCGETMAXBLOCKCOUNTREAD:
++		*(uint64_t *)data = 1;
++		return 0;
++	case DKIOCGETMAXBLOCKCOUNTWRITE:
++		*(uint64_t *)data = 0;
++		return 0;
++	case DKIOCGETMAXSEGMENTCOUNTREAD:
++	case DKIOCGETMAXSEGMENTCOUNTWRITE:
++		*(uint64_t *)data = 1;
++		return 0;
++	case DKIOCSYNCHRONIZE:
++	case DKIOCSYNCHRONIZECACHE:
++		return 0;
++	default:
++		return ENOTTY;
++	}
++}
++
++static int
++emmc_psize(__unused dev_t dev)
++{
++	return emmc_ready ? (int)MIN(emmc_nsectors * 512u / emmc_secsize, INT_MAX) : -1;
++}
++
++static int
++emmc_read(dev_t dev, struct uio *uio, __unused int ioflag)
++{
++	return physio(emmc_strategy, NULL, dev, B_READ, minphys, uio, (int)emmc_secsize);
++}
++
++static int
++emmc_write(__unused dev_t dev, __unused struct uio *uio, __unused int ioflag)
++{
++	return EROFS;
++}
++
++static const struct bdevsw emmc_bdevsw = {
++	.d_open = emmc_open, .d_close = emmc_close, .d_strategy = emmc_strategy,
++	.d_ioctl = emmc_ioctl, .d_dump = eno_dump, .d_psize = emmc_psize,
++	.d_type = D_DISK,
++};
++
++static const struct cdevsw emmc_cdevsw = {
++	.d_open = emmc_open, .d_close = emmc_close, .d_read = emmc_read,
++	.d_write = emmc_write, .d_ioctl = emmc_ioctl, .d_stop = eno_stop,
++	.d_reset = eno_reset, .d_ttys = NULL, .d_select = eno_select,
++	.d_mmap = eno_mmap, .d_strategy = eno_strat, .d_reserved_1 = eno_getc,
++	.d_reserved_2 = eno_putc, .d_type = D_DISK,
++};
++
++int
++a5xelte_emmc_rootdev(dev_t *dev)
++{
++	if (!emmc_ready) {
++		int error = emmc_map_host();
++		if (error) {
++			return error;
++		}
++		error = emmc_find_system();
++		if (error) {
++			return error;
++		}
++		int bmajor = bdevsw_add(-1, &emmc_bdevsw);
++		if (bmajor < 0) {
++			return ENXIO;
++		}
++		int cmajor = cdevsw_add_with_bdev(-1, &emmc_cdevsw, bmajor);
++		if (cmajor < 0) {
++			return ENXIO;
++		}
++		emmc_bdev = makedev(bmajor, 0);
++		devfs_make_node(emmc_bdev, DEVFS_BLOCK, UID_ROOT, GID_OPERATOR, 0640, "emmcroot0");
++		devfs_make_node(makedev(cmajor, 0), DEVFS_CHAR, UID_ROOT, GID_OPERATOR, 0640, "remmcroot0");
++		emmc_ready = true;
++		printf("A5XELTE eMMC: /dev/emmcroot0 ready, GPT SYSTEM read-only\n");
++	}
++	*dev = emmc_bdev;
++	return 0;
 +}
 +#endif /* ARM64_BOARD_CONFIG_A5XELTE */
