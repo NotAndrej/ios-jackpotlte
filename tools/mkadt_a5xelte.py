@@ -49,7 +49,7 @@ def build():
     arm_io.children = [n for n in arm_io.children if n.prop('name') == mkadt.cstr('wdt')]
     arm_io.children.append(mkadt.node('gic', [
         ('compatible', mkadt.cstr('arm,cortex-a15-gic')),
-        ('interrupt-controller', b''),
+        ('interrupt-controller', mkadt.cstr('master')),
         ('virtual-timer-intid', mkadt.u32(27)),
         ('reg', mkadt.u64(0x0c01000, 0x1000, 0x0c02000, 0x1000)),
     ]))
