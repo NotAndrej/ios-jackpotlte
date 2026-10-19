@@ -53,6 +53,14 @@ def build():
         ('virtual-timer-intid', mkadt.u32(27)),
         ('reg', mkadt.u64(0x0c01000, 0x1000, 0x0c02000, 0x1000)),
     ]))
+    # The Linux DECON handoff and Samsung loader already scan out this buffer.
+    # Publish its iOS display service without importing the SWEET panel size.
+    arm_io.children.append(mkadt.node('disp0', [
+        ('device_type', mkadt.cstr('display-subsystem')),
+        ('compatible', mkadt.cstr('samsung,a5xelte-display')),
+        ('canvas-width', mkadt.u32(1080)),
+        ('canvas-height', mkadt.u32(1920)),
+    ]))
     root.children = [n for n in root.children if n.prop('name') not in
                      (mkadt.cstr('sweet-fbcon'), mkadt.cstr('sweet-ufs'))]
     root.children.append(mkadt.node('a5xelte-fbcon', [
