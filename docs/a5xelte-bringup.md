@@ -20,9 +20,11 @@ The reproducible register probe is in `tools/a5xelte-mmfr0/`. Build it with `mak
 
 ## Separate 4 KiB MMU diagnostic
 
-`shim/a5xelte/build-probe4k.sh` builds a Samsung Image for a single-core EL1 test. It verifies 4 KiB granule support, constructs 4 KiB L1/L2/L3 identity tables, enables the MMU, records TCR/SCTLR and a result code in the reserved ramoops page, then requests TWRP recovery through the Exynos7580 PMU reset-mode registers. It does not read or write a block device. The image and BOOT package have passed offline assembly, ELF relocation and header checks; this is **not** evidence of device boot or XNU execution.
+`shim/a5xelte/build-probe4k.sh` builds a Samsung Image for a single-core EL1 test. It verifies 4 KiB granule support, constructs 4 KiB L1/L2/L3 identity tables, enables the MMU, records TCR/SCTLR and a result code in the reserved ramoops page, then requests TWRP recovery through the Exynos7580 PMU reset-mode registers. The probe itself does not access block devices. The host packer and flash operation are separate.
 
-The completed-capture path requests recovery automatically so that the original working BOOT can be restored through TWRP. An exception before that path may still require the hardware recovery keys. Keep the previously verified working BOOT file and recovery ADB path available before a live test. No iOS root image or USERDATA change is part of this diagnostic.
+On 2026-10-19 the packaged probe was written to BOOT p10 after its ramdisk, DTBH and header digest were checked against the working image. Readback matched the candidate. The ordinary `reboot` command did not restart the shell-based Linux system; `reboot -f` did. The phone entered TWRP automatically. The TWRP `/proc/last_kmsg` capture contained `A5XNU001` with CurrentEL `0x4`, SCTLR before `0x30c5183e`, FDT `0x48000000`, Image `0x40205000`, `ID_AA64MMFR0_EL1=0x1122`, result `4`, TCR after `0x80a03520`, and SCTLR after `0x30c5183f`. This is a **live 4 KiB MMU result**, not XNU execution. The captured `CNTFRQ_EL0` was zero; the Exynos timer path needs separate attention. At the user's request the Linux BOOT image was not restored, and the phone remains in TWRP for XNU work. No USERDATA, EFS or recovery partition was written.
+
+`xnu/patches/0082-a5xelte-4k-entry.patch` is a first XNU entry variant: it removes the donor's 16 KiB page selection, limits initial SMP to one CPU, skips the donor framebuffer writes and places an XNU-owned physical entry marker in reserved log RAM. Patch application passed against the donor's patched XNU source. **It has not been compiled or run.** The donor GICv3, timer, UFS and framebuffer paths are still incompatible with Exynos7580; the marker is only an entry checkpoint.
 
 ## Board map from the existing Linux port
 
@@ -42,10 +44,10 @@ The diagnostic DTS explicitly calls itself a scaffold. Check addresses against t
 
 ## Implementation order
 
-1. A5xelte shim: validate the 4 KiB MMU transition and recover the result through TWRP. The raw EL1 granule result is complete. Do not attempt the donor's 16 KiB MMU setup. Compile for baseline ARMv8-A.
+1. A5xelte shim: the raw EL1 granule result and live 4 KiB MMU transition are complete. Build a Samsung payload loader for the 4 KiB XNU variant. Do not attempt the donor's 16 KiB MMU setup. Compile for baseline ARMv8-A.
 2. A5xelte XNU machine config: GICv2 interrupt acknowledgement, timer PPI and one CPU. Then test PSCI secondaries.
 3. Recoverable panic log, eMMC read-only and root-device identification.
 4. Exynos display, touch and keys using downstream Linux and Lineage source as hardware references.
 5. iOS 16 root/userland only after memory and storage sizing: this board has 2 GiB RAM and about 11.5 GiB USERDATA, so the donor's 16 GiB root-image command is unsuitable as written.
 
-Build output, kernel observations and user-verified screen/input behavior must be recorded separately. This branch performs no partition operation.
+Build output, kernel observations and user-verified screen/input behavior must be recorded separately. The only partition operation in this branch's live test was the explicitly authorized diagnostic BOOT p10 write.
