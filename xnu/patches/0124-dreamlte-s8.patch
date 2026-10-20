@@ -92,6 +92,22 @@ index 9987f5a..e73ee66 100644
  #else
      "     'IONameMatch'     = 'xiaomi,sweet';"
  #endif
+diff --git osfmk/arm64/arm_vm_init.c osfmk/arm64/arm_vm_init.c
+index fbc383d..3e38fd8 100644
+--- a/osfmk/arm64/arm_vm_init.c
++++ b/osfmk/arm64/arm_vm_init.c
+@@ -1905,7 +1905,11 @@ arm_vm_init(uint64_t memory_size, boot_args * args)
+ #endif
+ 
+ 	// Slide the physical aperture to a random page-aligned location within the slide range
++#if defined(DREAMLTE)
++	uint64_t physmap_slide = 0;
++#else
+ 	uint64_t physmap_slide = early_random() & ARM64_PHYSMAP_SLIDE_MASK & ~((uint64_t)PAGE_MASK);
++#endif
+ 	assert(physmap_slide < ARM64_PHYSMAP_SLIDE_RANGE);
+ 
+ 	physmap_base += physmap_slide;
 diff --git osfmk/arm64/start.s osfmk/arm64/start.s
 index 7da26d2..1606c91 100644
 --- a/osfmk/arm64/start.s
@@ -249,6 +265,52 @@ index dcdbcf6..d4f3ca3 100644
  		a5_clear_row();
  		if (c == '\n') {
  			return;
+diff --git osfmk/vm/vm_resident.c osfmk/vm/vm_resident.c
+index 6394730..de4a6a7 100644
+--- a/osfmk/vm/vm_resident.c
++++ b/osfmk/vm/vm_resident.c
+@@ -1190,6 +1190,9 @@ vm_page_bootstrap(
+ 	 */
+ 
+ 	kernel_debug_string_early("pmap_startup");
++#if defined(ARM64_BOARD_CONFIG_A5XELTE)
++	kprintf("A5 vm: vm_page_bootstrap -> pmap_startup\n");
++#endif
+ 	pmap_startup(&virtual_space_start, &virtual_space_end);
+ 	virtual_space_start = round_page(virtual_space_start);
+ 	virtual_space_end = trunc_page(virtual_space_end);
+@@ -1439,6 +1442,9 @@ pmap_startup(
+ 
+ 
+ 	vm_pages = (vm_page_t) pmap_steal_freeable_memory(npages * sizeof *vm_pages);
++#if defined(ARM64_BOARD_CONFIG_A5XELTE)
++	kprintf("A5 vm: npages=%u vm_pages=%p mem_sz=%#llx\n", npages, vm_pages, (unsigned long long)mem_sz);
++#endif
+ 
+ 	/*
+ 	 * Check if we want to initialize pages to a known value
+@@ -1540,6 +1546,11 @@ pmap_startup(
+ 		if (!pmap_next_page(&phys_page)) {
+ 			break;
+ 		}
++#if defined(ARM64_BOARD_CONFIG_A5XELTE)
++		if ((i & 0x7fff) == 0) {
++			kprintf("A5 vm: page %u ppn %#x\n", i, phys_page);
++		}
++#endif
+ 
+ 		if (phys_page < max_valid_low_ppnum) {
+ 			++low_page_count;
+@@ -1575,6 +1586,9 @@ pmap_startup(
+ 		}
+ 	}
+ 	vm_page_pages = vm_pages_count; /* used to report to user space */
++#if defined(ARM64_BOARD_CONFIG_A5XELTE)
++	kprintf("A5 vm: %u pages initialized, releasing\n", vm_pages_count);
++#endif
+ 
+ 	if (!vm_himemory_mode) {
+ 		do {
 diff --git pexpert/arm/pe_serial.c pexpert/arm/pe_serial.c
 index ed7dccd..1966bdd 100644
 --- a/pexpert/arm/pe_serial.c

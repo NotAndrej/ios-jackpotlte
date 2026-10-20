@@ -181,6 +181,46 @@ edit('pexpert/arm/pe_serial.c', [
      '#endif\n', 1),
 ])
 
+# Boots 3, 5, 6 and 7 hung right after the kernel version line, before
+# pmap_startup's "init/release time"; boots 1, 2, 3b and 5b got past it with
+# the same image. The physical aperture slide (1 GiB range, early_random) is
+# the boot-to-boot variable there (gPicBase differs on every photo). Pin it
+# on the S8 and mark vm_page_bootstrap's steps in the console.
+edit('osfmk/arm64/arm_vm_init.c', [
+    ('\tuint64_t physmap_slide = early_random() & ARM64_PHYSMAP_SLIDE_MASK & ~((uint64_t)PAGE_MASK);\n',
+     '#if defined(DREAMLTE)\n'
+     '\tuint64_t physmap_slide = 0;\n'
+     '#else\n'
+     '\tuint64_t physmap_slide = early_random() & ARM64_PHYSMAP_SLIDE_MASK & ~((uint64_t)PAGE_MASK);\n'
+     '#endif\n', 1),
+])
+
+edit('osfmk/vm/vm_resident.c', [
+    ('\tpmap_startup(&virtual_space_start, &virtual_space_end);\n',
+     '#if defined(ARM64_BOARD_CONFIG_A5XELTE)\n'
+     '\tkprintf("A5 vm: vm_page_bootstrap -> pmap_startup\\n");\n'
+     '#endif\n'
+     '\tpmap_startup(&virtual_space_start, &virtual_space_end);\n', 1),
+    ('\tvm_pages = (vm_page_t) pmap_steal_freeable_memory(npages * sizeof *vm_pages);\n',
+     '\tvm_pages = (vm_page_t) pmap_steal_freeable_memory(npages * sizeof *vm_pages);\n'
+     '#if defined(ARM64_BOARD_CONFIG_A5XELTE)\n'
+     '\tkprintf("A5 vm: npages=%u vm_pages=%p mem_sz=%#llx\\n", npages, vm_pages, (unsigned long long)mem_sz);\n'
+     '#endif\n', 1),
+    ('\t\tif (!pmap_next_page(&phys_page)) {\n\t\t\tbreak;\n\t\t}\n\n\t\tif (phys_page < max_valid_low_ppnum) {\n',
+     '\t\tif (!pmap_next_page(&phys_page)) {\n\t\t\tbreak;\n\t\t}\n'
+     '#if defined(ARM64_BOARD_CONFIG_A5XELTE)\n'
+     '\t\tif ((i & 0x7fff) == 0) {\n'
+     '\t\t\tkprintf("A5 vm: page %u ppn %#x\\n", i, phys_page);\n'
+     '\t\t}\n'
+     '#endif\n'
+     '\n\t\tif (phys_page < max_valid_low_ppnum) {\n', 1),
+    ('\tvm_page_pages = vm_pages_count; /* used to report to user space */\n',
+     '\tvm_page_pages = vm_pages_count; /* used to report to user space */\n'
+     '#if defined(ARM64_BOARD_CONFIG_A5XELTE)\n'
+     '\tkprintf("A5 vm: %u pages initialized, releasing\\n", vm_pages_count);\n'
+     '#endif\n', 1),
+])
+
 # IOKit platform expert / CPU personalities: also match the S8 names.
 edit('iokit/KernelConfigTables.cpp', [
     ("    \"     'IONameMatch'     = 'samsung,a5xelte';\"\n",

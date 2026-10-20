@@ -293,6 +293,14 @@ uint64_t dl_main(uintptr_t dtb, uint64_t el, uint64_t sctlr)
 	if (kernel_end >= mem_end)
 		return fail("kernel larger than RAM window");
 
+	/* iBoot hands XNU zeroed RAM; S-Boot leaves the previous OS's data
+	 * (TWRP's Linux after `adb reboot`, partly decayed after a forced
+	 * reboot). XNU 6 hung right after its version line, in
+	 * vm_mem_bootstrap, depending on how the phone was rebooted. */
+	out("zeroing XNU RAM...\n");
+	zero(p->phys_base, p->mem_size);
+	out("zeroed\n");
+
 	for (uint64_t i = 0; i < nsegs; i++) {
 		const volatile struct payload_seg *s = &p->segs[i];
 		if (s->vmaddr < p->virt_base || s->file_size > s->vmsize ||
