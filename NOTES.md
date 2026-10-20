@@ -2,7 +2,7 @@
 
 ## a5xelte fork handoff (2026-10-20)
 
-The Samsung SM-A510F branch has a separate dated record in `A5XELTE_PROGRESS.md` and a donor replacement map in `docs/a5xelte-migration-map.md`. Its 4 KiB XNU boots four Exynos7580 cores with SGI1 verified, mounts an iOS 16 HFSX root from USERDATA, and executes launchd, SpringBoard and backboardd. A graphical SpringBoard frame remains unverified. The latest recovered log shows repeated backboardd crashes caused immediately by a missing system-container path. Patch `0116` traces the relevant XML entitlements; its four-core diagnostic BOOT image was written to p10 and rebooted, with the runtime log pending a return to TWRP. Recovery and EFS remain untouched. The SWEET notes below are donor history, not Samsung device results.
+The Samsung SM-A510F branch has a separate dated record in `A5XELTE_PROGRESS.md` and a donor replacement map in `docs/a5xelte-migration-map.md`. Its 4 KiB XNU boots four Exynos7580 cores with SGI1 verified, mounts an iOS 16 HFSX root from USERDATA, and executes launchd, SpringBoard and backboardd. A graphical SpringBoard frame remains unverified. The latest recovered log confirms backboardd has its stock system-container XML entitlement, yet it crashes after receiving a missing container path; `lsd` also aborts in system-group container URL initialization. The HFS `RENAME_SWAP` fallback was SWEET-only despite A5XELTE usermanagerd reporting ENOTSUP for atomic keybag writes. Patch `0117` enables the existing fallback for A5XELTE, and its four-core BOOT image was written to p10; the runtime log is pending. Recovery and EFS remain untouched. The SWEET notes below are donor history, not Samsung device results.
 
 ## Agent handoff / active work (2026-10-15, latest)
 
