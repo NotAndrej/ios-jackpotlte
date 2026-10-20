@@ -47,6 +47,13 @@ edit('pexpert/pexpert/arm64/A5XELTE.h', [(
     '#define A5_TOUCH_DEFAULT              0           /* A5 ZT7538 path absent */\n'
     '#define A5_KLOG_PHYS                  0x92180000  /* TWRP ramoops pmsg zone */\n'
     '#define A5_KLOG_SIZE                  0x80000\n'
+    '/* Samsung\'s S8 kernel DT: arch timer "use-physical-timer". The EL1\n'
+    ' * virtual timer is not usable on the secondary cores (boot 22/24: 4\n'
+    ' * CPUs up, then sleeping threads and workqueue threads never ran).\n'
+    ' * Use the non-secure physical timer, PPI 14 = INTID 30. */\n'
+    '#define A5_USE_PHYS_TIMER             1\n'
+    '#undef A5XELTE_VTIMER_INTID\n'
+    '#define A5XELTE_VTIMER_INTID         30\n'
     '#else\n'
     '#define A5_FB_PHYS                    0x67000000\n'
     '#define A5_FB_WIDTH                   1080\n'
@@ -376,6 +383,46 @@ edit('osfmk/console/serial_console.c', [
      '#if defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_A5XELTE)\nextern void sweet_log_append', 1),
     ('#if defined(ARM64_BOARD_CONFIG_SWEET)\n\tsweet_log_append(c, size);',
      '#if defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_A5XELTE)\n\tsweet_log_append(c, size);', 1),
+])
+
+# Physical instead of virtual EL1 timer on the S8 (A5_USE_PHYS_TIMER).
+edit('osfmk/arm64/machine_routines.c', [
+    ('\t\t__builtin_arm_wsr64("CNTV_TVAL_EL0", (uint64_t)dec_value);\n',
+     '#if defined(A5_USE_PHYS_TIMER)\n'
+     '\t\t__builtin_arm_wsr64("CNTP_TVAL_EL0", (uint64_t)dec_value);\n'
+     '#else\n'
+     '\t\t__builtin_arm_wsr64("CNTV_TVAL_EL0", (uint64_t)dec_value);\n'
+     '#endif\n', 1),
+    ('\t\twide_val = __builtin_arm_rsr64("CNTV_TVAL_EL0");\n',
+     '#if defined(A5_USE_PHYS_TIMER)\n'
+     '\t\twide_val = __builtin_arm_rsr64("CNTP_TVAL_EL0");\n'
+     '#else\n'
+     '\t\twide_val = __builtin_arm_rsr64("CNTV_TVAL_EL0");\n'
+     '#endif\n', 1),
+    ('\tuint64_t cntv_ctl = __builtin_arm_rsr64("CNTV_CTL_EL0");\n',
+     '#if defined(A5_USE_PHYS_TIMER)\n'
+     '\tuint64_t cntv_ctl = __builtin_arm_rsr64("CNTP_CTL_EL0");\n'
+     '#else\n'
+     '\tuint64_t cntv_ctl = __builtin_arm_rsr64("CNTV_CTL_EL0");\n'
+     '#endif\n', 1),
+    ('\t__builtin_arm_wsr64("CNTV_CTL_EL0", cntvctl);\n'
+     '\t/* disable the physical timer as a precaution, as its registers reset to architecturally unknown values */\n'
+     '\t__builtin_arm_wsr64("CNTP_CTL_EL0", CNTP_CTL_EL0_IMASKED);\n',
+     '#if defined(A5_USE_PHYS_TIMER)\n'
+     '\t__builtin_arm_wsr64("CNTP_CTL_EL0", cntvctl);   /* same ENABLE bit */\n'
+     '\t__builtin_arm_wsr64("CNTV_CTL_EL0", CNTV_CTL_EL0_IMASKED);\n'
+     '#else\n'
+     '\t__builtin_arm_wsr64("CNTV_CTL_EL0", cntvctl);\n'
+     '\t/* disable the physical timer as a precaution, as its registers reset to architecturally unknown values */\n'
+     '\t__builtin_arm_wsr64("CNTP_CTL_EL0", CNTP_CTL_EL0_IMASKED);\n'
+     '#endif\n', 1),
+])
+
+edit('pexpert/arm/pe_fiq.c', [
+    ('\t    a5_gic_read32(a5_gicd_base, 0x080) | (1U << 27) | (1U << 1));\n',
+     '\t    a5_gic_read32(a5_gicd_base, 0x080) | (1U << A5XELTE_VTIMER_INTID) | (1U << 1));\n', 1),
+    ('\ta5_gic_write32(a5_gicd_base, 0x100, (1U << 27) | (1U << 1));\n',
+     '\ta5_gic_write32(a5_gicd_base, 0x100, (1U << A5XELTE_VTIMER_INTID) | (1U << 1));\n', 1),
 ])
 
 # IOKit platform expert / CPU personalities: also match the S8 names.

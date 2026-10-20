@@ -97,7 +97,9 @@ def build():
     arm_io.children.append(mkadt.node('gic', [
         ('compatible', mkadt.cstr('arm,cortex-a15-gic')),
         ('interrupt-controller', mkadt.cstr('master')),
-        ('virtual-timer-intid', mkadt.u32(27)),
+        # Non-secure physical timer (PPI 14): Samsung's DT says
+        # "use-physical-timer"; the kernel (A5_USE_PHYS_TIMER) uses CNTP.
+        ('virtual-timer-intid', mkadt.u32(30)),
         ('reg', mkadt.u64(0x0201000, 0x1000, 0x0202000, 0x1000)),
     ]))
     arm_io.children.append(mkadt.node('disp0', [

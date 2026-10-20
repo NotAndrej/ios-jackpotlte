@@ -514,6 +514,61 @@ index fbc383d..57e6096 100644
  	va_l1_end = (va_l1_end + 0x00000000007FFFFFULL) & 0xFFFFFFFFFF800000ULL;
  
  	cpu_l1_tte = cpu_tte + ((va_l1 & ARM_TT_L1_INDEX_MASK) >> ARM_TT_L1_SHIFT);
+diff --git osfmk/arm64/machine_routines.c osfmk/arm64/machine_routines.c
+index c5b33bd..6d56a33 100644
+--- a/osfmk/arm64/machine_routines.c
++++ b/osfmk/arm64/machine_routines.c
+@@ -2054,7 +2054,11 @@ ml_set_decrementer(uint32_t dec_value)
+ 	if (cdp->cpu_set_decrementer_func) {
+ 		cdp->cpu_set_decrementer_func(dec_value);
+ 	} else {
++#if defined(A5_USE_PHYS_TIMER)
++		__builtin_arm_wsr64("CNTP_TVAL_EL0", (uint64_t)dec_value);
++#else
+ 		__builtin_arm_wsr64("CNTV_TVAL_EL0", (uint64_t)dec_value);
++#endif
+ 	}
+ }
+ 
+@@ -2182,7 +2186,11 @@ ml_get_decrementer(void)
+ 	} else {
+ 		uint64_t wide_val;
+ 
++#if defined(A5_USE_PHYS_TIMER)
++		wide_val = __builtin_arm_rsr64("CNTP_TVAL_EL0");
++#else
+ 		wide_val = __builtin_arm_rsr64("CNTV_TVAL_EL0");
++#endif
+ 		dec = (uint32_t)wide_val;
+ 		assert(wide_val == (uint64_t)dec);
+ 	}
+@@ -2205,7 +2213,11 @@ ml_enable_monitor(void)
+ boolean_t
+ ml_get_timer_pending(void)
+ {
++#if defined(A5_USE_PHYS_TIMER)
++	uint64_t cntv_ctl = __builtin_arm_rsr64("CNTP_CTL_EL0");
++#else
+ 	uint64_t cntv_ctl = __builtin_arm_rsr64("CNTV_CTL_EL0");
++#endif
+ 	return ((cntv_ctl & CNTV_CTL_EL0_ISTATUS) != 0) ? TRUE : FALSE;
+ }
+ 
+@@ -2282,9 +2294,14 @@ _enable_virtual_timer(void)
+ {
+ 	uint64_t cntvctl = CNTV_CTL_EL0_ENABLE; /* One wants to use 32 bits, but "mrs" prefers it this way */
+ 
++#if defined(A5_USE_PHYS_TIMER)
++	__builtin_arm_wsr64("CNTP_CTL_EL0", cntvctl);   /* same ENABLE bit */
++	__builtin_arm_wsr64("CNTV_CTL_EL0", CNTV_CTL_EL0_IMASKED);
++#else
+ 	__builtin_arm_wsr64("CNTV_CTL_EL0", cntvctl);
+ 	/* disable the physical timer as a precaution, as its registers reset to architecturally unknown values */
+ 	__builtin_arm_wsr64("CNTP_CTL_EL0", CNTP_CTL_EL0_IMASKED);
++#endif
+ }
+ 
+ void
 diff --git osfmk/arm64/start.s osfmk/arm64/start.s
 index 7da26d2..1606c91 100644
 --- a/osfmk/arm64/start.s
@@ -739,6 +794,24 @@ index 6394730..de4a6a7 100644
  
  	if (!vm_himemory_mode) {
  		do {
+diff --git pexpert/arm/pe_fiq.c pexpert/arm/pe_fiq.c
+index d3f8767..0207f32 100644
+--- a/pexpert/arm/pe_fiq.c
++++ b/pexpert/arm/pe_fiq.c
+@@ -315,11 +315,11 @@ pe_init_fiq(void)
+ 	a5_gic_cpu_masks[logical] = mask;
+ 	/* INTID 27 is the virtual timer PPI; SGI 1 carries CPU signals. */
+ 	a5_gic_write32(a5_gicd_base, 0x080,
+-	    a5_gic_read32(a5_gicd_base, 0x080) | (1U << 27) | (1U << 1));
++	    a5_gic_read32(a5_gicd_base, 0x080) | (1U << A5XELTE_VTIMER_INTID) | (1U << 1));
+ 	for (unsigned int i = 0; i < 32; i += 4) {
+ 		a5_gic_write32(a5_gicd_base, 0x400 + i, 0xa0a0a0a0U);
+ 	}
+-	a5_gic_write32(a5_gicd_base, 0x100, (1U << 27) | (1U << 1));
++	a5_gic_write32(a5_gicd_base, 0x100, (1U << A5XELTE_VTIMER_INTID) | (1U << 1));
+ 	a5_gic_write32(a5_gicc_base, 0x004, 0xff); /* GICC_PMR */
+ 	a5_gic_write32(a5_gicc_base, 0x008, 0);    /* GICC_BPR */
+ 	a5_gic_write32(a5_gicc_base, 0x000,
 diff --git pexpert/arm/pe_serial.c pexpert/arm/pe_serial.c
 index ed7dccd..1966bdd 100644
 --- a/pexpert/arm/pe_serial.c
@@ -824,10 +897,10 @@ index ed7dccd..1966bdd 100644
  	if (fbcon_base != NULL) {
  		register_serial_functions(&sweet_fbcon_serial_functions);
 diff --git pexpert/pexpert/arm64/A5XELTE.h pexpert/pexpert/arm64/A5XELTE.h
-index e6718d4..9ac1771 100644
+index e6718d4..b6f812d 100644
 --- a/pexpert/pexpert/arm64/A5XELTE.h
 +++ b/pexpert/pexpert/arm64/A5XELTE.h
-@@ -24,6 +24,36 @@
+@@ -24,6 +24,43 @@
  #define HAS_GIC_V3                    0
  #define A5XELTE_VTIMER_INTID         27
  
@@ -849,6 +922,13 @@ index e6718d4..9ac1771 100644
 +#define A5_TOUCH_DEFAULT              0           /* A5 ZT7538 path absent */
 +#define A5_KLOG_PHYS                  0x92180000  /* TWRP ramoops pmsg zone */
 +#define A5_KLOG_SIZE                  0x80000
++/* Samsung's S8 kernel DT: arch timer "use-physical-timer". The EL1
++ * virtual timer is not usable on the secondary cores (boot 22/24: 4
++ * CPUs up, then sleeping threads and workqueue threads never ran).
++ * Use the non-secure physical timer, PPI 14 = INTID 30. */
++#define A5_USE_PHYS_TIMER             1
++#undef A5XELTE_VTIMER_INTID
++#define A5XELTE_VTIMER_INTID         30
 +#else
 +#define A5_FB_PHYS                    0x67000000
 +#define A5_FB_WIDTH                   1080
