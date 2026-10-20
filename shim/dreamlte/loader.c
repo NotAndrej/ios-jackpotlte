@@ -19,6 +19,7 @@
 #include "smp_probe.h"
 #include "touch_probe.h"
 #include "pmic.h"
+#include "display_probe.h"
 
 #define UFS_PROBE_DMA		0x8f0000000UL	/* high bank, outside XNU's window */
 
@@ -411,6 +412,7 @@ uint64_t dl_main(uintptr_t dtb, uint64_t el, uint64_t sctlr)
 	rtc_bootarg(ba, pmic_init(kv, out));
 	clean(ba_pa, ba_pa + PAGE_SIZE);
 	touch_probe(kv, out);
+	display_probe(kv, out);
 	/* smp_probe(kv, out) proved the PMU power-up (boot 19); it leaves the
 	 * probed cores' PMU power on, which hid the 0 -> 0xF edge XNU needs. */
 	(void)smp_probe;

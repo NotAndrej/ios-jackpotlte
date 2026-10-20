@@ -69,7 +69,7 @@ def cpu_node(logical):
     ]
 
 
-def build():
+def build(canvas=(FB_W, FB_H)):
     root = mkadt.build(seed=os.urandom(64), qemu=True)
     # The kernel's SweetPlatformExpert personality matches 'samsung,a5xelte'
     # (KernelConfigTables.cpp); without it IOKit panics "Unable to find driver
@@ -108,8 +108,11 @@ def build():
         # without it no main display exists and SpringBoard aborts (boot 16).
         ('compatible', mkadt.cstr('samsung,dreamlte-display') +
          mkadt.cstr('samsung,a5xelte-display')),
-        ('canvas-width', mkadt.u32(FB_W)),
-        ('canvas-height', mkadt.u32(FB_H)),
+        # Must equal the size AppleCLCD reports (GetDisplaySize): 1125x2436
+        # unless sweetfb_native=1. Boot 18 presented 1125x2436 with a
+        # 1440x2960 canvas here and stalled after the first SwapBegin.
+        ('canvas-width', mkadt.u32(canvas[0])),
+        ('canvas-height', mkadt.u32(canvas[1])),
     ]))
     root.children = [n for n in root.children if n.prop('name') not in
                      (mkadt.cstr('sweet-fbcon'), mkadt.cstr('sweet-ufs'))]
@@ -131,7 +134,9 @@ def build():
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('output', type=Path)
+    parser.add_argument('--canvas', default=f'{FB_W}x{FB_H}',
+                        help='display size presented to iOS, WxH')
     args = parser.parse_args()
-    blob = adt.serialize(build())
+    blob = adt.serialize(build(tuple(int(v) for v in args.canvas.split('x'))))
     args.output.write_bytes(blob)
     print(f'{args.output}: {len(blob)} bytes')

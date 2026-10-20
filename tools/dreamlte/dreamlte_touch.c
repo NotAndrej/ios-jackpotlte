@@ -18,6 +18,7 @@
 
 static vm_offset_t s8ts_i2c, s8ts_alive;
 static int s8ts_sleep;
+static int s8ts_native;         /* sweetfb_native: iOS sees the whole panel */
 static bool s8ts_down[S8TS_FINGERS];
 static uint16_t s8ts_x[S8TS_FINGERS], s8ts_y[S8TS_FINGERS];
 
@@ -134,8 +135,18 @@ s8ts_report(const uint8_t *ev)
 	}
 	unsigned x = ((unsigned)ev[1] << 4) | (ev[3] >> 4);
 	unsigned y = ((unsigned)ev[2] << 4) | (ev[3] & 0xf);
-	x = x * 1080 / 4096;
-	y = y * 1920 / 4096;
+	if (s8ts_native) {
+		x = x * 1080 / 4096;
+		y = y * 1920 / 4096;
+	} else {
+		/* 1125x2436 is shown centered on the 1440x2960 panel. */
+		int px = (int)(x * 1440 / 4096) - (1440 - 1125) / 2;
+		int py = (int)(y * 2960 / 4096) - (2960 - 2436) / 2;
+		px = px < 0 ? 0 : (px > 1124 ? 1124 : px);
+		py = py < 0 ? 0 : (py > 2435 ? 2435 : py);
+		x = (unsigned)px * 1080 / 1125;
+		y = (unsigned)py * 1920 / 2436;
+	}
 	if (state == 1 || state == 2) {             /* press, move */
 		if (!s8ts_down[tid]) {
 			printf("S8 TOUCH: down id=%u x=%u y=%u\n", tid, x, y);
@@ -209,6 +220,7 @@ dreamlte_touch_start(void)
 	thread_t thread;
 	int enabled = 1;
 	(void)PE_parse_boot_argn("s8touch", &enabled, sizeof(enabled));
+	(void)PE_parse_boot_argn("sweetfb_native", &s8ts_native, sizeof(s8ts_native));
 	if (!enabled) {
 		printf("S8 TOUCH: disabled\n");
 		return;

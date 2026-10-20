@@ -12,7 +12,10 @@ shift 3
 args=${*:-debug=0xc serial=3 cpus=1 keepsyms=1 -enable_kprintf_spam -noprogress wdt=-1 wdt_test=no_user_checkin a5touchprobe=0}
 work=$repo/shim/dreamlte/out
 mkdir -p "$work"
-python3 "$repo/tools/mkadt_dreamlte.py" "$work/dreamlte.adt"
+# The ADT canvas must match the size the kernel presents (SweetFramebuffer).
+canvas=1125x2436
+[[ " $args " == *" sweetfb_native=1 "* ]] && canvas=1440x2960
+python3 "$repo/tools/mkadt_dreamlte.py" "$work/dreamlte.adt" --canvas "$canvas"
 python3 "$repo/tools/mkpayload.py" "$kernel" "$work/dreamlte.adt" "$work/payload.bin" --cmdline "$args"
 bash "$repo/shim/dreamlte/build.sh" "$stock" "$work/payload.bin" "$out"
 python3 "$repo/tools/dreamlte_bootimg_info.py" "$out" | head -4
