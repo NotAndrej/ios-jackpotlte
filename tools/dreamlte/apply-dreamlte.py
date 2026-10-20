@@ -368,7 +368,23 @@ edit('osfmk/console/serial_console.c', [
 ])
 
 # IOKit platform expert / CPU personalities: also match the S8 names.
+# Present the S8 panel as the iPhone X screen (1125x2436, centered on the
+# 1440x2960 panel), like SWEET does: iOS has no layout data for 1440x2960.
+edit('iokit/Kernel/arm/SweetFramebuffer.cpp', [
+    ('#if !defined(ARM64_BOARD_CONFIG_A5XELTE)\n'
+     '\tif (!native && fWidth <= SWEET_FB_LOGICAL_W && fHeight <= SWEET_FB_LOGICAL_H) {\n',
+     '#if defined(DREAMLTE)\n'
+     '\tif (!native) {\n'
+     '\t\tfLogicalW = SWEET_FB_LOGICAL_W;\n'
+     '\t\tfLogicalH = SWEET_FB_LOGICAL_H;\n'
+     '\t}\n'
+     '#elif !defined(ARM64_BOARD_CONFIG_A5XELTE)\n'
+     '\tif (!native && fWidth <= SWEET_FB_LOGICAL_W && fHeight <= SWEET_FB_LOGICAL_H) {\n', 1),
+])
+
 edit('iokit/KernelConfigTables.cpp', [
+    ("    \"     'IONameMatch'     = 'samsung,a5xelte-display';\"\n",
+     "    \"     'IONameMatch'     = ('samsung,a5xelte-display', 'samsung,dreamlte-display');\"\n", 1),
     ("    \"     'IONameMatch'     = 'samsung,a5xelte';\"\n",
      "    \"     'IONameMatch'     = ('samsung,a5xelte', 'samsung,dreamlte');\"\n", 1),
 ])

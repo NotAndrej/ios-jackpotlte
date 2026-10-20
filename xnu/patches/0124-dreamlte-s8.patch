@@ -260,7 +260,7 @@ index 55d0057..e42ad4a 100644
  	for (unsigned int i = 0; i < topology->num_cpus; i++) {
  		SweetCPU *cpu = __atomic_load_n(&sweet_cpus[i], __ATOMIC_ACQUIRE);
 diff --git iokit/Kernel/arm/SweetFramebuffer.cpp iokit/Kernel/arm/SweetFramebuffer.cpp
-index 356ff51..4d67952 100644
+index 356ff51..659eb77 100644
 --- a/iokit/Kernel/arm/SweetFramebuffer.cpp
 +++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
 @@ -48,6 +48,7 @@ extern "C" int sweet_console_muted;     /* osfmk/console/serial_console.c */
@@ -286,8 +286,22 @@ index 356ff51..4d67952 100644
  #else
  	fPhys = video.v_baseAddr;
  	fWidth = (uint32_t)video.v_width;
+@@ -184,7 +185,12 @@ AppleCLCD::start(IOService *provider)
+ 	PE_parse_boot_argn("sweetfb_native", &native, sizeof(native));
+ 	fLogicalW = fWidth;
+ 	fLogicalH = fHeight;
+-#if !defined(ARM64_BOARD_CONFIG_A5XELTE)
++#if defined(DREAMLTE)
++	if (!native) {
++		fLogicalW = SWEET_FB_LOGICAL_W;
++		fLogicalH = SWEET_FB_LOGICAL_H;
++	}
++#elif !defined(ARM64_BOARD_CONFIG_A5XELTE)
+ 	if (!native && fWidth <= SWEET_FB_LOGICAL_W && fHeight <= SWEET_FB_LOGICAL_H) {
+ 		fLogicalW = SWEET_FB_LOGICAL_W;
+ 		fLogicalH = SWEET_FB_LOGICAL_H;
 diff --git iokit/KernelConfigTables.cpp iokit/KernelConfigTables.cpp
-index 9987f5a..e73ee66 100644
+index 9987f5a..9848f10 100644
 --- a/iokit/KernelConfigTables.cpp
 +++ b/iokit/KernelConfigTables.cpp
 @@ -39,7 +39,7 @@ const char * gIOKernelConfigTables =
@@ -298,6 +312,15 @@ index 9987f5a..e73ee66 100644
 +    "     'IONameMatch'     = ('samsung,a5xelte', 'samsung,dreamlte');"
  #else
      "     'IONameMatch'     = 'xiaomi,sweet';"
+ #endif
+@@ -74,7 +74,7 @@ const char * gIOKernelConfigTables =
+     "     'IOClass'         = AppleCLCD;"
+     "     'IOProviderClass' = IOPlatformDevice;"
+ #if defined(ARM64_BOARD_CONFIG_A5XELTE)
+-    "     'IONameMatch'     = 'samsung,a5xelte-display';"
++    "     'IONameMatch'     = ('samsung,a5xelte-display', 'samsung,dreamlte-display');"
+ #else
+     "     'IONameMatch'     = 'sweet,display';"
  #endif
 diff --git iokit/bsddev/IOKitBSDInit.cpp iokit/bsddev/IOKitBSDInit.cpp
 index 63a3c37..b6ba676 100644
