@@ -49,8 +49,17 @@ jobs:
           # 12.5-14.3 use the top-level patches dir; ours go next to blacktop's
           cp xnu/patches/*.patch xnu/patches/*.sh dxb/patches/
           # libfirehose_kernel is built arm64e-only; the SWEET kernel is plain arm64
-          sed -i '' 's/ARCHS="x86_64 arm64e" VALID_ARCHS="x86_64 arm64e"/ARCHS="x86_64 arm64e arm64" VALID_ARCHS="x86_64 arm64e arm64"/' dxb/build.sh
-          grep -c 'VALID_ARCHS="x86_64 arm64e arm64"' dxb/build.sh
+          if [ "$MACHINE_CONFIG" = A5XELTE ]; then
+            # Cortex-A53 (Exynos7580 / Exynos8895) is ARMv8.0: Xcode's default
+            # arm64 code generation emits LSE atomics (ldadd/cas) that trap as
+            # "Undefined kernel instruction" right after "Firehose configured"
+            # (S8 boot 2). Same flags as tools/a5xelte-build-firehose.sh.
+            sed -i '' "s/ARCHS=\"x86_64 arm64e\" VALID_ARCHS=\"x86_64 arm64e\"/ARCHS=arm64 VALID_ARCHS=arm64 OTHER_CFLAGS='-mkernel -nostdinc -Wno-packed -mcpu=cortex-a53 -march=armv8-a+crypto'/" dxb/build.sh
+            grep -c "VALID_ARCHS=arm64 OTHER_CFLAGS='-mkernel -nostdinc -Wno-packed -mcpu=cortex-a53" dxb/build.sh
+          else
+            sed -i '' 's/ARCHS="x86_64 arm64e" VALID_ARCHS="x86_64 arm64e"/ARCHS="x86_64 arm64e arm64" VALID_ARCHS="x86_64 arm64e arm64"/' dxb/build.sh
+            grep -c 'VALID_ARCHS="x86_64 arm64e arm64"' dxb/build.sh
+          fi
           ls dxb/patches
 
       - name: Deps
@@ -115,6 +124,20 @@ jobs:
           cp -R dxb/fakeroot/System/Library/Kernels/. out/ 2>/dev/null || true
           ls -la out
           (cd out && shasum -a 256 kernel.* > SHA256SUMS) || true
+
+      - name: Check for ARMv8.1 LSE instructions (Cortex-A53 has none)
+        if: always()
+        run: |
+          for k in out/kernel.*; do
+            [ -f "$k" ] || continue
+            case "$k" in *.link|*.dSYM) continue ;; esac
+            xcrun llvm-objdump -d --no-show-raw-insn "$k" > "$k.disasm" 2>/dev/null || continue
+            # function headers + LSE mnemonics, so each hit names its function
+            grep -E '^[0-9a-f]+ <|	(cas|casa|casal|casl|casp|ldadd|ldclr|ldeor|ldset|ldsmax|ldsmin|ldumax|ldumin|stadd|stclr|steor|stset|stsmax|stsmin|stumax|stumin|swp)[a-z]*	' "$k.disasm" \
+              | awk '/^[0-9a-f]+ </{fn=$2; next} {n++; c[fn]++} END {printf "LSE instructions: %d\n", n+0; for (f in c) print c[f], f}' \
+              | sort -rn | head -40 | tee "$k.lse.txt"
+            rm -f "$k.disasm"
+          done
 
       - uses: actions/upload-artifact@v4
         if: always()

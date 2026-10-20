@@ -34,22 +34,41 @@
 #define PAGE_SIZE		4096UL
 #define BOOT_LINE_LENGTH	608
 
-/* ---- persistent log ---- */
+/* ---- persistent log ----
+ * The same text goes to two ramoops zones with separate headers: the
+ * console zone (/sys/fs/pstore/console-ramoops-0) and the pmsg zone
+ * (pmsg-ramoops-0). A forced reboot flips a few RAM bits; when one flips a
+ * zone header, TWRP drops that zone ("found existing invalid buffer", seen on
+ * the first XNU boot), the other copy usually survives. */
 struct prz {
 	uint32_t sig, start, size;
 	uint8_t data[];
 };
+#define RAMOOPS_PMSG		0x92180000UL	/* after dump, console, ftrace */
 static volatile struct prz *const prz = (volatile struct prz *)RAMOOPS_CONSOLE;
+static volatile struct prz *const prz2 = (volatile struct prz *)RAMOOPS_PMSG;
 #define PRZ_DATA_MAX	(RAMOOPS_CONSOLE_SIZE - 12)
-static uint32_t log_len;
+static uint32_t log_len, log2_len;
+
+static void prz_put(volatile struct prz *z, uint32_t *len, char c)
+{
+	if (*len >= PRZ_DATA_MAX)
+		return;
+	z->data[(*len)++] = (uint8_t)c;
+	z->start = *len;
+	z->size = *len;
+}
+
+/* console zone only: used for the XNU marker padding */
+static void log_ch1(char c)
+{
+	prz_put(prz, &log_len, c);
+}
 
 static void log_ch(char c)
 {
-	if (log_len >= PRZ_DATA_MAX)
-		return;
-	prz->data[log_len++] = (uint8_t)c;
-	prz->start = log_len;
-	prz->size = log_len;
+	prz_put(prz, &log_len, c);
+	prz_put(prz2, &log2_len, c);
 }
 
 /* ---- screen console ---- */
@@ -211,13 +230,13 @@ static void reserve_marker(void)
 	while (tag[tag_len])
 		tag_len++;
 	while (log_len < at - tag_len)
-		log_ch(log_len % 128 == 127 ? '\n' : ' ');
+		log_ch1(log_len % 128 == 127 ? '\n' : ' ');
 	for (uint32_t i = 0; i < tag_len; i++)
-		log_ch(tag[i]);
+		log_ch1(tag[i]);
 	for (int i = 0; i < 8; i++)
-		log_ch('-');
-	log_ch(']');
-	log_ch('\n');
+		log_ch1('-');
+	log_ch1(']');
+	log_ch1('\n');
 }
 
 uint64_t dl_main(uintptr_t dtb, uint64_t el, uint64_t sctlr)
@@ -225,6 +244,8 @@ uint64_t dl_main(uintptr_t dtb, uint64_t el, uint64_t sctlr)
 	*(volatile uint32_t *)DECON_TRIG = DECON_TRIG_UNMASK;
 	prz->sig = PRZ_SIG;
 	prz->start = prz->size = 0;
+	prz2->sig = PRZ_SIG;
+	prz2->start = prz2->size = 0;
 	fill(0, 0, FB_W, FB_H, 0xff000000U);
 	fg = 0xffffff00U;
 	out("S8LOADER BEGIN  (ios-s8 dreamlte XNU loader)\n");
@@ -328,6 +349,7 @@ uint64_t dl_main(uintptr_t dtb, uint64_t el, uint64_t sctlr)
 	out("\nJUMP TO XNU\n");
 	reserve_marker();
 	clean(RAMOOPS_CONSOLE, RAMOOPS_CONSOLE + RAMOOPS_CONSOLE_SIZE);
+	clean(RAMOOPS_PMSG, RAMOOPS_PMSG + RAMOOPS_CONSOLE_SIZE);
 	return entry_pa;
 }
 

@@ -21,7 +21,9 @@ import adt
 import mkadt
 
 DRAM_BASE = 0x880000000
-DRAM_SIZE = 0x80000000
+# 512 MiB, the A5XELTE-proven size: with the whole 2 GiB bank the first S8
+# boot panicked in kmem_range_init (kernel VA claims in the 39-bit 4K layout).
+DRAM_SIZE = 0x20000000
 FB_PHYS, FB_W, FB_H = 0xcc000000, 1440, 2960
 TIMEBASE = 26000000
 
