@@ -41,27 +41,31 @@ def build():
     set_prop(cpu0, 'compatible', mkadt.cstr('arm,cortex-a53') + mkadt.cstr('ARM,v8'))
     set_prop(cpu0, 'reg', mkadt.u32(0))
     set_prop(cpu0, 'timebase-frequency', mkadt.u32(26000000))
-    # The working Exynos7580 Linux DT identifies CPU1 as MPIDR 0x1.
-    # Start with the second A53 in the same cluster; cpus=1 remains usable.
-    cpus.children.append(mkadt.node('cpu1', [
-        ('device_type', mkadt.cstr('cpu')),
-        ('compatible', mkadt.cstr('arm,cortex-a53') + mkadt.cstr('ARM,v8')),
-        ('reg', mkadt.u32(1)),
-        ('cpu-id', mkadt.u32(1)),
-        ('cluster-id', mkadt.u32(0)),
-        ('cluster-type', mkadt.u32(0)),
-        ('die-cluster-id', mkadt.u32(0)),
-        ('cluster-core-id', mkadt.u32(1)),
-        ('l2-cache-id', mkadt.u32(0)),
-        ('l3-cache-id', mkadt.u32(0)),
-        ('state', mkadt.cstr('stopped')),
-        ('timebase-frequency', mkadt.u32(26000000)),
-        ('clock-frequency', mkadt.u32(1804800000)),
-        ('bus-frequency', mkadt.u32(100000000)),
-        ('memory-frequency', mkadt.u32(1866000000)),
-        ('peripheral-frequency', mkadt.u32(26000000)),
-        ('fixed-frequency', mkadt.u32(26000000)),
-    ]))
+    # The working Exynos7580 Linux DT has two A53 clusters of four cores:
+    # MPIDR 0..3 in cluster 0 and 0x100..0x103 in cluster 1. The cpus=N
+    # boot argument still selects a prefix, so cpus=1 and cpus=2 remain valid.
+    for logical in range(1, 8):
+        cluster, core = divmod(logical, 4)
+        mpidr = (cluster << 8) | core
+        cpus.children.append(mkadt.node(f'cpu{logical}', [
+            ('device_type', mkadt.cstr('cpu')),
+            ('compatible', mkadt.cstr('arm,cortex-a53') + mkadt.cstr('ARM,v8')),
+            ('reg', mkadt.u32(mpidr)),
+            ('cpu-id', mkadt.u32(logical)),
+            ('cluster-id', mkadt.u32(cluster)),
+            ('cluster-type', mkadt.u32(0)),
+            ('die-cluster-id', mkadt.u32(cluster)),
+            ('cluster-core-id', mkadt.u32(core)),
+            ('l2-cache-id', mkadt.u32(cluster)),
+            ('l3-cache-id', mkadt.u32(0)),
+            ('state', mkadt.cstr('stopped')),
+            ('timebase-frequency', mkadt.u32(26000000)),
+            ('clock-frequency', mkadt.u32(1600000000)),
+            ('bus-frequency', mkadt.u32(100000000)),
+            ('memory-frequency', mkadt.u32(1866000000)),
+            ('peripheral-frequency', mkadt.u32(26000000)),
+            ('fixed-frequency', mkadt.u32(26000000)),
+        ]))
     arm_io = child(root, 'arm-io')
     set_prop(arm_io, 'device_type', mkadt.cstr('a5xelte-io'))
     set_prop(arm_io, 'compatible', mkadt.cstr('samsung,exynos7580-io') +
