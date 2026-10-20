@@ -71,8 +71,12 @@ def cpu_node(logical):
 
 def build():
     root = mkadt.build(seed=os.urandom(64), qemu=True)
+    # The kernel's SweetPlatformExpert personality matches 'samsung,a5xelte'
+    # (KernelConfigTables.cpp); without it IOKit panics "Unable to find driver
+    # for this platform" (S8 boot 3). IONameMatch accepts any listed name.
     set_prop(root, 'compatible', mkadt.cstr('samsung,dreamlte') +
-             mkadt.cstr('samsung,exynos8895') + mkadt.cstr('AppleARM'))
+             mkadt.cstr('samsung,a5xelte') + mkadt.cstr('samsung,exynos8895') +
+             mkadt.cstr('AppleARM'))
     chosen = child(root, 'chosen')
     set_prop(chosen, 'dram-base', mkadt.u64(DRAM_BASE))
     set_prop(chosen, 'dram-size', mkadt.u64(DRAM_SIZE))

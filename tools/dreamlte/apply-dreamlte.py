@@ -44,6 +44,8 @@ edit('pexpert/pexpert/arm64/A5XELTE.h', [(
     '#define A5_ENTRY_MARKER_PHYS          0x920ff000  /* slot in the loader\'s pstore text */\n'
     '#define A5_BOOT_MPIDR                 0x100       /* first Cortex-A53 */\n'
     '#define A5_KEYS_DEFAULT               0           /* A5 GPA2 keys absent */\n'
+    '#define A5_KLOG_PHYS                  0x92000000  /* TWRP ramoops dump zone */\n'
+    '#define A5_KLOG_SIZE                  0x80000\n'
     '#else\n'
     '#define A5_FB_PHYS                    0x67000000\n'
     '#define A5_FB_WIDTH                   1080\n'
@@ -109,6 +111,67 @@ edit('iokit/Kernel/arm/SweetCPU.cpp', [
      '\t/* The ADT describes logical CPU 0 as the boot CPU. */\n'
      '\tif (topology->boot_cpu->cpu_id != 0 || topology->boot_cpu->phys_id != A5_BOOT_MPIDR) {\n'
      '\t\tpanic(CPU_PORT_NAME " CPU: expected boot MPIDR %#x and logical CPU 0", A5_BOOT_MPIDR);\n', 1),
+])
+
+edit('pexpert/arm/pe_serial.c', [
+    ('static uint32_t fbcon_cols, fbcon_rows, fbcon_col, fbcon_row;\n',
+     'static uint32_t fbcon_cols, fbcon_rows, fbcon_col, fbcon_row;\n'
+     '\n'
+     '#if defined(DREAMLTE)\n'
+     '/*\n'
+     ' * Copy of the console in TWRP\'s ramoops dump zone, in persistent_ram\n'
+     ' * format (sig "DBGC", start, size, ring data). After a forced reboot TWRP\n'
+     ' * shows it as /sys/fs/pstore/dmesg-ramoops-0, so no photo is needed.\n'
+     ' */\n'
+     '#define KLOG_CAP        (A5_KLOG_SIZE - 12)\n'
+     'static volatile uint32_t *klog_hdr;\n'
+     'static volatile uint8_t *klog_data;\n'
+     'static uint32_t klog_start, klog_size;\n'
+     '\n'
+     'static void\n'
+     'klog_init(void)\n'
+     '{\n'
+     '\tklog_hdr = (volatile uint32_t *)ml_io_map(A5_KLOG_PHYS, A5_KLOG_SIZE);\n'
+     '\tif (klog_hdr == NULL) {\n'
+     '\t\treturn;\n'
+     '\t}\n'
+     '\tklog_data = (volatile uint8_t *)(klog_hdr + 3);\n'
+     '\tklog_hdr[0] = 0x43474244u;\n'
+     '\tklog_hdr[1] = 0;\n'
+     '\tklog_hdr[2] = 0;\n'
+     '}\n'
+     '\n'
+     'static void\n'
+     'klog_putc(uint8_t c)\n'
+     '{\n'
+     '\tif (klog_data == NULL) {\n'
+     '\t\treturn;\n'
+     '\t}\n'
+     '\tklog_data[klog_start] = c;\n'
+     '\tklog_start = (klog_start + 1) % KLOG_CAP;\n'
+     '\tif (klog_size < KLOG_CAP) {\n'
+     '\t\tklog_size++;\n'
+     '\t}\n'
+     '\tklog_hdr[1] = klog_start;\n'
+     '\tklog_hdr[2] = klog_size;\n'
+     '}\n'
+     '#endif\n', 1),
+    ('fbcon_transmit_data(uint8_t c)\n{\n',
+     'fbcon_transmit_data(uint8_t c)\n{\n'
+     '#if defined(DREAMLTE)\n'
+     '\tklog_putc(c);\n'
+     '#endif\n', 1),
+    ('\tfbcon_base = (volatile uint32_t *)ml_io_map_wcomb(reg[0], reg[1]);\n',
+     '\tfbcon_base = (volatile uint32_t *)ml_io_map_wcomb(reg[0], reg[1]);\n'
+     '#if defined(DREAMLTE)\n'
+     '\tklog_init();\n'
+     '#endif\n', 1),
+])
+
+# IOKit platform expert / CPU personalities: also match the S8 names.
+edit('iokit/KernelConfigTables.cpp', [
+    ("    \"     'IONameMatch'     = 'samsung,a5xelte';\"\n",
+     "    \"     'IONameMatch'     = ('samsung,a5xelte', 'samsung,dreamlte');\"\n", 1),
 ])
 
 edit('bsd/dev/a5xelte_keys.c', [

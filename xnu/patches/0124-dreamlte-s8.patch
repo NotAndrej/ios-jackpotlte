@@ -79,6 +79,19 @@ index 356ff51..4d67952 100644
  #else
  	fPhys = video.v_baseAddr;
  	fWidth = (uint32_t)video.v_width;
+diff --git iokit/KernelConfigTables.cpp iokit/KernelConfigTables.cpp
+index 9987f5a..e73ee66 100644
+--- a/iokit/KernelConfigTables.cpp
++++ b/iokit/KernelConfigTables.cpp
+@@ -39,7 +39,7 @@ const char * gIOKernelConfigTables =
+     "     'IOClass'         = SweetPlatformExpert;"
+     "     'IOProviderClass' = IOPlatformExpertDevice;"
+ #if defined(ARM64_BOARD_CONFIG_A5XELTE)
+-    "     'IONameMatch'     = 'samsung,a5xelte';"
++    "     'IONameMatch'     = ('samsung,a5xelte', 'samsung,dreamlte');"
+ #else
+     "     'IONameMatch'     = 'xiaomi,sweet';"
+ #endif
 diff --git osfmk/arm64/start.s osfmk/arm64/start.s
 index 7da26d2..1606c91 100644
 --- a/osfmk/arm64/start.s
@@ -236,11 +249,82 @@ index dcdbcf6..d4f3ca3 100644
  		a5_clear_row();
  		if (c == '\n') {
  			return;
+diff --git pexpert/arm/pe_serial.c pexpert/arm/pe_serial.c
+index ed7dccd..c77a85e 100644
+--- a/pexpert/arm/pe_serial.c
++++ b/pexpert/arm/pe_serial.c
+@@ -721,6 +721,46 @@ static volatile uint32_t *fbcon_base;
+ static uint32_t fbcon_width, fbcon_height, fbcon_stride;
+ static uint32_t fbcon_cols, fbcon_rows, fbcon_col, fbcon_row;
+ 
++#if defined(DREAMLTE)
++/*
++ * Copy of the console in TWRP's ramoops dump zone, in persistent_ram
++ * format (sig "DBGC", start, size, ring data). After a forced reboot TWRP
++ * shows it as /sys/fs/pstore/dmesg-ramoops-0, so no photo is needed.
++ */
++#define KLOG_CAP        (A5_KLOG_SIZE - 12)
++static volatile uint32_t *klog_hdr;
++static volatile uint8_t *klog_data;
++static uint32_t klog_start, klog_size;
++
++static void
++klog_init(void)
++{
++	klog_hdr = (volatile uint32_t *)ml_io_map(A5_KLOG_PHYS, A5_KLOG_SIZE);
++	if (klog_hdr == NULL) {
++		return;
++	}
++	klog_data = (volatile uint8_t *)(klog_hdr + 3);
++	klog_hdr[0] = 0x43474244u;
++	klog_hdr[1] = 0;
++	klog_hdr[2] = 0;
++}
++
++static void
++klog_putc(uint8_t c)
++{
++	if (klog_data == NULL) {
++		return;
++	}
++	klog_data[klog_start] = c;
++	klog_start = (klog_start + 1) % KLOG_CAP;
++	if (klog_size < KLOG_CAP) {
++		klog_size++;
++	}
++	klog_hdr[1] = klog_start;
++	klog_hdr[2] = klog_size;
++}
++#endif
++
+ static void
+ fbcon_clear_row(uint32_t row)
+ {
+@@ -761,6 +801,9 @@ fbcon_transmit_ready(void)
+ static void
+ fbcon_transmit_data(uint8_t c)
+ {
++#if defined(DREAMLTE)
++	klog_putc(c);
++#endif
+ 	if (c == '\r') {
+ 		fbcon_col = 0;
+ 		return;
+@@ -840,6 +883,9 @@ fbcon_probe(void)
+ 	}
+ 	sweet_early_mark(17, "fbcon config read; mapping");
+ 	fbcon_base = (volatile uint32_t *)ml_io_map_wcomb(reg[0], reg[1]);
++#if defined(DREAMLTE)
++	klog_init();
++#endif
+ 	sweet_early_mark(18, "fbcon mapping returned");
+ 	if (fbcon_base != NULL) {
+ 		register_serial_functions(&sweet_fbcon_serial_functions);
 diff --git pexpert/pexpert/arm64/A5XELTE.h pexpert/pexpert/arm64/A5XELTE.h
-index e6718d4..ad6f8d7 100644
+index e6718d4..eb3f947 100644
 --- a/pexpert/pexpert/arm64/A5XELTE.h
 +++ b/pexpert/pexpert/arm64/A5XELTE.h
-@@ -24,6 +24,32 @@
+@@ -24,6 +24,34 @@
  #define HAS_GIC_V3                    0
  #define A5XELTE_VTIMER_INTID         27
  
@@ -259,6 +343,8 @@ index e6718d4..ad6f8d7 100644
 +#define A5_ENTRY_MARKER_PHYS          0x920ff000  /* slot in the loader's pstore text */
 +#define A5_BOOT_MPIDR                 0x100       /* first Cortex-A53 */
 +#define A5_KEYS_DEFAULT               0           /* A5 GPA2 keys absent */
++#define A5_KLOG_PHYS                  0x92000000  /* TWRP ramoops dump zone */
++#define A5_KLOG_SIZE                  0x80000
 +#else
 +#define A5_FB_PHYS                    0x67000000
 +#define A5_FB_WIDTH                   1080
