@@ -359,7 +359,9 @@ uint64_t dl_main(uintptr_t dtb, uint64_t el, uint64_t sctlr)
 	}
 	out("\n");
 	ufs_probe(kv, out, UFS_PROBE_DMA);
-	smp_probe(kv, out);
+	/* smp_probe(kv, out) proved the PMU power-up (boot 19); it leaves the
+	 * probed cores' PMU power on, which hid the 0 -> 0xF edge XNU needs. */
+	(void)smp_probe;
 	fg = 0xff40ff40U;
 	out("\nJUMP TO XNU\n");
 	reserve_marker();
