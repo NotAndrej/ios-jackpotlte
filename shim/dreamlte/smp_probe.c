@@ -67,6 +67,66 @@ static void regs(void (*kv)(const char *, uint64_t), uint64_t m)
 	kv("l2", rd(CL_L2(c)));
 }
 
+/* Poll a PMU bit with a timeout; 1 = reached. */
+static int wait_bit(uintptr_t a, uint32_t bit, unsigned ms)
+{
+	uint64_t end = ticks() + TIMER_HZ / 1000 * ms;
+	while (ticks() < end)
+		if (rd(a) & bit)
+			return 1;
+	return 0;
+}
+
+#define DD(n)		(0x16840000UL + (n) * 0x400)	/* DDn_DD_DA_INPUT_0 */
+
+/*
+ * Mongoose (CLUSTER0, MPIDR 0x0-0x3) bring-up test on core 0x000, in the
+ * order of Samsung's cal-if/exynos8895/pmucal_cpu_exynos8895.h:
+ * cluster0_on = CPU_QCH 0x3C20 := 1, wait 0x3C24; CLKSTOP 0x45C0 := 1,
+ * wait 0x45C4; DD4 := 1; CPUSEQUENCER_OPTION 0x2488 bit 0 := 0.
+ * cpu00_on = CONFIGURATION 0x2000 := 0xF; DD0 := 1. Then PSCI CPU_ON.
+ * Every wait has a timeout and stops the test, so a stuck step is logged.
+ */
+void mngs_probe(void (*kv)(const char *, uint64_t), void (*out)(const char *))
+{
+	out("MNGS probe (Mongoose cluster 0)\n");
+	kv("seq st", rd(PMU + 0x2484));
+	kv("seq opt", rd(PMU + 0x2488));
+	kv("qch", rd(PMU + 0x3c24));
+	kv("clkstop", rd(PMU + 0x45c4));
+	kv("dd4", rd(DD(4)));
+	kv("cpu0 st", rd(CPU_STAT(0)));
+	out("\n");
+	wr(PMU + 0x3c20, rd(PMU + 0x3c20) | 1);
+	if (!wait_bit(PMU + 0x3c24, 1, 50)) {
+		out("MNGS: QCH status stuck\n");
+		return;
+	}
+	wr(PMU + 0x45c0, rd(PMU + 0x45c0) | 1);
+	if (!wait_bit(PMU + 0x45c4, 1, 50)) {
+		out("MNGS: CLKSTOP status stuck\n");
+		return;
+	}
+	wr(DD(4), rd(DD(4)) | 1);
+	wr(PMU + 0x2488, rd(PMU + 0x2488) & ~1u);
+	kv("cluster on: seq st", rd(PMU + 0x2484));
+	out("\n");
+	smp_flags[0] = 0;
+	wr(CPU_CFG(0), rd(CPU_CFG(0)) | 0xf);
+	uint64_t end = ticks() + TIMER_HZ / 10;
+	while (ticks() < end && (rd(CPU_STAT(0)) & 0xf) != 0xf)
+		;
+	wr(DD(0), rd(DD(0)) | 1);
+	kv("cpu0 st", rd(CPU_STAT(0)));
+	kv("dd0", rd(DD(0)));
+	out("\n");
+	int64_t rc = smc3(PSCI_CPU_ON, 0x000, (uintptr_t)smp_entry, 0);
+	int up = wait_flag(0, 300);
+	kv("CPU_ON rc", (uint64_t)rc);
+	kv("MONGOOSE STARTED", up);
+	out("\nMNGS probe done\n");
+}
+
 void smp_probe(void (*kv)(const char *, uint64_t), void (*out)(const char *))
 {
 	static const uint64_t targets[] = { 0x101, 0x000 };
