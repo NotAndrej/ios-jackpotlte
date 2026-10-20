@@ -347,10 +347,19 @@ edit('bsd/dev/sweet_ufs.c', [
      '#endif\n', 1),
     ('\tsweet_sample_start();\n\t/* Input drivers (HID services in iokit/Kernel/arm/hid/SweetHID.cpp). */\n'
      '\tsweet_keys_init();\n\tsweet_touch_init();\n\tsweet_usb_probe();\n',
+     '\tsweet_sample_start();\n'
      '#if defined(ARM64_BOARD_CONFIG_SWEET)\n'
-     '\tsweet_sample_start();\n\t/* Input drivers (HID services in iokit/Kernel/arm/hid/SweetHID.cpp). */\n'
+     '\t/* Input drivers (HID services in iokit/Kernel/arm/hid/SweetHID.cpp). */\n'
      '\tsweet_keys_init();\n\tsweet_touch_init();\n\tsweet_usb_probe();\n'
      '#endif\n', 1),
+])
+
+# The SWEET user-stack sampler (bsd/dev/sweet_sample.c; its kernel hook in
+# exception.c is already built for A5XELTE): stacks of SpringBoard and
+# backboardd every 2 minutes, to see where 4-CPU rendering stalls (boot 22).
+edit('bsd/dev/sweet_sample.c', [
+    ('#if defined(ARM64_BOARD_CONFIG_SWEET)\n/*\n * SWEET process sampler',
+     '#if defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_A5XELTE)\n/*\n * SWEET process sampler', 1),
 ])
 
 # rd=ufsroot0 also on the A5XELTE machine config (the S8 build).
@@ -479,10 +488,12 @@ edit('bsd/dev/a5xelte_keys.c', [
      '/*\n'
      ' * Galaxy S8 (mainline exynos8895-dreamlte.dts gpio-keys, all active low):\n'
      ' * Power GPA2-4, Volume Up GPA0-3, Volume Down GPA0-4, Bixby GPA0-6 (used\n'
-     ' * as Home). Banks are 0x20 apart, DAT at +4: sample = GPA0 | GPA2 << 8.\n'
+     ' * as Home). Bank offsets per mainline pinctrl-exynos-arm64.c\n'
+     ' * (exynos8895_pin_banks0): GPA0 0x020, GPA2 0x060; DAT at +4. Boot 22/23\n'
+     ' * read 0x044 (GPA1 DAT) and saw nothing. Sample = GPA0 | GPA2 << 8.\n'
      ' */\n'
      'typedef uint16_t keys_t;\n'
-     '#define KEYS_SAMPLE() ((keys_t)((a5_keys_read(0x04) & 0xff) | (a5_keys_read(0x44) & 0xff) << 8))\n'
+     '#define KEYS_SAMPLE() ((keys_t)((a5_keys_read(0x24) & 0xff) | (a5_keys_read(0x64) & 0xff) << 8))\n'
      '#define KEYS_PINS { 12, 3, 4, 6 }\n'
      '#else\n'
      'typedef uint8_t keys_t;\n'
