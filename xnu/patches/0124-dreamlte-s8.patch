@@ -250,23 +250,27 @@ index dcdbcf6..d4f3ca3 100644
  		if (c == '\n') {
  			return;
 diff --git pexpert/arm/pe_serial.c pexpert/arm/pe_serial.c
-index ed7dccd..c77a85e 100644
+index ed7dccd..1966bdd 100644
 --- a/pexpert/arm/pe_serial.c
 +++ b/pexpert/arm/pe_serial.c
-@@ -721,6 +721,46 @@ static volatile uint32_t *fbcon_base;
+@@ -721,6 +721,59 @@ static volatile uint32_t *fbcon_base;
  static uint32_t fbcon_width, fbcon_height, fbcon_stride;
  static uint32_t fbcon_cols, fbcon_rows, fbcon_col, fbcon_row;
  
 +#if defined(DREAMLTE)
 +/*
-+ * Copy of the console in TWRP's ramoops dump zone, in persistent_ram
-+ * format (sig "DBGC", start, size, ring data). After a forced reboot TWRP
-+ * shows it as /sys/fs/pstore/dmesg-ramoops-0, so no photo is needed.
++ * Copy of the console in TWRP's ramoops pmsg zone, in persistent_ram
++ * format (sig "DBGC", start, size, ring data), appended to the loader's
++ * text there. After a forced reboot TWRP shows loader + kernel log as
++ * /sys/fs/pstore/pmsg-ramoops-0. (The dump zone survives too but this
++ * TWRP does not expose it; the console zone header sits on RAM cells that
++ * lose the same bits on every forced reboot.)
 + */
 +#define KLOG_CAP        (A5_KLOG_SIZE - 12)
 +static volatile uint32_t *klog_hdr;
 +static volatile uint8_t *klog_data;
 +static uint32_t klog_start, klog_size;
++static void klog_putc(uint8_t c);
 +
 +static void
 +klog_init(void)
@@ -276,9 +280,18 @@ index ed7dccd..c77a85e 100644
 +		return;
 +	}
 +	klog_data = (volatile uint8_t *)(klog_hdr + 3);
-+	klog_hdr[0] = 0x43474244u;
-+	klog_hdr[1] = 0;
-+	klog_hdr[2] = 0;
++	/* Continue after the loader's text if its header is sane. */
++	if (klog_hdr[0] == 0x43474244u && klog_hdr[1] == klog_hdr[2] &&
++	    klog_hdr[2] < KLOG_CAP - 0x10000) {
++		klog_start = klog_size = klog_hdr[2];
++	} else {
++		klog_hdr[0] = 0x43474244u;
++		klog_start = klog_size = 0;
++	}
++	const char *banner = "\n--- XNU console ---\n";
++	for (; *banner; banner++) {
++		klog_putc((uint8_t)*banner);
++	}
 +}
 +
 +static void
@@ -300,7 +313,7 @@ index ed7dccd..c77a85e 100644
  static void
  fbcon_clear_row(uint32_t row)
  {
-@@ -761,6 +801,9 @@ fbcon_transmit_ready(void)
+@@ -761,6 +814,9 @@ fbcon_transmit_ready(void)
  static void
  fbcon_transmit_data(uint8_t c)
  {
@@ -310,7 +323,7 @@ index ed7dccd..c77a85e 100644
  	if (c == '\r') {
  		fbcon_col = 0;
  		return;
-@@ -840,6 +883,9 @@ fbcon_probe(void)
+@@ -840,6 +896,9 @@ fbcon_probe(void)
  	}
  	sweet_early_mark(17, "fbcon config read; mapping");
  	fbcon_base = (volatile uint32_t *)ml_io_map_wcomb(reg[0], reg[1]);
@@ -321,7 +334,7 @@ index ed7dccd..c77a85e 100644
  	if (fbcon_base != NULL) {
  		register_serial_functions(&sweet_fbcon_serial_functions);
 diff --git pexpert/pexpert/arm64/A5XELTE.h pexpert/pexpert/arm64/A5XELTE.h
-index e6718d4..eb3f947 100644
+index e6718d4..7fa4bdb 100644
 --- a/pexpert/pexpert/arm64/A5XELTE.h
 +++ b/pexpert/pexpert/arm64/A5XELTE.h
 @@ -24,6 +24,34 @@
@@ -343,7 +356,7 @@ index e6718d4..eb3f947 100644
 +#define A5_ENTRY_MARKER_PHYS          0x920ff000  /* slot in the loader's pstore text */
 +#define A5_BOOT_MPIDR                 0x100       /* first Cortex-A53 */
 +#define A5_KEYS_DEFAULT               0           /* A5 GPA2 keys absent */
-+#define A5_KLOG_PHYS                  0x92000000  /* TWRP ramoops dump zone */
++#define A5_KLOG_PHYS                  0x92180000  /* TWRP ramoops pmsg zone */
 +#define A5_KLOG_SIZE                  0x80000
 +#else
 +#define A5_FB_PHYS                    0x67000000
