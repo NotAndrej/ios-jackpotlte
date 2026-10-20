@@ -14,7 +14,8 @@ $CC $CFLAGS -c ../fdt.c -o out/fdt.o
 $CC $CFLAGS -c ufs_probe.c -o out/ufs_probe.o
 $CC $CFLAGS -c smp_probe.c -o out/smp_probe.o
 $CC $CFLAGS -c touch_probe.c -o out/touch_probe.o
-objs="out/loader.o out/fdt.o out/ufs_probe.o out/smp_probe.o out/touch_probe.o"
+$CC $CFLAGS -c pmic.c -o out/pmic.o
+objs="out/loader.o out/fdt.o out/ufs_probe.o out/smp_probe.o out/touch_probe.o out/pmic.o"
 # Runs wherever S-Boot puts it with no relocation pass.
 abs=$(aarch64-linux-gnu-readelf -r $objs | grep -c ABS64 || true)
 [ "$abs" = 0 ] || { echo "error: $abs absolute relocations" >&2; exit 1; }

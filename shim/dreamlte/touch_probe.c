@@ -197,6 +197,7 @@ void touch_probe(void (*kv_fn)(const char *, uint64_t), void (*out_fn)(const cha
 	kv = kv_fn;
 	out = out_fn;
 	out("TOUCH probe (S6SY761 hsi2c_23 0x108e0000)\n");
+	delay_ms(200);	/* rails just enabled by pmic_init; s6sy761.c waits 140 */
 	show("top mux", TOP_USI09_MUX);
 	show("div", TOP_USI09_DIV);
 	show("gate", TOP_USI09_GATE);
