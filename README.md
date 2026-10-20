@@ -18,17 +18,15 @@ This project ports Apple's open-source XNU kernel (xnu-8796, the iOS 16 generati
 | Display | S-Boot framebuffer, 1440×2960 (DECON in command mode). CoreAnimation renders on the CPU |
 | GUI | Apple logo, iOS lock screen (confirmed on the device) |
 | Buttons | Power, volume up/down, Bixby (ALIVE GPIOs) → HID events (seen in the log) |
-| Touch | **In progress.** S6SY761 controller on `hsi2c_23`. The loader probe reaches the bus; the controller's power rails still need to be enabled |
+| Clock | Date and time from the S2MPS17 RTC, read by the loader |
+| Touch | S6SY761 on `hsi2c_23`: the loader powers its rails (S2MPS17 LDO34/35 over SPEEDY), a polled kernel driver feeds HID touch events; taps and swipes reach SpringBoard |
 | Logs | No need to film the screen: loader and kernel log in ramoops (pmsg) plus a 4 MiB ring at the end of USERDATA, read from TWRP |
 
 ## Known bugs
 
 - **Very slow and laggy.** All rendering is on the CPU, there is no GPU. About 15 minutes to the lock screen on one core.
-- **With 4 cores, rendering stalls** after a few frames: threads on the secondary cores miss their timer wakeups. A fix (physical timer CNTP, INTID 30) is being tested.
-- **Touch does not work in iOS yet.** The touch controller is unpowered under our boot (its PMIC LDOs are off); the driver is being written.
 - The iPhone X 1125×2436 mode hangs on its first frame; the native 1440×2960 mode is used (`sweetfb_native=1`).
 - The Mongoose (big) cluster does not start yet: its L2/cluster power must be enabled.
-- The date shows 31 Dec 1969: no RTC driver.
 - No battery / charging readout (no fuel gauge driver).
 - No Wi-Fi, Bluetooth, cellular, audio, cameras, sensors, GPS or SEP / Face ID.
 - **No GPU.** The Mali-G71 cannot run iOS's Metal / AGX drivers, so hardware graphics is not realistic.
@@ -36,11 +34,13 @@ This project ports Apple's open-source XNU kernel (xnu-8796, the iOS 16 generati
 
 ## Roadmap
 
-- [ ] S6SY761 touch driver in XNU (power its LDOs, poll the `gpa1-0` interrupt line) → `SweetHIDTouch`
-- [ ] Fix the 4-core stalls, then bring up the Mongoose cluster (4 more cores)
-- [ ] Faster display path: zero-copy DECON layers, G2D for copies, lower resolution
+- [x] S6SY761 touch driver in XNU
+- [x] Fix the 4-core stalls (physical timer)
+- [ ] Bring up the Mongoose cluster (4 more cores), raise the A53 clock (now ~1050 of 1690 MHz)
+- [ ] Faster display path: zero-copy scanout through the DPU input DMA (probe in progress), 1125x2436 presentation (being tested)
 - [ ] 1125×2436 mode without the hang
-- [ ] RTC (date/time), battery stub or driver (MAX77865 fuel gauge)
+- [x] RTC (date/time)
+- [ ] Battery stub or driver (MAX77865 fuel gauge)
 - [ ] More RAM (512 MiB of 4 GiB today)
 - [ ] Vibration motor, backlight brightness
 - [ ] Wi-Fi (BCM4361): a large job
