@@ -41,6 +41,27 @@ def build():
     set_prop(cpu0, 'compatible', mkadt.cstr('arm,cortex-a53') + mkadt.cstr('ARM,v8'))
     set_prop(cpu0, 'reg', mkadt.u32(0))
     set_prop(cpu0, 'timebase-frequency', mkadt.u32(26000000))
+    # The working Exynos7580 Linux DT identifies CPU1 as MPIDR 0x1.
+    # Start with the second A53 in the same cluster; cpus=1 remains usable.
+    cpus.children.append(mkadt.node('cpu1', [
+        ('device_type', mkadt.cstr('cpu')),
+        ('compatible', mkadt.cstr('arm,cortex-a53') + mkadt.cstr('ARM,v8')),
+        ('reg', mkadt.u32(1)),
+        ('cpu-id', mkadt.u32(1)),
+        ('cluster-id', mkadt.u32(0)),
+        ('cluster-type', mkadt.u32(0)),
+        ('die-cluster-id', mkadt.u32(0)),
+        ('cluster-core-id', mkadt.u32(1)),
+        ('l2-cache-id', mkadt.u32(0)),
+        ('l3-cache-id', mkadt.u32(0)),
+        ('state', mkadt.cstr('stopped')),
+        ('timebase-frequency', mkadt.u32(26000000)),
+        ('clock-frequency', mkadt.u32(1804800000)),
+        ('bus-frequency', mkadt.u32(100000000)),
+        ('memory-frequency', mkadt.u32(1866000000)),
+        ('peripheral-frequency', mkadt.u32(26000000)),
+        ('fixed-frequency', mkadt.u32(26000000)),
+    ]))
     arm_io = child(root, 'arm-io')
     set_prop(arm_io, 'device_type', mkadt.cstr('a5xelte-io'))
     set_prop(arm_io, 'compatible', mkadt.cstr('samsung,exynos7580-io') +
