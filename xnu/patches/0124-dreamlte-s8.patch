@@ -227,10 +227,20 @@ index 6b926fe..3bbc0f4 100644
  }
  
 diff --git iokit/Kernel/arm/SweetCPU.cpp iokit/Kernel/arm/SweetCPU.cpp
-index 55d0057..e42ad4a 100644
+index 55d0057..9be3ad7 100644
 --- a/iokit/Kernel/arm/SweetCPU.cpp
 +++ b/iokit/Kernel/arm/SweetCPU.cpp
-@@ -84,8 +84,15 @@ SweetCPU::start(IOService *provider)
+@@ -17,6 +17,9 @@
+ #include <kern/thread.h>
+ #include <mach/mach_time.h>
+ #include <pexpert/pexpert.h>
++#if defined(DREAMLTE)
++extern "C" vm_offset_t ml_io_map(vm_offset_t phys_addr, vm_size_t size);
++#endif
+ 
+ extern "C" void sweet_secondary_entry(void);
+ extern "C" boolean_t sweet_cpu_signal_is_enabled(unsigned int cpu);
+@@ -84,8 +87,15 @@ SweetCPU::start(IOService *provider)
  #if defined(A5XELTE)
  	/* Linux's Exynos7580 DT: logical 0..3 = MPIDR 0..3;
  	 * logical 4..7 = MPIDR 0x100..0x103. */
@@ -246,7 +256,7 @@ index 55d0057..e42ad4a 100644
  	if (cpu->phys_id != expected_mpidr ||
  	    topology->num_cpus > SWEET_SMP_MAX_CPUS) {
  		panic(CPU_PORT_NAME " CPU: unsupported topology cpu=%u mpidr=0x%x count=%u",
-@@ -168,9 +175,9 @@ SweetCPU::startAll(void *arg __unused, wait_result_t result __unused)
+@@ -168,9 +178,9 @@ SweetCPU::startAll(void *arg __unused, wait_result_t result __unused)
  		}
  		IOSleep(1);
  	}
@@ -259,6 +269,38 @@ index 55d0057..e42ad4a 100644
  	}
  	for (unsigned int i = 0; i < topology->num_cpus; i++) {
  		SweetCPU *cpu = __atomic_load_n(&sweet_cpus[i], __ATOMIC_ACQUIRE);
+@@ -279,13 +289,30 @@ SweetCPU::startCPU(vm_offset_t start_paddr, vm_offset_t arg_paddr)
+ {
+ 	const ml_topology_cpu_t *cpu = &ml_get_topology_info()->cpus[getCPUNumber()];
+ 	/* cpu_start() passes NULL,NULL: x20/x21 are set by LowResetVectorBase. */
+-	if (start_paddr != 0 || arg_paddr != 0 || cpu->phys_id == 0 ||
++	if (start_paddr != 0 || arg_paddr != 0 || cpu->phys_id == A5_BOOT_MPIDR ||
+ 	    __atomic_load_n(&initialized, __ATOMIC_ACQUIRE) != 0) {
+ 		panic(CPU_PORT_NAME " CPU: cpu=%u unsupported restart", getCPUNumber());
+ 	}
+ 	vm_offset_t entry = ml_static_vtop((vm_offset_t)&sweet_secondary_entry);
+ 	IOLog(CPU_PORT_NAME " CPU: cpu=%u CPU_ON target=0x%x entry_pa=0x%llx context=%u\n",
+ 	    getCPUNumber(), cpu->phys_id, (uint64_t)entry, getCPUNumber());
++#if defined(DREAMLTE)
++	{
++		static vm_offset_t pmu;
++		if (pmu == 0) {
++			pmu = ml_io_map(0x16480000, 0x10000);
++		}
++		uint32_t off = 0x2000 + (uint32_t)(((((cpu->phys_id >> 8) & 0xf) << 2) |
++		    (cpu->phys_id & 0xf)) * 0x80);
++		volatile uint32_t *cfg = (volatile uint32_t *)(pmu + off);
++		cfg[0] |= 0xf;                  /* CPUn_CONFIGURATION: LOCAL_PWR_CFG */
++		for (int i = 0; i < 10000 && (cfg[1] & 0xf) != 0xf; i++) {
++			IODelay(1);
++		}
++		IOLog(CPU_PORT_NAME " CPU: cpu=%u PMU power-up cfg=0x%x status=0x%x\n",
++		    getCPUNumber(), cfg[0], cfg[1]);
++	}
++#endif
+ 	__builtin_arm_dsb(DSB_SY);
+ 	int32_t rc = sweet_psci_cpu_on(cpu->phys_id, entry, getCPUNumber());
+ 	IOLog(CPU_PORT_NAME " CPU: cpu=%u PSCI CPU_ON rc=%d\n", getCPUNumber(), rc);
 diff --git iokit/Kernel/arm/SweetFramebuffer.cpp iokit/Kernel/arm/SweetFramebuffer.cpp
 index 356ff51..659eb77 100644
 --- a/iokit/Kernel/arm/SweetFramebuffer.cpp

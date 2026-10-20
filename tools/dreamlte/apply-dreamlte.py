@@ -397,6 +397,40 @@ edit('bsd/dev/a5xelte_touch.c', [
      'a5xelte_touch_probe(void)\n{\n\tint enabled = A5_KEYS_DEFAULT; /* A5 board drivers: off on the S8 */\n', 1),
 ])
 
+# Secondary CPUs. Loader probe (boot 19): PSCI CPU_ON alone never starts an
+# S8 core; after the PMU power-up that Samsung's kernel does itself
+# (drivers/soc/samsung/exynos-pmu.c: CPUn_CONFIGURATION |= LOCAL_PWR_CFG 0xF)
+# the A53 at MPIDR 0x101 started. The Mongoose cluster also needs its
+# cluster power (L2/non-CPU), not done yet: use cpus<=4 (the A53 cluster).
+edit('iokit/Kernel/arm/SweetCPU.cpp', [
+    ('#include <pexpert/pexpert.h>\n',
+     '#include <pexpert/pexpert.h>\n'
+     '#if defined(DREAMLTE)\n'
+     'extern "C" vm_offset_t ml_io_map(vm_offset_t phys_addr, vm_size_t size);\n'
+     '#endif\n', 1),
+    ('\tif (start_paddr != 0 || arg_paddr != 0 || cpu->phys_id == 0 ||\n',
+     '\tif (start_paddr != 0 || arg_paddr != 0 || cpu->phys_id == A5_BOOT_MPIDR ||\n', 1),
+    ('\t__builtin_arm_dsb(DSB_SY);\n\tint32_t rc = sweet_psci_cpu_on(cpu->phys_id, entry, getCPUNumber());\n',
+     '#if defined(DREAMLTE)\n'
+     '\t{\n'
+     '\t\tstatic vm_offset_t pmu;\n'
+     '\t\tif (pmu == 0) {\n'
+     '\t\t\tpmu = ml_io_map(0x16480000, 0x10000);\n'
+     '\t\t}\n'
+     '\t\tuint32_t off = 0x2000 + (uint32_t)(((((cpu->phys_id >> 8) & 0xf) << 2) |\n'
+     '\t\t    (cpu->phys_id & 0xf)) * 0x80);\n'
+     '\t\tvolatile uint32_t *cfg = (volatile uint32_t *)(pmu + off);\n'
+     '\t\tcfg[0] |= 0xf;                  /* CPUn_CONFIGURATION: LOCAL_PWR_CFG */\n'
+     '\t\tfor (int i = 0; i < 10000 && (cfg[1] & 0xf) != 0xf; i++) {\n'
+     '\t\t\tIODelay(1);\n'
+     '\t\t}\n'
+     '\t\tIOLog(CPU_PORT_NAME " CPU: cpu=%u PMU power-up cfg=0x%x status=0x%x\\n",\n'
+     '\t\t    getCPUNumber(), cfg[0], cfg[1]);\n'
+     '\t}\n'
+     '#endif\n'
+     '\t__builtin_arm_dsb(DSB_SY);\n\tint32_t rc = sweet_psci_cpu_on(cpu->phys_id, entry, getCPUNumber());\n', 1),
+])
+
 edit('bsd/dev/a5xelte_keys.c', [
     ('#include <pexpert/pexpert.h>\n',
      '#include <pexpert/pexpert.h>\n#include <pexpert/arm64/board_config.h>\n', 1),
