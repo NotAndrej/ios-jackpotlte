@@ -860,7 +860,7 @@ index 55d0057..5bd24a7 100644
  	int32_t rc = sweet_psci_cpu_on(cpu->phys_id, entry, getCPUNumber());
  	IOLog(CPU_PORT_NAME " CPU: cpu=%u PSCI CPU_ON rc=%d\n", getCPUNumber(), rc);
 diff --git iokit/Kernel/arm/SweetFramebuffer.cpp iokit/Kernel/arm/SweetFramebuffer.cpp
-index 356ff51..659eb77 100644
+index 356ff51..ece1417 100644
 --- a/iokit/Kernel/arm/SweetFramebuffer.cpp
 +++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
 @@ -48,6 +48,7 @@ extern "C" int sweet_console_muted;     /* osfmk/console/serial_console.c */
@@ -871,7 +871,17 @@ index 356ff51..659eb77 100644
  #include <kern/clock.h>
  #include <sys/proc.h>
  
-@@ -166,10 +167,10 @@ AppleCLCD::start(IOService *provider)
+@@ -120,6 +121,9 @@ public:
+ 	uint32_t      fFlushTicks;    /* vsync ticks between panel copies */
+ 	bool          fPowerOff;      /* RequestPowerChange(0) */
+ 	uint32_t      fFadeStep;      /* fade-out steps done while off */
++	IOLock       *fPresentLock;   /* one panel copy at a time */
++	uint64_t      fLastPresent;   /* mach_absolute_time of the last copy */
++	uint64_t      fMinGap;        /* 1/hz in timebase ticks */
+ 
+ 	bool start(IOService *provider) APPLE_KEXT_OVERRIDE;
+ 	void addClient(IOMobileFramebufferUserClient *client);
+@@ -166,10 +170,10 @@ AppleCLCD::start(IOService *provider)
  	/* The loader's DECON handoff scans out this physical XRGB8888 buffer.
  	 * It does not fill boot_args.Video, so PE_current_console is empty.
  	 * Keep the physical address out of the donor path. */
@@ -886,7 +896,7 @@ index 356ff51..659eb77 100644
  #else
  	fPhys = video.v_baseAddr;
  	fWidth = (uint32_t)video.v_width;
-@@ -184,7 +185,12 @@ AppleCLCD::start(IOService *provider)
+@@ -184,7 +188,12 @@ AppleCLCD::start(IOService *provider)
  	PE_parse_boot_argn("sweetfb_native", &native, sizeof(native));
  	fLogicalW = fWidth;
  	fLogicalH = fHeight;
@@ -900,6 +910,51 @@ index 356ff51..659eb77 100644
  	if (!native && fWidth <= SWEET_FB_LOGICAL_W && fHeight <= SWEET_FB_LOGICAL_H) {
  		fLogicalW = SWEET_FB_LOGICAL_W;
  		fLogicalH = SWEET_FB_LOGICAL_H;
+@@ -211,6 +220,11 @@ AppleCLCD::start(IOService *provider)
+ 	uint32_t hz = 10;
+ 	PE_parse_boot_argn("sweetfb_hz", &hz, sizeof(hz));
+ 	fFlushTicks = (hz == 0 || hz >= 60) ? 1 : 60 / hz;
++	fMinGap = 26000000ULL / (hz == 0 ? 60 : hz);     /* 26 MHz timebase */
++	fPresentLock = IOLockAlloc();
++	if (fPresentLock == NULL) {
++		return false;
++	}
+ 	fVsync->setTimeoutUS(SWEET_FB_VSYNC_US);
+ 
+ 	setProperty(kIOUserClientClassKey, "IOMobileFramebufferUserClient");
+@@ -318,7 +332,16 @@ AppleCLCD::swap(const uint8_t *rec)
+ 	IOLockLock(fLock);
+ 	memcpy(fPending, rec, SWEET_FB_SWAP_REC_SIZE);
+ 	fDirty = true;
++	uint64_t now = mach_absolute_time();
++	bool copyNow = !fPowerOff && now - fLastPresent >= fMinGap;
++	if (copyNow) {
++		fDirty = false;
++		fLastPresent = now;
++	}
+ 	IOLockUnlock(fLock);
++	if (copyNow) {
++		present(rec);
++	}
+ 	if ((++sweet_fb_swap_count % 1000) == 0) {
+ 		IOLog("SWEET FB: %llu swaps\n", sweet_fb_swap_count);
+ 	}
+@@ -328,6 +351,7 @@ void
+ AppleCLCD::present(const uint8_t *rec)
+ {
+ 	uint32_t mask = get32(rec, 0x104);
++	IOLockLock(fPresentLock);
+ 
+ 
+ 	if (!fConsolePaused) {
+@@ -419,6 +443,7 @@ AppleCLCD::present(const uint8_t *rec)
+ 		}
+ 		s->release();
+ 	}
++	IOLockUnlock(fPresentLock);
+ }
+ 
+ bool
 diff --git iokit/KernelConfigTables.cpp iokit/KernelConfigTables.cpp
 index 9987f5a..9a35982 100644
 --- a/iokit/KernelConfigTables.cpp

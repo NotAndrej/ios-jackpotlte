@@ -473,6 +473,43 @@ edit('iokit/Kernel/IOPlatformExpert.cpp', [
      '#include <mach/mach_time.h>\n', 1),
 ])
 
+# Present at SwapEnd. Boot 29 (sweetfb_hz=30) showed heavy artifacts: the
+# vsync timer copied the latest swapped surface whenever it fired, while
+# CoreAnimation (SwapWait is a no-op) could already be drawing into it.
+# During the SwapEnd call the surface is stable, so copy there, at most once
+# per 1/hz; the timer only flushes a swap that was skipped. One lock
+# serializes the two copy paths.
+edit('iokit/Kernel/arm/SweetFramebuffer.cpp', [
+    ('\tuint32_t      fFadeStep;      /* fade-out steps done while off */\n',
+     '\tuint32_t      fFadeStep;      /* fade-out steps done while off */\n'
+     '\tIOLock       *fPresentLock;   /* one panel copy at a time */\n'
+     '\tuint64_t      fLastPresent;   /* mach_absolute_time of the last copy */\n'
+     '\tuint64_t      fMinGap;        /* 1/hz in timebase ticks */\n', 1),
+    ('\tfFlushTicks = (hz == 0 || hz >= 60) ? 1 : 60 / hz;\n',
+     '\tfFlushTicks = (hz == 0 || hz >= 60) ? 1 : 60 / hz;\n'
+     '\tfMinGap = 26000000ULL / (hz == 0 ? 60 : hz);     /* 26 MHz timebase */\n'
+     '\tfPresentLock = IOLockAlloc();\n'
+     '\tif (fPresentLock == NULL) {\n'
+     '\t\treturn false;\n'
+     '\t}\n', 1),
+    ('\tmemcpy(fPending, rec, SWEET_FB_SWAP_REC_SIZE);\n\tfDirty = true;\n\tIOLockUnlock(fLock);\n',
+     '\tmemcpy(fPending, rec, SWEET_FB_SWAP_REC_SIZE);\n\tfDirty = true;\n'
+     '\tuint64_t now = mach_absolute_time();\n'
+     '\tbool copyNow = !fPowerOff && now - fLastPresent >= fMinGap;\n'
+     '\tif (copyNow) {\n'
+     '\t\tfDirty = false;\n'
+     '\t\tfLastPresent = now;\n'
+     '\t}\n'
+     '\tIOLockUnlock(fLock);\n'
+     '\tif (copyNow) {\n'
+     '\t\tpresent(rec);\n'
+     '\t}\n', 1),
+    ('\tuint32_t mask = get32(rec, 0x104);\n',
+     '\tuint32_t mask = get32(rec, 0x104);\n\tIOLockLock(fPresentLock);\n', 1),
+    ('\t\ts->release();\n\t}\n}\n',
+     '\t\ts->release();\n\t}\n\tIOLockUnlock(fPresentLock);\n}\n', 1),
+])
+
 # Battery: the A5XELTE config had no power source, so iOS showed a wrong
 # battery. On the S8, SweetBattery reads the MAX77865 fuel gauge and charger
 # through dreamlte_battery_read() (dreamlte_touch.c). S8 battery: 3000 mAh.

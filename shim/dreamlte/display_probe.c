@@ -54,6 +54,24 @@ static void update(void)
 		delay_ms(1);
 }
 
+/* DECON INTERRUPT_PENDING (0x4c) bit 13 DPU_FRAME_DONE over 0.5 s, with
+ * the frame-done source enabled (0x40 bit 13) for the count only. */
+static uint64_t frames(void)
+{
+	uint32_t en = rd(DECON + 0x40);
+	wr(DECON + 0x40, en | (1u << 13) | 1u);
+	wr(DECON + 0x4c, 1u << 13);
+	uint64_t n = 0, end = ticks() + TIMER_HZ / 2;
+	while (ticks() < end) {
+		if (rd(DECON + 0x4c) & (1u << 13)) {
+			n++;
+			wr(DECON + 0x4c, 1u << 13);
+		}
+	}
+	wr(DECON + 0x40, en);
+	return n;
+}
+
 /* IDMA_ENABLE / DPP_ENABLE bit 4: SFR_UPDATE_FORCE (dpp_reg.c). */
 static void force(unsigned n)
 {
@@ -97,26 +115,27 @@ void display_probe(void (*kv)(const char *, uint64_t), void (*out)(const char *)
 			scan = (int)n;
 	}
 	if (scan >= 0) {
+		/* Boot 29: forcing IDMA/DPP SFR updates left IDMA_ENABLE bit 4 set
+		 * (0x14) and iOS showed heavy artifacts; no forcing any more. */
+		(void)force;
 		kv("flip test on idma", (uint64_t)scan);
+		kv("frames/0.5s", frames());
+		out("\n");
 		uintptr_t y = idma[scan] + 0x40;
-		out("\nTEST A: window+global update. PICTURE JUMPS UP NOW?\n");
+		out("TEST: base +800 lines. PICTURE JUMPS UP NOW?\n");
 		wr(y, FB_PHYS + FB_STRIDE * 800);
-		update();
-		delay_ms(3000);
+		wr(DECON + SHADOW_REQ, rd(DECON + SHADOW_REQ) | SHADOW_GLOBAL | 0x3f);
+		kv("req after write", rd(DECON + SHADOW_REQ));
+		kv("frames/0.5s", frames());
+		kv("req", rd(DECON + SHADOW_REQ));
+		kv("Y", rd(y));
+		out("\n");
+		delay_ms(2500);
 		wr(y, FB_PHYS);
-		update();
-		delay_ms(1000);
-		out("TEST B: + IDMA/DPP SFR force. PICTURE JUMPS UP NOW?\n");
-		wr(y, FB_PHYS + FB_STRIDE * 800);
-		force((unsigned)scan);
-		update();
-		delay_ms(3000);
-		wr(y, FB_PHYS);
-		force((unsigned)scan);
 		update();
 		kv("restored Y", rd(y));
 		kv("idma en", rd(idma[scan]));
-		out("\nTESTS DONE\n");
+		out("\nTEST DONE\n");
 	} else {
 		out("no IDMA reads 0xcc000000: no flip test\n");
 	}
