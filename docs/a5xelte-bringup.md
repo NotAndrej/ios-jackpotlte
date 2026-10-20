@@ -131,3 +131,9 @@ The A5XELTE variant also has a console mute hook, enabled by `a5fb_noconsole=1` 
 The candidate was transferred through Mac ADB in TWRP and written only to BOOT p10; the `ANDROID!` header was read back before reboot. USERDATA p23 was not rewritten. The phone display result is pending.
 
 For kernel changes, rebuild and transfer only BOOT p10. The populated USERDATA HFSX volume stays on p23. Future root file changes can be staged as targeted filesystem edits from TWRP rather than retransferring the entire 11.25 GiB image. The new XNU write path needs a device result before being counted as working.
+
+## Persistent console log candidate
+
+Patch `0110` adds an opt-in 4 MiB console ring for the A5XELTE build. With `a5log=1`, `emmcroot=USERDATA`, and `emmcwrite=1`, a kernel thread flushes it every 10 seconds to the first 8,193 sectors of GPT SYSTEM p20. The old `A5XNU` test HFS volume there is sacrificed; the iOS root remains on USERDATA p23. The GPT header and entries must pass CRC checks, the SYSTEM and USERDATA ranges must not overlap, and the sector writer checks its target against one of those ranges. BOOT, RECOVERY, EFS, and the GPT are not log targets.
+
+After a test, return to TWRP and read the log with `tools/a5xelte-log-pull.sh /private/path/boot-log.txt`. The helper writes a raw `.bin` beside the decoded text; both may contain device identifiers and userland messages, so keep them outside Git. The `A5XLOG1` header records total bytes and flush sequence. A missing header means the device has not successfully flushed a log yet; it is not proof that XNU never started. The first physical readback has not been performed yet.
