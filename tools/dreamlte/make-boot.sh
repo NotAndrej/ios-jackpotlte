@@ -7,7 +7,9 @@ set -euo pipefail
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 kernel=$(realpath "$1"); stock=$(realpath "$2"); out=$(realpath -m "$3")
 shift 3
-args=${*:-debug=0xc serial=3 cpus=1 keepsyms=1 -enable_kprintf_spam -noprogress wdt=-1 wdt_test=no_user_checkin}
+# a5touchprobe=0: the A5 touch probe maps Exynos7580 I2C/GPIO; on the S8 its
+# first read is a synchronous external abort (boot 8, a5xelte_touch_probe).
+args=${*:-debug=0xc serial=3 cpus=1 keepsyms=1 -enable_kprintf_spam -noprogress wdt=-1 wdt_test=no_user_checkin a5touchprobe=0}
 work=$repo/shim/dreamlte/out
 mkdir -p "$work"
 python3 "$repo/tools/mkadt_dreamlte.py" "$work/dreamlte.adt"

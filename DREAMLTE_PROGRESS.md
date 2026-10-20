@@ -46,6 +46,35 @@ the bare-metal `s8-probe` (v2–v7) booted from BOOT:
 - `tools/dreamlte_mkboot.py`: Samsung BOOT packer (stock header + DTBH);
   byte-identical when repacking the stock kernel and ramdisk.
 
+## Phone results (2026-10-20)
+
+All on the SM-G950F, BOOT `sda7`, CI kernels from this branch, `cpus=1`:
+
+1. CI run 39438201259, 2 GiB RAM: loader → XNU; `Darwin Kernel Version 22.6.0
+   … xnu-8796.141.3`, GIC mapped; panic `kmem_range_init: vm_map_locate_space
+   failing for claim c…`. → ADT RAM reduced to 512 MiB (the A5 size).
+2. Same kernel, 512 MiB: VM bootstrap done, IOKit, ATM, Firehose; panic
+   `Undefined kernel instruction … instr=f8200120` (LSE `ldadd`). All 11 LSE
+   instructions were in `firehose_*` → CI builds libfirehose_kernel for A53 and
+   scans the kernel for LSE (run 39440612537: none left).
+3. Platform expert not matched (`Unable to find driver for this platform:
+   "samsung,dreamlte"`) → ADT also lists `samsung,a5xelte`; 0124 matches both.
+4. Random hang right after the version line, before `pmap_startup` (several
+   boots, not tied to the reboot method; zeroing XNU RAM in the loader did not
+   help). The physical-aperture slide is random per boot → pinned to 0 on
+   DREAMLTE (run 39448175183); no hang since. `pmap_startup`: 119714 pages,
+   17.6 ms.
+5. `Kernel data abort` (ESR 0x96000010) in `a5xelte_touch_probe`: the A5
+   touch probe is on by default and maps Exynos7580 I2C/GPIO → `a5touchprobe=0`
+   (and off by default on DREAMLTE in 0124).
+6. **Boot 9: no panic.** CPU0 (MPIDR 0x100) initialised with SGI1, platform
+   expert, AppleKeyStore/IOWatchdog/IOSurfaceRoot/HID stand-ins, BSD, AMFI,
+   Sandbox, HFS, Skywalk self-tests; then `Waiting on … IOMedia … Apple_HFS`
+   — the root device. Expected: there is no S8 storage driver yet.
+
+Logs: the loader and (since run 39445481053) the kernel console are written
+to the pmsg zone and read from TWRP as `/sys/fs/pstore/pmsg-ramoops-0`.
+
 ## Next
 
 1. CI kernel build; first boot target: loader log + XNU entry marker, then the

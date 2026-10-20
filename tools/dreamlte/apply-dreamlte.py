@@ -227,6 +227,12 @@ edit('iokit/KernelConfigTables.cpp', [
      "    \"     'IONameMatch'     = ('samsung,a5xelte', 'samsung,dreamlte');\"\n", 1),
 ])
 
+# A5 touch probe maps Exynos7580 I2C/GPIO blocks: a bus error on the S8.
+edit('bsd/dev/a5xelte_touch.c', [
+    ('a5xelte_touch_probe(void)\n{\n\tint enabled = 1;\n',
+     'a5xelte_touch_probe(void)\n{\n\tint enabled = A5_KEYS_DEFAULT; /* A5 board drivers: off on the S8 */\n', 1),
+])
+
 edit('bsd/dev/a5xelte_keys.c', [
     ('#include <pexpert/pexpert.h>\n',
      '#include <pexpert/pexpert.h>\n#include <pexpert/arm64/board_config.h>\n', 1),
