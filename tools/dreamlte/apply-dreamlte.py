@@ -43,7 +43,8 @@ edit('pexpert/pexpert/arm64/A5XELTE.h', [(
     '#define A5_FB_2M_BLOCKS               9           /* 1440*2960*4 bytes */\n'
     '#define A5_ENTRY_MARKER_PHYS          0x920ff000  /* slot in the loader\'s pstore text */\n'
     '#define A5_BOOT_MPIDR                 0x100       /* first Cortex-A53 */\n'
-    '#define A5_KEYS_DEFAULT               0           /* A5 GPA2 keys absent */\n'
+    '#define A5_KEYS_DEFAULT               1           /* S8 keys: GPA0/GPA2 */\n'
+    '#define A5_TOUCH_DEFAULT              0           /* A5 ZT7538 path absent */\n'
     '#define A5_KLOG_PHYS                  0x92180000  /* TWRP ramoops pmsg zone */\n'
     '#define A5_KLOG_SIZE                  0x80000\n'
     '#else\n'
@@ -55,6 +56,7 @@ edit('pexpert/pexpert/arm64/A5XELTE.h', [(
     '#define A5_ENTRY_MARKER_PHYS          0x469ff100\n'
     '#define A5_BOOT_MPIDR                 0\n'
     '#define A5_KEYS_DEFAULT               1\n'
+    '#define A5_TOUCH_DEFAULT              1\n'
     '#endif\n', 1)])
 
 # Early assembly: entry/MMU/stage blocks are 36x21 px at x=240, rows 88..216.
@@ -394,7 +396,7 @@ edit('bsd/dev/a5xelte_touch.c', [
     ('#include <pexpert/pexpert.h>\n',
      '#include <pexpert/pexpert.h>\n#include <pexpert/arm64/board_config.h>\n', 1),
     ('a5xelte_touch_probe(void)\n{\n\tint enabled = 1;\n',
-     'a5xelte_touch_probe(void)\n{\n\tint enabled = A5_KEYS_DEFAULT; /* A5 board drivers: off on the S8 */\n', 1),
+     'a5xelte_touch_probe(void)\n{\n\tint enabled = A5_TOUCH_DEFAULT; /* A5 touch: off on the S8 */\n', 1),
 ])
 
 # Secondary CPUs. Loader probe (boot 19): PSCI CPU_ON alone never starts an
@@ -413,6 +415,26 @@ edit('iokit/Kernel/arm/SweetCPU.cpp', [
     ('\t__builtin_arm_dsb(DSB_SY);\n\tint32_t rc = sweet_psci_cpu_on(cpu->phys_id, entry, getCPUNumber());\n',
      '#if defined(DREAMLTE)\n'
      '\t{\n'
+     '\t\t/*\n'
+     '\t\t * The entry is in the high RAM bank (0x88xxxxxxx); the loader probe\n'
+     '\t\t * that started a core used a low entry. Exynos firmware keeps the\n'
+     '\t\t * CPU_ON entry in a 32-bit PMU INFORM register, so give it a\n'
+     '\t\t * trampoline in the unused low bank: ldr x1, 8; br x1; .quad entry.\n'
+     '\t\t */\n'
+     '\t\tstatic vm_offset_t tramp;\n'
+     '\t\tconst uint64_t tramp_pa = 0x8f000000ULL;\n'
+     '\t\tif (tramp == 0) {\n'
+     '\t\t\ttramp = ml_io_map(tramp_pa, 0x1000);\n'
+     '\t\t}\n'
+     '\t\tvolatile uint32_t *t = (volatile uint32_t *)tramp;\n'
+     '\t\tt[0] = 0x58000041;              /* ldr x1, #8 */\n'
+     '\t\tt[1] = 0xd61f0020;              /* br x1 */\n'
+     '\t\tt[2] = (uint32_t)entry;\n'
+     '\t\tt[3] = (uint32_t)((uint64_t)entry >> 32);\n'
+     '\t\t__builtin_arm_dsb(DSB_SY);\n'
+     '\t\tIOLog(CPU_PORT_NAME " CPU: cpu=%u entry 0x%llx via low trampoline 0x%llx\\n",\n'
+     '\t\t    getCPUNumber(), (uint64_t)entry, tramp_pa);\n'
+     '\t\tentry = (vm_offset_t)tramp_pa;\n'
      '\t\tstatic vm_offset_t pmu;\n'
      '\t\tif (pmu == 0) {\n'
      '\t\t\tpmu = ml_io_map(0x16480000, 0x10000);\n'
@@ -446,6 +468,39 @@ edit('iokit/Kernel/arm/SweetCPU.cpp', [
 edit('bsd/dev/a5xelte_keys.c', [
     ('#include <pexpert/pexpert.h>\n',
      '#include <pexpert/pexpert.h>\n#include <pexpert/arm64/board_config.h>\n', 1),
+    ('#define A5_ALIVE_PA 0x139b0000u\n',
+     '#if defined(DREAMLTE)\n'
+     '#define A5_ALIVE_PA 0x164b0000u            /* Exynos 8895 pinctrl ALIVE */\n'
+     '#else\n'
+     '#define A5_ALIVE_PA 0x139b0000u\n'
+     '#endif\n', 1),
+    ('static void\na5_keys_wait(void)\n',
+     '#if defined(DREAMLTE)\n'
+     '/*\n'
+     ' * Galaxy S8 (mainline exynos8895-dreamlte.dts gpio-keys, all active low):\n'
+     ' * Power GPA2-4, Volume Up GPA0-3, Volume Down GPA0-4, Bixby GPA0-6 (used\n'
+     ' * as Home). Banks are 0x20 apart, DAT at +4: sample = GPA0 | GPA2 << 8.\n'
+     ' */\n'
+     'typedef uint16_t keys_t;\n'
+     '#define KEYS_SAMPLE() ((keys_t)((a5_keys_read(0x04) & 0xff) | (a5_keys_read(0x44) & 0xff) << 8))\n'
+     '#define KEYS_PINS { 12, 3, 4, 6 }\n'
+     '#else\n'
+     'typedef uint8_t keys_t;\n'
+     '#define KEYS_SAMPLE() ((keys_t)a5_keys_read(A5_GPA2_DAT))\n'
+     '#define KEYS_PINS { 7, 0, 1, 5 }\n'
+     '#endif\n'
+     '\n'
+     'static void\na5_keys_wait(void)\n', 1),
+    ('\tstatic const uint8_t pins[4] = {7, 0, 1, 5};\n'
+     '\tuint8_t stable = (uint8_t)a5_keys_read(A5_GPA2_DAT);\n'
+     '\tuint8_t previous = stable;\n',
+     '\tstatic const uint8_t pins[4] = KEYS_PINS;\n'
+     '\tkeys_t stable = KEYS_SAMPLE();\n'
+     '\tkeys_t previous = stable;\n', 1),
+    ('\t\tuint8_t sample = (uint8_t)a5_keys_read(A5_GPA2_DAT);\n',
+     '\t\tkeys_t sample = KEYS_SAMPLE();\n', 1),
+    ('\t\t\t\tuint8_t bit = 1u << pins[key];\n',
+     '\t\t\t\tkeys_t bit = (keys_t)(1u << pins[key]);\n', 1),
     ('\tint enabled = 1;\n\tif (a5_keys_started) {',
      '\tint enabled = A5_KEYS_DEFAULT;\n\tif (a5_keys_started) {', 1),
 ])
