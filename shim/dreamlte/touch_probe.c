@@ -70,8 +70,10 @@ static void (*out)(const char *);
 
 static inline uint32_t rd(uintptr_t a) { return *(volatile uint32_t *)a; }
 static inline void wr(uintptr_t a, uint32_t v) { *(volatile uint32_t *)a = v; }
-static inline uint32_t hr(unsigned o) { return rd(HSI2C + o); }
-static inline void hw(unsigned o, uint32_t v) { wr(HSI2C + o, v); }
+static uintptr_t bus = HSI2C;	/* controller in use */
+static unsigned dev = TS_ADDR;	/* I2C device address */
+static inline uint32_t hr(unsigned o) { return rd(bus + o); }
+static inline void hw(unsigned o, uint32_t v) { wr(bus + o, v); }
 
 static uint64_t ticks(void)
 {
@@ -137,7 +139,7 @@ static uint32_t xfer(const uint8_t *w, unsigned wlen, uint8_t *r, unsigned rlen)
 {
 	uint32_t st;
 	hw(INT_STATUS, hr(INT_STATUS));
-	hw(ADDR, (TS_ADDR & 0x3ff) << 10);
+	hw(ADDR, (dev & 0x3ff) << 10);
 	hw(INT_ENABLE, INT_DONE | INT_ERRS);
 	if (wlen) {
 		hw(FIFO_CTL, 3);
@@ -260,7 +262,7 @@ void touch_probe(void (*kv_fn)(const char *, uint64_t), void (*out_fn)(const cha
 	kv("sense on", st);
 	out("\n");
 	unsigned shown = 0;
-	uint64_t end = ticks() + TIMER_HZ * 4;
+	uint64_t end = ticks() + TIMER_HZ;
 	while (ticks() < end && shown < 24) {
 		if (rd(GPA1 + 4) & 1) {
 			delay_ms(2);
@@ -275,4 +277,58 @@ void touch_probe(void (*kv_fn)(const char *, uint64_t), void (*out_fn)(const cha
 	}
 	kv("gpa1 dat", rd(GPA1 + 4));
 	out("\nTOUCH probe done\n");
+}
+
+/*
+ * Battery: MAX77865 on hsi2c_32 = second HSI2C of USI13 (0x10970000), pins
+ * gpe5-6/7 function 2 (PERIC1 bank gpe5 at +0xc0), stock USI mode
+ * "uart_hsi2c1" (v1 SW_CONF 0xa). Fuel gauge 0x36, charger 0x69. The
+ * kernel's SweetBattery (patch 0124) polls the same registers.
+ */
+#define P1_USI13_USER_MUX	(CMU_PERIC1 + 0x02c0)
+#define P1_USI13_PCLK		(CMU_PERIC1 + 0x20cc)
+#define P1_USI13_SCLK		(CMU_PERIC1 + 0x20d0)
+#define SYSREG_USI13		0x1082102cUL
+#define USI_V1_UART_I2C1	0xau
+#define GPE5			(0x10980000UL + 0x0c0)
+
+/* One 16-bit little-endian fuel-gauge register. */
+static void fg_show(const char *name, uint8_t reg)
+{
+	uint8_t b[2];
+	uint32_t st = xfer(&reg, 1, b, 2);
+	kv(name, st ? 0xdead0000u | (st & 0xffff) : (uint32_t)(b[0] | b[1] << 8));
+}
+
+void battery_probe(void (*kv_fn)(const char *, uint64_t), void (*out_fn)(const char *))
+{
+	uint8_t r, b[2];
+	kv = kv_fn;
+	out = out_fn;
+	out("BATTERY (MAX77865 hsi2c_32 0x10970000)\n");
+	show("sysreg", SYSREG_USI13);
+	show("gpe5", GPE5);
+	out("\n");
+	wr(P1_USI13_PCLK, rd(P1_USI13_PCLK) | GATE_ON);
+	wr(P1_USI13_SCLK, rd(P1_USI13_SCLK) | GATE_ON);
+	wr(P1_USI13_USER_MUX, rd(P1_USI13_USER_MUX) & ~(1u << 4));
+	wr(SYSREG_USI13, (rd(SYSREG_USI13) & ~0xfu) | USI_V1_UART_I2C1);
+	wr(GPE5, (rd(GPE5) & ~0xff000000u) | 0x22000000u);
+	wr(GPE5 + 8, rd(GPE5 + 8) & ~0xf000u);
+	bus = 0x10970000UL;
+	hsi2c_reset();
+	dev = 0x36;
+	fg_show("soc", 0x06);
+	fg_show("vcell", 0x09);
+	fg_show("cur", 0x0a);
+	fg_show("design", 0x18);
+	out("\n");
+	dev = 0x69;
+	r = 0xb2;
+	kv("chg int_ok", xfer(&r, 1, b, 1) ? 0xdead : b[0]);
+	r = 0xb4;
+	kv("dtls01", xfer(&r, 1, b, 1) ? 0xdead : b[0]);
+	out("\n");
+	bus = HSI2C;
+	dev = TS_ADDR;
 }

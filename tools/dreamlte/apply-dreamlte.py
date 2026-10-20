@@ -473,6 +473,62 @@ edit('iokit/Kernel/IOPlatformExpert.cpp', [
      '#include <mach/mach_time.h>\n', 1),
 ])
 
+# Battery: the A5XELTE config had no power source, so iOS showed a wrong
+# battery. On the S8, SweetBattery reads the MAX77865 fuel gauge and charger
+# through dreamlte_battery_read() (dreamlte_touch.c). S8 battery: 3000 mAh.
+edit('iokit/Kernel/arm/SweetBattery.cpp', [
+    ('#if defined(ARM64_BOARD_CONFIG_SWEET)\n#include <device/device_types.h>',
+     '#if defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_A5XELTE)\n'
+     '#include <device/device_types.h>', 1),
+    ('/* bsd/dev/sweet_spmi.c */\n'
+     'extern "C" int sweet_spmi_init(void);\n'
+     'extern "C" int sweet_spmi_read(unsigned sid, unsigned addr, uint8_t *out);\n',
+     '#if defined(ARM64_BOARD_CONFIG_A5XELTE)\n'
+     '/* Galaxy S8: MAX77865 fuel gauge (bsd/dev/a5xelte_touch.c). */\n'
+     'extern "C" int dreamlte_battery_read(unsigned *percent, unsigned *mv, int *ma,\n'
+     '    int *external, int *charging, int *full);\n'
+     'static inline int sweet_spmi_init(void) { return -1; }\n'
+     'static inline int sweet_spmi_read(unsigned, unsigned, uint8_t *) { return -1; }\n'
+     '#define SWEET_BAT_MAH 3000u\n'
+     '#else\n'
+     '/* bsd/dev/sweet_spmi.c */\n'
+     'extern "C" int sweet_spmi_init(void);\n'
+     'extern "C" int sweet_spmi_read(unsigned sid, unsigned addr, uint8_t *out);\n'
+     '#define SWEET_BAT_MAH 5020u\n'
+     '#endif\n', 1),
+    ('5020u * percent', 'SWEET_BAT_MAH * percent', 1),
+    ('setMaxCapacity(5020)', 'setMaxCapacity(SWEET_BAT_MAH)', 1),
+    ('"AppleRawMaxCapacity", 5020)', '"AppleRawMaxCapacity", SWEET_BAT_MAH)', 1),
+    ('"DesignCapacity", 5020)', '"DesignCapacity", SWEET_BAT_MAH)', 1),
+    ('{capacity, 5020, mv', '{capacity, SWEET_BAT_MAH, mv', 1),
+    ('void\nSweetBattery::poll(void)\n{\n',
+     'void\nSweetBattery::poll(void)\n{\n'
+     '#if defined(ARM64_BOARD_CONFIG_A5XELTE)\n'
+     '\tunsigned pct = 0, s8mv = 0;\n'
+     '\tint s8ma = 0, ext = 0, chg = 0, full = 0;\n'
+     '\tif (fReal && dreamlte_battery_read(&pct, &s8mv, &s8ma, &ext, &chg, &full) == 0) {\n'
+     '\t\tpublish(full ? 100 : pct, s8mv, s8ma, ext != 0, ext != 0, chg != 0, full != 0, true, true);\n'
+     '\t} else {\n'
+     '\t\tpublish(100, 4200, 0, true, true, false, true, false, false);\n'
+     '\t}\n'
+     '#else\n', 1),
+    ('\t    charging, full, true, currentValid);\n}\n',
+     '\t    charging, full, true, currentValid);\n#endif\n}\n', 1),
+    ('\tint real = 0;\n\t(void)PE_parse_boot_argn("sweetbattery"',
+     '#if defined(ARM64_BOARD_CONFIG_A5XELTE)\n\tint real = 1;\n#else\n\tint real = 0;\n#endif\n'
+     '\t(void)PE_parse_boot_argn("sweetbattery"', 1),
+    ('\tfReal = real == 1 && sweet_spmi_init() == 0;\n',
+     '#if defined(ARM64_BOARD_CONFIG_A5XELTE)\n\tfReal = real == 1;\n#else\n'
+     '\tfReal = real == 1 && sweet_spmi_init() == 0;\n#endif\n', 1),
+    ('measured ? "PM6150 / estimated SOC" : "static fallback"',
+     'measured ? "fuel gauge" : "static fallback"', 1),
+])
+edit('iokit/KernelConfigTables.cpp', [
+    ('#if !defined(ARM64_BOARD_CONFIG_A5XELTE)\n    "   {"\n    "     \'IOClass\'         = SweetBattery;"',
+     '#if !defined(ARM64_BOARD_CONFIG_A5XELTE) || 1  /* S8: MAX77865 */\n    "   {"\n'
+     '    "     \'IOClass\'         = SweetBattery;"', 1),
+])
+
 # S8 S6SY761 driver (dreamlte_touch.c next to this script), started from
 # the same IOKitBSDInit hook in place of the A5 probe.
 edit('bsd/dev/a5xelte_touch.c', [

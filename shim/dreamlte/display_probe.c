@@ -46,11 +46,22 @@ static void delay_ms(unsigned ms)
 		;
 }
 
+/* decon_reg_all_win_shadow_update_req + global (Samsung decon_reg.c). */
 static void update(void)
 {
-	wr(DECON + SHADOW_REQ, rd(DECON + SHADOW_REQ) | SHADOW_GLOBAL);
+	wr(DECON + SHADOW_REQ, rd(DECON + SHADOW_REQ) | SHADOW_GLOBAL | 0x3f);
 	for (unsigned n = 0; n < 100 && rd(DECON + SHADOW_REQ); n++)
 		delay_ms(1);
+}
+
+/* IDMA_ENABLE / DPP_ENABLE bit 4: SFR_UPDATE_FORCE (dpp_reg.c). */
+static void force(unsigned n)
+{
+	static const uintptr_t dpp[6] = {
+		0x12851000, 0x12852000, 0x12853000, 0x12854000, 0x12855000, 0x12890000,
+	};
+	wr(idma[n], rd(idma[n]) | (1u << 4));
+	wr(dpp[n], rd(dpp[n]) | (1u << 4));
 }
 
 void display_probe(void (*kv)(const char *, uint64_t), void (*out)(const char *))
@@ -87,15 +98,25 @@ void display_probe(void (*kv)(const char *, uint64_t), void (*out)(const char *)
 	}
 	if (scan >= 0) {
 		kv("flip test on idma", (uint64_t)scan);
-		out("\nPICTURE SHOULD JUMP UP FOR 3 SECONDS\n");
 		uintptr_t y = idma[scan] + 0x40;
+		out("\nTEST A: window+global update. PICTURE JUMPS UP NOW?\n");
 		wr(y, FB_PHYS + FB_STRIDE * 800);
 		update();
 		delay_ms(3000);
 		wr(y, FB_PHYS);
 		update();
+		delay_ms(1000);
+		out("TEST B: + IDMA/DPP SFR force. PICTURE JUMPS UP NOW?\n");
+		wr(y, FB_PHYS + FB_STRIDE * 800);
+		force((unsigned)scan);
+		update();
+		delay_ms(3000);
+		wr(y, FB_PHYS);
+		force((unsigned)scan);
+		update();
 		kv("restored Y", rd(y));
-		out("\n");
+		kv("idma en", rd(idma[scan]));
+		out("\nTESTS DONE\n");
 	} else {
 		out("no IDMA reads 0xcc000000: no flip test\n");
 	}

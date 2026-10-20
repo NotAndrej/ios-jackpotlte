@@ -1,68 +1,63 @@
 #if defined(DREAMLTE)
 /*
- * Galaxy S8 touchscreen: Samsung S6SY761 at 0x48 on hsi2c_23 (USI09 HSI2C,
- * 0x108e0000), interrupt gpa1-0 active low. The loader (shim/dreamlte)
- * already powered S2MPS17 LDO34/LDO35, ungated USI09 with its clock on
- * OSCCLK, set USI v1 I2C mode and the gpe3 pins (boot 26: boot status
- * 0x20, device id 0xac3761, firmware ok). Here: Exynos8895 HSI2C in auto
- * mode, polled; the event protocol is mainline s6sy761.c. Raw 0..4095 axes
- * are scaled to SweetHIDTouch's 1080x1920 logical grid.
+ * Galaxy S8 I2C devices, polled (no XNU interrupt routing for them).
+ * The loader (shim/dreamlte) ungates both USI blocks with their clock on
+ * OSCCLK, sets USI v1 I2C mode and the pins, and powers the touch rails.
+ *
+ * Touch: Samsung S6SY761 at 0x48 on hsi2c_23 (USI09, 0x108e0000), its
+ * interrupt gpa1-0 active low (boot 26: boot status 0x20, device id
+ * 0xac3761). Event protocol from mainline s6sy761.c; raw 0..4095 axes go
+ * to SweetHIDTouch's 1080x1920 grid.
+ *
+ * Battery: MAX77865 on hsi2c_32 (USI13 second HSI2C, 0x10970000), fuel
+ * gauge 0x36 and charger 0x69 (Samsung max77865_fuelgauge.c/_charger.c).
  */
 #define S8TS_HSI2C_PA           0x108e0000u
+#define S8BAT_HSI2C_PA          0x10970000u
 #define S8TS_ALIVE_PA           0x164b0000u
 #define S8TS_GPA1_DAT           0x44u
 #define S8TS_ADDR               0x48u
+#define S8BAT_FG                0x36u
+#define S8BAT_CHG               0x69u
 #define S8TS_FINGERS            10
-#define S8TS_CLKIN              26000000u
-#define S8TS_SCL_HZ             400000u
+#define S8_I2C_CLKIN            26000000u
+#define S8_I2C_SCL_HZ           400000u
 
-static vm_offset_t s8ts_i2c, s8ts_alive;
+static vm_offset_t s8ts_i2c, s8ts_alive, s8bat_i2c;
 static int s8ts_sleep;
 static int s8ts_native;         /* sweetfb_native: iOS sees the whole panel */
 static bool s8ts_down[S8TS_FINGERS];
 static uint16_t s8ts_x[S8TS_FINGERS], s8ts_y[S8TS_FINGERS];
 
-static uint32_t
-s8ts_rd(unsigned off)
-{
-	return a5touch_read(s8ts_i2c, off);
-}
-
-static void
-s8ts_wr(unsigned off, uint32_t value)
-{
-	a5touch_write(s8ts_i2c, off, value);
-}
-
 /* i2c-exynos5.c: reset, Exynos8895 fast-mode timing, master auto mode. */
 static void
-s8ts_bus_reset(void)
+s8i2c_reset(vm_offset_t bus)
 {
-	s8ts_wr(0x00, s8ts_rd(0x00) | (1u << 31));
-	s8ts_wr(0x00, s8ts_rd(0x00) & ~(1u << 31));
-	unsigned ftl = (s8ts_rd(0x40) >> 16) & 7;
-	unsigned temp = S8TS_CLKIN / S8TS_SCL_HZ - (ftl + 3) * 2;
+	a5touch_write(bus, 0x00, a5touch_read(bus, 0x00) | (1u << 31));
+	a5touch_write(bus, 0x00, a5touch_read(bus, 0x00) & ~(1u << 31));
+	unsigned ftl = (a5touch_read(bus, 0x40) >> 16) & 7;
+	unsigned temp = S8_I2C_CLKIN / S8_I2C_SCL_HZ - (ftl + 3) * 2;
 	unsigned div = temp / 512;
 	unsigned cyc = (temp + ((ftl + 3) % (div + 1)) * 2) / (div + 1) - 2;
 	unsigned l = cyc * 64 / 100, h = cyc - l;
-	s8ts_wr(0x60, l << 24 | l << 16 | l << 8);
-	s8ts_wr(0x64, (l / 2) << 24 | l << 8 | h);
-	s8ts_wr(0x68, div << 16 | cyc);
-	s8ts_wr(0x6c, l / 2);
-	s8ts_wr(0x48, s8ts_rd(0x48) & ~(1u << 31));
-	s8ts_wr(0x00, 0x9);
-	s8ts_wr(0x08, 0xf);
-	s8ts_wr(0x40, s8ts_rd(0x40) | (1u << 31));
+	a5touch_write(bus, 0x60, l << 24 | l << 16 | l << 8);
+	a5touch_write(bus, 0x64, (l / 2) << 24 | l << 8 | h);
+	a5touch_write(bus, 0x68, div << 16 | cyc);
+	a5touch_write(bus, 0x6c, l / 2);
+	a5touch_write(bus, 0x48, a5touch_read(bus, 0x48) & ~(1u << 31));
+	a5touch_write(bus, 0x00, 0x9);
+	a5touch_write(bus, 0x08, 0xf);
+	a5touch_write(bus, 0x40, a5touch_read(bus, 0x40) | (1u << 31));
 }
 
 /* INT_STATUS: bit 7 TRANS_DONE, bits 8-11 abort/no-ack/no-dev/timeout. */
 static bool
-s8ts_wait_done(void)
+s8i2c_wait_done(vm_offset_t bus)
 {
 	for (unsigned us = 0; us < 20000; us++) {
-		uint32_t s = s8ts_rd(0x24);
+		uint32_t s = a5touch_read(bus, 0x24);
 		if (s & 0xf80u) {
-			s8ts_wr(0x24, s);
+			a5touch_write(bus, 0x24, s);
 			return !(s & 0xf00u);
 		}
 		delay(1);
@@ -72,54 +67,55 @@ s8ts_wait_done(void)
 
 /* Write wlen bytes, then read rlen bytes (repeated start); STOP at the end. */
 static bool
-s8ts_xfer(const uint8_t *w, unsigned wlen, uint8_t *r, unsigned rlen)
+s8i2c_xfer(vm_offset_t bus, unsigned addr, const uint8_t *w, unsigned wlen,
+    uint8_t *r, unsigned rlen)
 {
-	s8ts_wr(0x24, s8ts_rd(0x24));
-	s8ts_wr(0x70, S8TS_ADDR << 10);
-	s8ts_wr(0x20, 0xf80u);
+	a5touch_write(bus, 0x24, a5touch_read(bus, 0x24));
+	a5touch_write(bus, 0x70, addr << 10);
+	a5touch_write(bus, 0x20, 0xf80u);
 	if (wlen) {
-		s8ts_wr(0x04, 3);
-		s8ts_wr(0x00, 0x9 | 0x80);
-		s8ts_wr(0x44, (rlen ? 0 : (1u << 17)) | wlen | (1u << 31));
+		a5touch_write(bus, 0x04, 3);
+		a5touch_write(bus, 0x00, 0x9 | 0x80);
+		a5touch_write(bus, 0x44, (rlen ? 0 : (1u << 17)) | wlen | (1u << 31));
 		for (unsigned i = 0; i < wlen; i++) {
-			for (unsigned n = 0; n < 1000 && (s8ts_rd(0x30) & (1u << 7)); n++) {
+			for (unsigned n = 0; n < 1000 && (a5touch_read(bus, 0x30) & (1u << 7)); n++) {
 				delay(1);
 			}
-			s8ts_wr(0x34, w[i]);
+			a5touch_write(bus, 0x34, w[i]);
 		}
-		if (!s8ts_wait_done()) {
+		if (!s8i2c_wait_done(bus)) {
 			goto fail;
 		}
 	}
 	if (rlen) {
-		s8ts_wr(0x04, 3);
-		s8ts_wr(0x00, 0x9 | 0x40);
-		s8ts_wr(0x44, (1u << 16) | (1u << 17) | rlen | (1u << 31));
+		a5touch_write(bus, 0x04, 3);
+		a5touch_write(bus, 0x00, 0x9 | 0x40);
+		a5touch_write(bus, 0x44, (1u << 16) | (1u << 17) | rlen | (1u << 31));
 		for (unsigned i = 0; i < rlen; i++) {
 			unsigned n = 0;
-			while ((s8ts_rd(0x30) & (1u << 24)) && n++ < 20000) {
+			while ((a5touch_read(bus, 0x30) & (1u << 24)) && n++ < 20000) {
 				delay(1);
 			}
-			if (s8ts_rd(0x30) & (1u << 24)) {
+			if (a5touch_read(bus, 0x30) & (1u << 24)) {
 				goto fail;
 			}
-			r[i] = (uint8_t)s8ts_rd(0x38);
+			r[i] = (uint8_t)a5touch_read(bus, 0x38);
 		}
-		if (!s8ts_wait_done()) {
+		if (!s8i2c_wait_done(bus)) {
 			goto fail;
 		}
 	}
-	s8ts_wr(0x00, 0x9);
+	a5touch_write(bus, 0x00, 0x9);
 	return true;
 fail:
-	s8ts_bus_reset();
+	s8i2c_reset(bus);
 	return false;
 }
 
 static bool
 s8ts_cmd_read(uint8_t cmd, uint8_t *r, unsigned rlen)
 {
-	return s8ts_xfer(&cmd, 1, r, rlen);
+	return s8i2c_xfer(s8ts_i2c, S8TS_ADDR, &cmd, 1, r, rlen);
 }
 
 static void
@@ -204,13 +200,65 @@ s8ts_thread(void *arg, wait_result_t result)
 			s8ts_wait(4);       /* INT low with an empty queue */
 			continue;
 		}
-		for (unsigned i = 0; i <= left && buf[0]; i++) {
+		for (unsigned i = 0; i <= left; i++) {
 			if (buf[i * 8]) {
 				s8ts_report(buf + i * 8);
 			}
 		}
 		errors = 0;
 	}
+}
+
+static bool
+s8bat_read16(unsigned addr, uint8_t reg, uint16_t *value)
+{
+	uint8_t b[2];
+	if (!s8i2c_xfer(s8bat_i2c, addr, &reg, 1, b, 2)) {
+		return false;
+	}
+	*value = (uint16_t)(b[0] | (b[1] << 8));
+	return true;
+}
+
+/*
+ * SweetBattery (patch 0124) calls this every 30 s. 0 = valid sample.
+ * MAX77865 fuel gauge: SOCREP 0x06 in 1/256 %, VCELL 0x09 in 78.125 uV,
+ * CURRENT 0x0a signed 156.25 uA (0.01 ohm sense, positive = charging).
+ * Charger: INT_OK 0xb2 bit 6 CHGIN_OK; DETAILS_01 0xb4 [3:0] 0-2 charging,
+ * 3-4 done.
+ */
+int dreamlte_battery_read(unsigned *percent, unsigned *mv, int *ma,
+    int *external, int *charging, int *full);
+int
+dreamlte_battery_read(unsigned *percent, unsigned *mv, int *ma,
+    int *external, int *charging, int *full)
+{
+	uint16_t soc, vcell, cur;
+	uint8_t reg, ok = 0, dtls = 0;
+	if (!s8bat_i2c) {
+		s8bat_i2c = ml_io_map(S8BAT_HSI2C_PA, 0x1000);
+		if (!s8bat_i2c) {
+			return -1;
+		}
+		s8i2c_reset(s8bat_i2c);
+	}
+	if (!s8bat_read16(S8BAT_FG, 0x06, &soc) || !s8bat_read16(S8BAT_FG, 0x09, &vcell) ||
+	    !s8bat_read16(S8BAT_FG, 0x0a, &cur)) {
+		return -1;
+	}
+	reg = 0xb2;
+	(void)s8i2c_xfer(s8bat_i2c, S8BAT_CHG, &reg, 1, &ok, 1);
+	reg = 0xb4;
+	(void)s8i2c_xfer(s8bat_i2c, S8BAT_CHG, &reg, 1, &dtls, 1);
+	unsigned pct = (unsigned)(soc >> 8) + ((soc & 0xffu) >= 128 ? 1 : 0);
+	*percent = pct > 100 ? 100 : pct;
+	*mv = (unsigned)((uint32_t)vcell * 78125u / 1000000u);
+	*ma = (int)((int16_t)cur) * 15625 / 100000;
+	*external = (ok & 0x40u) != 0;
+	dtls &= 0x0f;
+	*charging = *external && dtls <= 2;
+	*full = *external && (dtls == 3 || dtls == 4);
+	return (*mv >= 2800 && *mv <= 4600) ? 0 : -1;
 }
 
 static void
@@ -231,7 +279,7 @@ dreamlte_touch_start(void)
 		printf("S8 TOUCH: MMIO mapping failed\n");
 		return;
 	}
-	s8ts_bus_reset();
+	s8i2c_reset(s8ts_i2c);
 	if (!s8ts_cmd_read(0x55, b, 1) || b[0] != 0x20) {     /* BOOT_STATUS */
 		printf("S8 TOUCH: no S6SY761 in application mode (status %#x)\n", b[0]);
 		return;
@@ -241,7 +289,8 @@ dreamlte_touch_start(void)
 	}
 	uint8_t func[3] = {0x30, 0x01, 0x00};                  /* TOUCH_FUNCTION = touch */
 	uint8_t sense = 0x10;                                   /* SENSE_ON */
-	if (!s8ts_xfer(func, 3, NULL, 0) || !s8ts_xfer(&sense, 1, NULL, 0)) {
+	if (!s8i2c_xfer(s8ts_i2c, S8TS_ADDR, func, 3, NULL, 0) ||
+	    !s8i2c_xfer(s8ts_i2c, S8TS_ADDR, &sense, 1, NULL, 0)) {
 		printf("S8 TOUCH: enable sequence failed\n");
 		return;
 	}
