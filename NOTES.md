@@ -2,7 +2,7 @@
 
 ## a5xelte fork handoff (2026-10-20)
 
-The Samsung SM-A510F branch has a separate dated record in `A5XELTE_PROGRESS.md` and a donor replacement map in `docs/a5xelte-migration-map.md`. Its 4 KiB XNU now shows dynamic `kprintf` text, CPU0 SGI1 and scheduler progress, and an HFS+ RAM disk root mounted on the physical phone. The latest screen reaches `/sbin/launchd` exec, then panics with `errno 2` because the test image is deliberately empty. This verifies the kernel's root mount, not iOS userland execution or eMMC. Only BOOT p10 was written for these trials; recovery, EFS and USERDATA were preserved. The SWEET notes below are donor history, not Samsung device results.
+The Samsung SM-A510F branch has a separate dated record in `A5XELTE_PROGRESS.md` and a donor replacement map in `docs/a5xelte-migration-map.md`. Its 4 KiB XNU boots four Exynos7580 cores with SGI1 verified, mounts an iOS 16 HFSX root from USERDATA, and executes launchd, SpringBoard and backboardd. A graphical SpringBoard frame remains unverified. The latest recovered log shows repeated backboardd crashes caused immediately by a missing system-container path. Patch `0116` traces the relevant XML entitlements; its four-core diagnostic BOOT image was written to p10 and rebooted, with the runtime log pending a return to TWRP. Recovery and EFS remain untouched. The SWEET notes below are donor history, not Samsung device results.
 
 ## Agent handoff / active work (2026-10-15, latest)
 
