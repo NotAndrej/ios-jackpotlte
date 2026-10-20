@@ -245,6 +245,53 @@ static void reserve_marker(void)
 	log_ch1('\n');
 }
 
+/* Days since 1970-01-01 of a proleptic Gregorian date (Howard Hinnant). */
+static int64_t days_from_civil(int64_t y, unsigned m, unsigned d)
+{
+	y -= m <= 2;
+	int64_t era = (y >= 0 ? y : y - 399) / 400;
+	unsigned yoe = (unsigned)(y - era * 400);
+	unsigned doy = (153 * (m + (m > 2 ? -3 : 9)) + 2) / 5 + d - 1;
+	unsigned doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+	return era * 146097 + (int64_t)doe - 719468;
+}
+
+/* XNU's platform expert has no clock on the S8 (iOS showed 1969). Pass the
+ * PMIC RTC as "s8rtc=" = UTC seconds at system-counter zero; the kernel
+ * adds the counter (patch 0124, PEGetUTCTimeOfDay). RTC bytes from 0x04:
+ * msec, sec, min, hour, weekday mask, day, month, year-2000 (boot 26). */
+static void rtc_bootarg(volatile struct boot_args *ba, uint64_t raw)
+{
+	unsigned sec = (raw >> 8) & 0x7f, min = (raw >> 16) & 0x7f;
+	unsigned hour = (raw >> 24) & 0x1f, day = (raw >> 40) & 0x1f;
+	unsigned mon = (raw >> 48) & 0x0f, year = 2000 + ((raw >> 56) & 0x7f);
+	if (sec > 59 || min > 59 || hour > 23 || !day || !mon || mon > 12 || year < 2024)
+		return;
+	int64_t t = days_from_civil(year, mon, day) * 86400 + hour * 3600 + min * 60 + sec;
+	uint64_t cnt;
+	__asm__ volatile("isb; mrs %0, cntpct_el0" : "=r"(cnt));
+	t -= (int64_t)(cnt / 26000000);
+	kv("rtc unix", (uint64_t)t);
+	out("\n");
+	char num[24];
+	int n = 0;
+	do {
+		num[n++] = (char)('0' + t % 10);
+		t /= 10;
+	} while (t && n < 20);
+	int at = 0;
+	while (at < BOOT_LINE_LENGTH && ba->CommandLine[at])
+		at++;
+	const char *key = " s8rtc=";
+	if (at + 7 + n >= BOOT_LINE_LENGTH)
+		return;
+	for (int i = 0; key[i]; i++)
+		ba->CommandLine[at++] = key[i];
+	while (n)
+		ba->CommandLine[at++] = num[--n];
+	ba->CommandLine[at] = 0;
+}
+
 uint64_t dl_main(uintptr_t dtb, uint64_t el, uint64_t sctlr)
 {
 	*(volatile uint32_t *)DECON_TRIG = DECON_TRIG_UNMASK;
@@ -361,7 +408,8 @@ uint64_t dl_main(uintptr_t dtb, uint64_t el, uint64_t sctlr)
 	}
 	out("\n");
 	ufs_probe(kv, out, UFS_PROBE_DMA);
-	pmic_init(kv, out);
+	rtc_bootarg(ba, pmic_init(kv, out));
+	clean(ba_pa, ba_pa + PAGE_SIZE);
 	touch_probe(kv, out);
 	/* smp_probe(kv, out) proved the PMU power-up (boot 19); it leaves the
 	 * probed cores' PMU power on, which hid the 0 -> 0xF edge XNU needs. */

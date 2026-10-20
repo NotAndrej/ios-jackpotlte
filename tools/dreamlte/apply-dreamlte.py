@@ -454,6 +454,33 @@ edit('bsd/dev/a5xelte_touch.c', [
     ('a5xelte_touch_probe(void)\n{\n\tint enabled = 1;\n',
      'a5xelte_touch_probe(void)\n{\n\tint enabled = A5_TOUCH_DEFAULT; /* A5 touch: off on the S8 */\n', 1),
 ])
+# No platform clock on the S8 (iOS showed 31 Dec 1969). The loader reads the
+# S2MPS17 RTC and passes s8rtc = UTC seconds at system-counter zero.
+edit('iokit/Kernel/IOPlatformExpert.cpp', [
+    ('\tif (gIOPlatform) {\n\t\tgIOPlatform->getUTCTimeOfDay(secs, &nsecs);\n\t}\n\n\tassert(nsecs < NSEC_PER_SEC);\n',
+     '\tif (gIOPlatform) {\n\t\tgIOPlatform->getUTCTimeOfDay(secs, &nsecs);\n\t}\n'
+     '#if defined(ARM64_BOARD_CONFIG_A5XELTE)\n'
+     '\tuint64_t s8rtc = 0;\n'
+     '\tif (*secs == 0 && PE_parse_boot_argn("s8rtc", &s8rtc, sizeof(s8rtc)) && s8rtc) {\n'
+     '\t\tuint64_t ns;\n'
+     '\t\tabsolutetime_to_nanoseconds(mach_absolute_time(), &ns);\n'
+     '\t\t*secs = (clock_sec_t)(s8rtc + ns / NSEC_PER_SEC);\n'
+     '\t\tnsecs = (clock_nsec_t)(ns % NSEC_PER_SEC);\n'
+     '\t}\n'
+     '#endif\n\n\tassert(nsecs < NSEC_PER_SEC);\n', 1),
+    ('#include <pexpert/pexpert.h>\n#include <uuid/uuid.h>\n',
+     '#include <pexpert/pexpert.h>\n#include <uuid/uuid.h>\n#include <kern/clock.h>\n'
+     '#include <mach/mach_time.h>\n', 1),
+])
+
+# S8 S6SY761 driver (dreamlte_touch.c next to this script), started from
+# the same IOKitBSDInit hook in place of the A5 probe.
+edit('bsd/dev/a5xelte_touch.c', [
+    ('void\na5xelte_touch_probe(void)\n{\n',
+     (Path(__file__).parent / 'dreamlte_touch.c').read_text() +
+     'void\na5xelte_touch_probe(void)\n{\n'
+     '#if defined(DREAMLTE)\n\tdreamlte_touch_start();   /* the A5 path below stays off */\n#endif\n', 1),
+])
 
 # Secondary CPUs. Loader probe (boot 19): PSCI CPU_ON alone never starts an
 # S8 core; after the PMU power-up that Samsung's kernel does itself
