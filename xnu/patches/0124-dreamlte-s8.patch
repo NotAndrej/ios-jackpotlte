@@ -1,0 +1,275 @@
+diff --git bsd/dev/a5xelte_keys.c bsd/dev/a5xelte_keys.c
+index 3ba2fd4..9eb06e3 100644
+--- a/bsd/dev/a5xelte_keys.c
++++ b/bsd/dev/a5xelte_keys.c
+@@ -13,6 +13,7 @@
+ #include <kern/sched_prim.h>
+ #include <machine/machine_routines.h>
+ #include <pexpert/pexpert.h>
++#include <pexpert/arm64/board_config.h>
+ 
+ extern vm_offset_t ml_io_map(vm_offset_t, vm_size_t);
+ extern void sweet_hid_key(int key, int down);
+@@ -82,7 +83,7 @@ void
+ a5xelte_keys_init(void)
+ {
+ 	thread_t thread;
+-	int enabled = 1;
++	int enabled = A5_KEYS_DEFAULT;
+ 	if (a5_keys_started) {
+ 		return;
+ 	}
+diff --git iokit/Kernel/arm/SweetCPU.cpp iokit/Kernel/arm/SweetCPU.cpp
+index 55d0057..e42ad4a 100644
+--- a/iokit/Kernel/arm/SweetCPU.cpp
++++ b/iokit/Kernel/arm/SweetCPU.cpp
+@@ -84,8 +84,15 @@ SweetCPU::start(IOService *provider)
+ #if defined(A5XELTE)
+ 	/* Linux's Exynos7580 DT: logical 0..3 = MPIDR 0..3;
+ 	 * logical 4..7 = MPIDR 0x100..0x103. */
++#if defined(DREAMLTE)
++	/* Exynos 8895: logical 0..3 = A53 MPIDR 0x100..0x103 (boot cluster);
++	 * logical 4..7 = Mongoose M2 MPIDR 0..3. */
++	uint32_t expected_mpidr = cpu->cpu_id < 4 ? 0x100U + cpu->cpu_id :
++	    cpu->cpu_id - 4;
++#else
+ 	uint32_t expected_mpidr = cpu->cpu_id < 4 ? cpu->cpu_id :
+ 	    0x100U + cpu->cpu_id - 4;
++#endif
+ 	if (cpu->phys_id != expected_mpidr ||
+ 	    topology->num_cpus > SWEET_SMP_MAX_CPUS) {
+ 		panic(CPU_PORT_NAME " CPU: unsupported topology cpu=%u mpidr=0x%x count=%u",
+@@ -168,9 +175,9 @@ SweetCPU::startAll(void *arg __unused, wait_result_t result __unused)
+ 		}
+ 		IOSleep(1);
+ 	}
+-	/* The A5 ADT describes CPU0 as the boot CPU. */
+-	if (topology->boot_cpu->cpu_id != 0 || topology->boot_cpu->phys_id != 0) {
+-		panic(CPU_PORT_NAME " CPU: expected boot MPIDR 0 and logical CPU 0");
++	/* The ADT describes logical CPU 0 as the boot CPU. */
++	if (topology->boot_cpu->cpu_id != 0 || topology->boot_cpu->phys_id != A5_BOOT_MPIDR) {
++		panic(CPU_PORT_NAME " CPU: expected boot MPIDR %#x and logical CPU 0", A5_BOOT_MPIDR);
+ 	}
+ 	for (unsigned int i = 0; i < topology->num_cpus; i++) {
+ 		SweetCPU *cpu = __atomic_load_n(&sweet_cpus[i], __ATOMIC_ACQUIRE);
+diff --git iokit/Kernel/arm/SweetFramebuffer.cpp iokit/Kernel/arm/SweetFramebuffer.cpp
+index 356ff51..4d67952 100644
+--- a/iokit/Kernel/arm/SweetFramebuffer.cpp
++++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
+@@ -48,6 +48,7 @@ extern "C" int sweet_console_muted;     /* osfmk/console/serial_console.c */
+ #include <IOKit/IOTimerEventSource.h>
+ #include <IOKit/system.h>
+ #include <pexpert/pexpert.h>
++#include <pexpert/arm64/board_config.h>
+ #include <kern/clock.h>
+ #include <sys/proc.h>
+ 
+@@ -166,10 +167,10 @@ AppleCLCD::start(IOService *provider)
+ 	/* The loader's DECON handoff scans out this physical XRGB8888 buffer.
+ 	 * It does not fill boot_args.Video, so PE_current_console is empty.
+ 	 * Keep the physical address out of the donor path. */
+-	fPhys = 0x67000000ULL;
+-	fWidth = 1080;
+-	fHeight = 1920;
+-	fRowBytes = 4320;
++	fPhys = A5_FB_PHYS;
++	fWidth = A5_FB_WIDTH;
++	fHeight = A5_FB_HEIGHT;
++	fRowBytes = A5_FB_STRIDE;
+ #else
+ 	fPhys = video.v_baseAddr;
+ 	fWidth = (uint32_t)video.v_width;
+diff --git osfmk/arm64/start.s osfmk/arm64/start.s
+index 7da26d2..1606c91 100644
+--- a/osfmk/arm64/start.s
++++ b/osfmk/arm64/start.s
+@@ -517,15 +517,15 @@ LEXT(start_first_cpu)
+ 
+ #if defined(A5XELTE)
+ 	/* Earliest XNU-owned physical marker in preserved Samsung log RAM. */
+-	MOV64	x10, 0x469ff100
++	MOV64	x10, A5_ENTRY_MARKER_PHYS
+ 	MOV64	x11, 0x3145544c45554e58
+ 	str		x11, [x10]
+ 	dsb		sy
+ 	/* XNU-owned green entry block on the Exynos DECON scanout buffer. */
+-	MOV64	x10, 0x6705d0c0
++	MOV64	x10, (A5_FB_PHYS + 88 * A5_FB_STRIDE + 240 * 4)
+ 	MOV64	x11, 0xff00ff00
+ 	mov		x12, #21
+-	mov		x15, #4320
++	mov		x15, #A5_FB_STRIDE
+ La5_entry_row:
+ 	mov		x14, x10
+ 	mov		x13, #36
+@@ -710,18 +710,18 @@ Lkernelcache_base_found:
+ 	create_bootstrap_mapping x14, x15, x5, x3, x2, x9, x10, x11, x12, x13
+ 
+ #if defined(A5XELTE)
+-	/* Five 2 MiB blocks map the 1080x1920 scanout buffer VA=PA.
++	/* A5_FB_2M_BLOCKS 2 MiB blocks map the scanout buffer VA=PA.
+ 	 * Its L1 index differs from isolated XNU RAM, so this uses one extra
+ 	 * bootstrap L2 page. Mark it write-combined for DECON DMA visibility. */
+-	MOV64	x0, 0x67000000
++	MOV64	x0, A5_FB_PHYS
+ 	mov		x4, x0
+-	mov		x5, #5
++	mov		x5, #A5_FB_2M_BLOCKS
+ 	create_bootstrap_mapping x0, x4, x5, x1, x2, x6, x10, x11, x12, x13
+-	MOV64	x10, 0x67000000
++	MOV64	x10, A5_FB_PHYS
+ 	and		x11, x10, #(ARM_TT_L2_INDEX_MASK)
+ 	lsr		x11, x11, #(ARM_TT_L2_SHIFT)
+ 	add		x12, x2, x11, lsl #TTE_SHIFT
+-	mov		x13, #5
++	mov		x13, #A5_FB_2M_BLOCKS
+ La5_fb_attr:
+ 	ldr		x11, [x12]
+ 	bic		x11, x11, #(ARM_TTE_BLOCK_ATTRINDXMASK)
+@@ -892,10 +892,10 @@ common_start:
+ 
+ #if defined(A5XELTE)
+ 	/* Blue block: the 4 KiB MMU is active and the framebuffer alias works. */
+-	MOV64	x10, 0x6707ecc0
++	MOV64	x10, (A5_FB_PHYS + 120 * A5_FB_STRIDE + 240 * 4)
+ 	MOV64	x11, 0xff0000ff
+ 	mov		x12, #21
+-	mov		x15, #4320
++	mov		x15, #A5_FB_STRIDE
+ La5_mmu_row:
+ 	mov		x14, x10
+ 	mov		x13, #36
+@@ -936,10 +936,10 @@ La5_mmu_pixel:
+ 
+ #if defined(A5XELTE)
+ 	/* fp_enabled: write directly to the DECON scanout alias. */
+-	MOV64	x10, 0x670a08c0
++	MOV64	x10, (A5_FB_PHYS + 152 * A5_FB_STRIDE + 240 * 4)
+ 	MOV64	x11, 0xff00ffff
+ 	mov	x12, #21
+-	mov	x15, #4320
++	mov	x15, #A5_FB_STRIDE
+ La5_fp_enabled_row:
+ 	mov	x14, x10
+ 	mov	x13, #36
+@@ -971,10 +971,10 @@ La5_fp_enabled_pixel:
+ 
+ #if defined(A5XELTE)
+ 	/* tunables_done: write directly to the DECON scanout alias. */
+-	MOV64	x10, 0x670c24c0
++	MOV64	x10, (A5_FB_PHYS + 184 * A5_FB_STRIDE + 240 * 4)
+ 	MOV64	x11, 0xffff00ff
+ 	mov	x12, #21
+-	mov	x15, #4320
++	mov	x15, #A5_FB_STRIDE
+ La5_tunables_done_row:
+ 	mov	x14, x10
+ 	mov	x13, #36
+@@ -1018,10 +1018,10 @@ La5_tunables_done_pixel:
+ 
+ #if defined(A5XELTE)
+ 	/* arm_init_jump: write directly to the DECON scanout alias. */
+-	MOV64	x10, 0x670e40c0
++	MOV64	x10, (A5_FB_PHYS + 216 * A5_FB_STRIDE + 240 * 4)
+ 	MOV64	x11, 0xffffff00
+ 	mov	x12, #21
+-	mov	x15, #4320
++	mov	x15, #A5_FB_STRIDE
+ La5_arm_init_jump_row:
+ 	mov	x14, x10
+ 	mov	x13, #36
+@@ -1103,8 +1103,8 @@ arm_init_tramp:
+ La5_draw_text:
+ 	adrp	x3, EXT(iso_font)@page
+ 	add	x3, x3, EXT(iso_font)@pageoff
+-	MOV64	x4, 0x67000000
+-	mov	x5, #4320
++	MOV64	x4, A5_FB_PHYS
++	mov	x5, #A5_FB_STRIDE
+ 	madd	x4, x2, x5, x4
+ 	add	x4, x4, x1, lsl #2
+ La5_text_next_char:
+@@ -1120,7 +1120,7 @@ La5_text_column:
+ 	lsl	w11, w11, w10
+ 	tst	w9, w11
+ 	b.eq	La5_text_skip_pixel
+-	mov	x13, #8640
++	mov	x13, #(2 * A5_FB_STRIDE)
+ 	madd	x12, x8, x13, x4
+ 	add	x12, x12, x10, lsl #3
+ 	mov	w14, #-1
+diff --git osfmk/arm64/sweet_early.c osfmk/arm64/sweet_early.c
+index dcdbcf6..d4f3ca3 100644
+--- a/osfmk/arm64/sweet_early.c
++++ b/osfmk/arm64/sweet_early.c
+@@ -12,12 +12,12 @@
+ #include <kern/misc_protos.h>
+ 
+ /* The bootstrap TTBR0 maps DECON scanout VA=PA until arm_vm_init. */
+-#define A5_FB ((volatile uint32_t *)(uintptr_t)0x67000000)
+-#define A5_STRIDE 1080u
++#define A5_FB ((volatile uint32_t *)(uintptr_t)A5_FB_PHYS)
++#define A5_STRIDE (A5_FB_STRIDE / 4u)
+ #define A5_SCALE 2u
+ #define A5_ROW_HEIGHT (16u * A5_SCALE)
+ #define A5_COL_WIDTH (8u * A5_SCALE)
+-#define A5_COLS (1080u / A5_COL_WIDTH)
++#define A5_COLS (A5_FB_WIDTH / A5_COL_WIDTH)
+ extern unsigned char iso_font[256 * 16];
+ static unsigned int a5_row = 4, a5_col, a5_active = 1, a5_panicking;
+ 
+@@ -26,7 +26,7 @@ a5_clear_row(void)
+ {
+ 	for (unsigned int y = 0; y < A5_ROW_HEIGHT; y++) {
+ 		volatile uint32_t *line = A5_FB + (a5_row * A5_ROW_HEIGHT + y) * A5_STRIDE;
+-		for (unsigned int x = 0; x < A5_STRIDE; x++) {
++		for (unsigned int x = 0; x < A5_FB_WIDTH; x++) {
+ 			line[x] = 0xff000000u;
+ 		}
+ 	}
+@@ -44,7 +44,7 @@ sweet_early_putc(char c)
+ 	}
+ 	if (c == '\n' || a5_col >= A5_COLS) {
+ 		a5_col = 0;
+-		a5_row = (a5_row + 1) % (1920u / A5_ROW_HEIGHT);
++		a5_row = (a5_row + 1) % (A5_FB_HEIGHT / A5_ROW_HEIGHT);
+ 		a5_clear_row();
+ 		if (c == '\n') {
+ 			return;
+diff --git pexpert/pexpert/arm64/A5XELTE.h pexpert/pexpert/arm64/A5XELTE.h
+index e6718d4..ad6f8d7 100644
+--- a/pexpert/pexpert/arm64/A5XELTE.h
++++ b/pexpert/pexpert/arm64/A5XELTE.h
+@@ -24,6 +24,32 @@
+ #define HAS_GIC_V3                    0
+ #define A5XELTE_VTIMER_INTID         27
+ 
++/*
++ * Samsung Galaxy S8 (SM-G950F, dreamlte, Exynos 8895) build of this port.
++ * Same Samsung S-Boot handoff, GIC-400, 26 MHz timer and Cortex-A53 boot
++ * cluster as the A5; the board facts that differ are below.
++ */
++#define DREAMLTE                      1
++#if defined(DREAMLTE)
++#define A5_FB_PHYS                    0xcc000000  /* s3cfb.bootloaderfb */
++#define A5_FB_WIDTH                   1440
++#define A5_FB_HEIGHT                  2960
++#define A5_FB_STRIDE                  5760        /* bytes per row */
++#define A5_FB_2M_BLOCKS               9           /* 1440*2960*4 bytes */
++#define A5_ENTRY_MARKER_PHYS          0x920ff000  /* slot in the loader's pstore text */
++#define A5_BOOT_MPIDR                 0x100       /* first Cortex-A53 */
++#define A5_KEYS_DEFAULT               0           /* A5 GPA2 keys absent */
++#else
++#define A5_FB_PHYS                    0x67000000
++#define A5_FB_WIDTH                   1080
++#define A5_FB_HEIGHT                  1920
++#define A5_FB_STRIDE                  4320
++#define A5_FB_2M_BLOCKS               5
++#define A5_ENTRY_MARKER_PHYS          0x469ff100
++#define A5_BOOT_MPIDR                 0
++#define A5_KEYS_DEFAULT               1
++#endif
++
+ #ifndef ASSEMBLER
+ #define PLATFORM_PANIC_LOG_DISABLED
+ #endif
