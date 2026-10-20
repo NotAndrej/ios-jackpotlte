@@ -505,7 +505,40 @@ edit('iokit/Kernel/arm/SweetFramebuffer.cpp', [
      '\t\tpresent(rec);\n'
      '\t}\n', 1),
     ('\tuint32_t mask = get32(rec, 0x104);\n',
-     '\tuint32_t mask = get32(rec, 0x104);\n\tIOLockLock(fPresentLock);\n', 1),
+     '\tuint32_t mask = get32(rec, 0x104);\n\tIOLockLock(fPresentLock);\n'
+     '#if defined(DREAMLTE)\n\tsweet_fb_wait_frame_done();\n#endif\n', 1),
+    ('static uint32_t sweet_fb_swaps_logged;\n',
+     '#if defined(DREAMLTE)\n'
+     '/*\n'
+     ' * Boot 31 video: torn frames (top half of one screen, bottom of the\n'
+     ' * next). DECON_F fetches the panel memory at 60 Hz (boot 30 probe: 30\n'
+     ' * frame-done events per 0.5 s) while we copy into it. Start each copy\n'
+     ' * right after a frame-done (INTERRUPT_PENDING 0x4c bit 13, source\n'
+     ' * enabled in INTERRUPT_ENABLE 0x40; the SPI is not routed), so the copy\n'
+     ' * runs ahead of the next fetch.\n'
+     ' */\n'
+     'extern "C" vm_offset_t ml_io_map(vm_offset_t phys_addr, vm_size_t size);\n'
+     'static vm_offset_t sweet_fb_decon;\n'
+     '\n'
+     'static void\n'
+     'sweet_fb_wait_frame_done(void)\n'
+     '{\n'
+     '\tif (sweet_fb_decon == 0) {\n'
+     '\t\tsweet_fb_decon = ml_io_map(0x12860000, 0x1000);\n'
+     '\t\tif (sweet_fb_decon == 0) {\n'
+     '\t\t\treturn;\n'
+     '\t\t}\n'
+     '\t\t*(volatile uint32_t *)(sweet_fb_decon + 0x40) |= (1u << 13) | 1u;\n'
+     '\t}\n'
+     '\tvolatile uint32_t *pend = (volatile uint32_t *)(sweet_fb_decon + 0x4c);\n'
+     '\t*pend = 1u << 13;\n'
+     '\tfor (int i = 0; i < 200 && !(*pend & (1u << 13)); i++) {\n'
+     '\t\tIODelay(100);\n'
+     '\t}\n'
+     '}\n'
+     '#endif\n'
+     '\n'
+     'static uint32_t sweet_fb_swaps_logged;\n', 1),
     ('\t\ts->release();\n\t}\n}\n',
      '\t\ts->release();\n\t}\n\tIOLockUnlock(fPresentLock);\n}\n', 1),
 ])

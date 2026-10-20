@@ -111,17 +111,34 @@ void mngs_probe(void (*kv)(const char *, uint64_t), void (*out)(const char *))
 	wr(PMU + 0x2488, rd(PMU + 0x2488) & ~1u);
 	kv("cluster on: seq st", rd(PMU + 0x2484));
 	out("\n");
+	/*
+	 * Boot 31 powered the core first, then CPU_ON: status 0xf, rc 0, the
+	 * core never ran our entry. The order that starts the A53s (SweetCPU,
+	 * patch 0124): power off, CPU_ON (firmware records the entry), power
+	 * 0 -> 0xF edge, CPU_ON again. cpu00_on adds DD0 after the power-up.
+	 */
 	smp_flags[0] = 0;
-	wr(CPU_CFG(0), rd(CPU_CFG(0)) | 0xf);
+	wr(DD(0), rd(DD(0)) & ~1u);
+	wr(CPU_CFG(0), rd(CPU_CFG(0)) & ~0xfu);
 	uint64_t end = ticks() + TIMER_HZ / 10;
+	while (ticks() < end && (rd(CPU_STAT(0)) & 0xf))
+		;
+	int64_t rc0 = smc3(PSCI_CPU_ON, 0x000, (uintptr_t)smp_entry, 0);
+	wr(CPU_CFG(0), rd(CPU_CFG(0)) | 0xf);
+	end = ticks() + TIMER_HZ / 10;
 	while (ticks() < end && (rd(CPU_STAT(0)) & 0xf) != 0xf)
 		;
 	wr(DD(0), rd(DD(0)) | 1);
+	kv("first CPU_ON rc", (uint64_t)rc0);
 	kv("cpu0 st", rd(CPU_STAT(0)));
 	kv("dd0", rd(DD(0)));
 	out("\n");
-	int64_t rc = smc3(PSCI_CPU_ON, 0x000, (uintptr_t)smp_entry, 0);
-	int up = wait_flag(0, 300);
+	int up = wait_flag(0, 100);
+	int64_t rc = 0;
+	if (!up) {
+		rc = smc3(PSCI_CPU_ON, 0x000, (uintptr_t)smp_entry, 0);
+		up = wait_flag(0, 300);
+	}
 	kv("CPU_ON rc", (uint64_t)rc);
 	kv("MONGOOSE STARTED", up);
 	out("\nMNGS probe done\n");
