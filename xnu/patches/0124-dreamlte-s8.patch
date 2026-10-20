@@ -19,6 +19,213 @@ index 3ba2fd4..9eb06e3 100644
  	if (a5_keys_started) {
  		return;
  	}
+diff --git bsd/dev/a5xelte_touch.c bsd/dev/a5xelte_touch.c
+index 7ba309b..1017d41 100644
+--- a/bsd/dev/a5xelte_touch.c
++++ b/bsd/dev/a5xelte_touch.c
+@@ -12,6 +12,7 @@
+ #include <kern/sched_prim.h>
+ #include <machine/machine_routines.h>
+ #include <pexpert/pexpert.h>
++#include <pexpert/arm64/board_config.h>
+ 
+ extern vm_offset_t ml_io_map(vm_offset_t, vm_size_t);
+ extern void thread_terminate_self(void);
+@@ -618,7 +619,7 @@ a5touch_start_early(vm_offset_t nfc, vm_offset_t alive)
+ void
+ a5xelte_touch_probe(void)
+ {
+-	int enabled = 1;
++	int enabled = A5_KEYS_DEFAULT; /* A5 board drivers: off on the S8 */
+ 	int log_contacts = 0;
+ 	int bus_trial = 0;
+ 	vm_offset_t alive;
+diff --git bsd/dev/sweet_ufs.c bsd/dev/sweet_ufs.c
+index 6b926fe..3bbc0f4 100644
+--- a/bsd/dev/sweet_ufs.c
++++ b/bsd/dev/sweet_ufs.c
+@@ -18,7 +18,7 @@
+  * against the partition bounds again right before it is issued, so nothing
+  * outside the named partition can be written.
+  */
+-#if defined(ARM64_BOARD_CONFIG_SWEET)
++#if defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_A5XELTE)
+ #include <sys/param.h>
+ #include <sys/systm.h>
+ #include <sys/buf.h>
+@@ -69,9 +69,37 @@ extern void sweet_usb_probe(void);
+ #define HCS_UTRLRDY     (1u << 1)
+ #define CAP_64AS        (1u << 24)              /* 64-bit DMA addressing */
+ 
++#if defined(ARM64_BOARD_CONFIG_A5XELTE)
++/*
++ * Galaxy S8 (Exynos 8895) host, per the Samsung 4.4 driver and the S8
++ * loader probe (shim/dreamlte/ufs_probe.c): UTRD offsets and lengths are
++ * in bytes (UFSHCD_QUIRK_BROKEN_DWORD_UTRD), PRDT entries are 16 bytes and
++ * cover at most 4 KiB (HCI_TXPRDT_ENTRY_SIZE 12), each SCSI slot needs its
++ * HCI_UTRL_NEXUS_TYPE bit, the standard HCE register reads 0 while the host
++ * runs (UFSHCD_QUIRK_USE_OF_HCE) and UTRLCLR is inverted
++ * (UFSHCD_QUIRK_BROKEN_REQ_LIST_CLR). S-Boot leaves the device stopped
++ * (sense 02/04/02): START STOP UNIT, power condition ACTIVE, to the UFS
++ * Device well-known LUN wakes it.
++ */
++#define EXYNOS_UFS              1
++#define VS_UTRL_NEXUS_TYPE      0x40
++#define UFS_WLUN_DEVICE         0xd0
++#define UFS_ADT_NODE            "/dreamlte-ufs"
++#define UFS_DEFAULT_PART        "USERDATA"
++#define PRDT_BYTES(field)       (field)
++#else
++#define UFS_ADT_NODE            "/sweet-ufs"
++#define UFS_DEFAULT_PART        "userdata"
++#define PRDT_BYTES(field)       ((field) * 16u)
++#endif
++
+ #define UFS_BLOCK       4096u
+ #define BOUNCE_SIZE     (1u << 20)
++#if defined(EXYNOS_UFS)
++#define PRDT_CHUNK      4096u                   /* HCI_TXPRDT_ENTRY_SIZE 12 */
++#else
+ #define PRDT_CHUNK      (256u << 10)            /* PRDT byte count field: 18 bits */
++#endif
+ #define PRDT_MAX        (BOUNCE_SIZE / PRDT_CHUNK)
+ #define CMD_TIMEOUT_NS  (5ull * NSEC_PER_SEC)
+ #define CMD_SPIN_NS     (50ull * NSEC_PER_USEC)
+@@ -100,6 +128,7 @@ struct ucd {
+ 
+ static struct {
+ 	vm_offset_t regs;
++	vm_offset_t vs_regs;                    /* Exynos vendor HCI registers */
+ 	vm_offset_t dma;                        /* kernel VA of the DMA allocation */
+ 	uint64_t dma_pa;
+ 	uint8_t lun;
+@@ -171,7 +200,11 @@ ufs_scsi(const uint8_t *cdb, unsigned cdb_len, uint32_t len, bool write)
+ 	utrd->dw2 = 0x0f;                       /* OCS invalid until updated */
+ 	utrd->ucdba = (uint32_t)ucd_pa;
+ 	utrd->ucdbau = (uint32_t)(ucd_pa >> 32);
++#if defined(EXYNOS_UFS)
++	utrd->resp = 512u << 16 | 512u;
++#else
+ 	utrd->resp = (512u / 4) << 16 | (512u / 4);
++#endif
+ 	if (len) {
+ 		uint32_t n = 0;
+ 		for (uint32_t done = 0; done < len; done += PRDT_CHUNK, n++) {
+@@ -180,7 +213,11 @@ ufs_scsi(const uint8_t *cdb, unsigned cdb_len, uint32_t len, bool write)
+ 			ucd->prdt[n].addr_hi = (uint32_t)((bounce_pa + done) >> 32);
+ 			ucd->prdt[n].dbc = chunk - 1;
+ 		}
++#if defined(EXYNOS_UFS)
++		utrd->prdt = 1024u << 16 | (n * (uint32_t)sizeof(ucd->prdt[0]));
++#else
+ 		utrd->prdt = (1024u / 4) << 16 | n;
++#endif
+ 	}
+ 
+ 	if (su.cache) {
+@@ -189,7 +226,7 @@ ufs_scsi(const uint8_t *cdb, unsigned cdb_len, uint32_t len, bool write)
+ 		dma_sync(DMA_UCD + offsetof(struct ucd, resp), sizeof(ucd->resp));
+ 		if (len) {
+ 			dma_clean(DMA_UCD + offsetof(struct ucd, prdt),
+-			    (utrd->prdt & 0xffff) * sizeof(ucd->prdt[0]));
++			    PRDT_BYTES(utrd->prdt & 0xffff));
+ 		}
+ 	} else {
+ 		dma_sync(DMA_UTRL, sizeof(*utrd));
+@@ -204,6 +241,9 @@ ufs_scsi(const uint8_t *cdb, unsigned cdb_len, uint32_t len, bool write)
+ 	}
+ 	__builtin_arm_dsb(0xf);
+ 
++#if defined(EXYNOS_UFS)
++	*(volatile uint32_t *)(su.vs_regs + VS_UTRL_NEXUS_TYPE) |= 1;  /* slot 0: SCSI */
++#endif
+ 	ufs_wr(REG_UTRLDBR, 1);
+ 	uint64_t deadline;
+ 	nanoseconds_to_absolutetime(CMD_TIMEOUT_NS, &deadline);
+@@ -219,7 +259,9 @@ ufs_scsi(const uint8_t *cdb, unsigned cdb_len, uint32_t len, bool write)
+ 	while (ufs_rd(REG_UTRLDBR) & 1) {
+ 		uint64_t now = mach_absolute_time();
+ 		if (now > deadline) {
++#if !defined(EXYNOS_UFS)
+ 			ufs_wr(REG_UTRLCLR, ~1u);
++#endif
+ 			printf("SWEET UFS: command 0x%02x timed out\n", cdb[0]);
+ 			return ETIMEDOUT;
+ 		}
+@@ -357,7 +399,12 @@ static int
+ ufs_take_over_host(void)
+ {
+ 	uint32_t hce = ufs_rd(REG_HCE), hcs = ufs_rd(REG_HCS);
++#if defined(EXYNOS_UFS)
++	(void)hce;
++	if (!(hcs & HCS_DP) || !(hcs & HCS_UTRLRDY)) {
++#else
+ 	if (!(hce & 1) || !(hcs & HCS_DP) || !(hcs & HCS_UTRLRDY)) {
++#endif
+ 		printf("SWEET UFS: host not ready (hce 0x%x hcs 0x%x)\n", hce, hcs);
+ 		return ENXIO;
+ 	}
+@@ -589,13 +636,17 @@ sweet_ufs_init(void)
+ 	DTEntry node;
+ 	uintptr_t const *reg = NULL;
+ 	unsigned int size = 0;
+-	char want[64] = "userdata";
++	char want[64] = UFS_DEFAULT_PART;
+ 	int error;
+ 
+-	if (SecureDTLookupEntry(NULL, "/sweet-ufs", &node) != kSuccess ||
++	if (SecureDTLookupEntry(NULL, UFS_ADT_NODE, &node) != kSuccess ||
+ 	    SecureDTGetProperty(node, "reg", (void const **)&reg, &size) != kSuccess ||
++#if defined(EXYNOS_UFS)
++	    size < 4 * sizeof(uintptr_t)) {
++#else
+ 	    size < 2 * sizeof(uintptr_t)) {
+-		printf("SWEET UFS: no /sweet-ufs node in the device tree\n");
++#endif
++		printf("SWEET UFS: no " UFS_ADT_NODE " node in the device tree\n");
+ 		return ENXIO;
+ 	}
+ 	PE_parse_boot_argn("ufsroot", want, sizeof(want));
+@@ -608,6 +659,9 @@ sweet_ufs_init(void)
+ 	su.wait = (wait == 1);
+ 
+ 	su.regs = ml_io_map(reg[0], reg[1]);
++#if defined(EXYNOS_UFS)
++	su.vs_regs = ml_io_map(reg[2], reg[3]);
++#endif
+ 	if (kmem_alloc_contig(kernel_map, &su.dma, DMA_SIZE, PAGE_MASK, 0, 0,
+ 	    KMA_DATA | KMA_ZERO | KMA_PERMANENT, VM_KERN_MEMORY_IOKIT) != KERN_SUCCESS) {
+ 		printf("SWEET UFS: no contiguous DMA memory\n");
+@@ -623,6 +677,15 @@ sweet_ufs_init(void)
+ 
+ 	lck_mtx_lock(&sweet_ufs_lock);
+ 	error = ufs_take_over_host();
++#if defined(EXYNOS_UFS)
++	if (!error) {
++		static const uint8_t ssu_active[6] = { 0x1b, 0, 0, 0, 0x10, 0 };
++		su.lun = UFS_WLUN_DEVICE;
++		error = ufs_scsi(ssu_active, sizeof(ssu_active), 0, false);
++		su.lun = 0;
++		printf("SWEET UFS: START STOP UNIT (ACTIVE) to the device W-LUN: %d\n", error);
++	}
++#endif
+ 	if (!error) {
+ 		static const uint8_t tur[6] = { 0x00 };
+ 		/* The first command after the bootloader may report a unit attention. */
+@@ -655,11 +718,13 @@ sweet_ufs_init(void)
+ 	    want, su.lun, su.first_block, su.nblocks * UFS_BLOCK >> 20,
+ 	    su.writable ? "read-write" : "read-only", su.dma_pa);
+ 	sweet_log_start();
++#if defined(ARM64_BOARD_CONFIG_SWEET)
+ 	sweet_sample_start();
+ 	/* Input drivers (HID services in iokit/Kernel/arm/hid/SweetHID.cpp). */
+ 	sweet_keys_init();
+ 	sweet_touch_init();
+ 	sweet_usb_probe();
++#endif
+ 	return 0;
+ }
+ 
 diff --git iokit/Kernel/arm/SweetCPU.cpp iokit/Kernel/arm/SweetCPU.cpp
 index 55d0057..e42ad4a 100644
 --- a/iokit/Kernel/arm/SweetCPU.cpp
@@ -92,6 +299,22 @@ index 9987f5a..e73ee66 100644
  #else
      "     'IONameMatch'     = 'xiaomi,sweet';"
  #endif
+diff --git iokit/bsddev/IOKitBSDInit.cpp iokit/bsddev/IOKitBSDInit.cpp
+index 63a3c37..b6ba676 100644
+--- a/iokit/bsddev/IOKitBSDInit.cpp
++++ b/iokit/bsddev/IOKitBSDInit.cpp
+@@ -795,9 +795,9 @@ IOFindBSDRoot( char * rootName, unsigned int rootNameSize,
+ 	}
+ #endif
+ 
+-#if defined(ARM64_BOARD_CONFIG_SWEET)
++#if defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_A5XELTE)
+ //
+-//	SWEET: root on a GPT partition of the internal UFS (bsd/dev/sweet_ufs.c)
++//	SWEET / Galaxy S8: root on a GPT partition of the internal UFS (bsd/dev/sweet_ufs.c)
+ //
+ 	if (strcmp(rdBootVar, "ufsroot0") == 0) {
+ 		extern int sweet_ufs_rootdev(dev_t *dev);
 diff --git osfmk/arm64/arm_vm_init.c osfmk/arm64/arm_vm_init.c
 index fbc383d..3e38fd8 100644
 --- a/osfmk/arm64/arm_vm_init.c
@@ -265,6 +488,28 @@ index dcdbcf6..d4f3ca3 100644
  		a5_clear_row();
  		if (c == '\n') {
  			return;
+diff --git osfmk/console/serial_console.c osfmk/console/serial_console.c
+index 2ab4334..f2489bd 100644
+--- a/osfmk/console/serial_console.c
++++ b/osfmk/console/serial_console.c
+@@ -266,7 +266,7 @@ _cnputc(char c, bool poll)
+  *             waiting for an interrupt when the hardware device isn't ready
+  * @param size The number of characters to print to the console.
+  */
+-#if defined(ARM64_BOARD_CONFIG_SWEET)
++#if defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_A5XELTE)
+ extern void sweet_log_append(const char *c, int size);  /* bsd/dev/sweet_ufs.c */
+ #endif
+ #if defined(ARM64_BOARD_CONFIG_A5XELTE)
+@@ -286,7 +286,7 @@ _cnputs(char *c, int size, bool poll)
+ {
+ 	extern int disableConsoleOutput;
+ 
+-#if defined(ARM64_BOARD_CONFIG_SWEET)
++#if defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_A5XELTE)
+ 	sweet_log_append(c, size);
+ #endif
+ #if defined(ARM64_BOARD_CONFIG_A5XELTE)
 diff --git osfmk/vm/vm_resident.c osfmk/vm/vm_resident.c
 index 6394730..de4a6a7 100644
 --- a/osfmk/vm/vm_resident.c

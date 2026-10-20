@@ -115,6 +115,11 @@ def build():
         ('height', mkadt.u32(FB_H)),
         ('stride', mkadt.u32(FB_W * 4)),
     ]))
+    # bsd/dev/sweet_ufs.c (A5XELTE config, EXYNOS_UFS): UFSHCI standard
+    # registers, then the Exynos vendor HCI block (HCI_UTRL_NEXUS_TYPE etc.).
+    root.children.append(mkadt.node('dreamlte-ufs', [
+        ('reg', mkadt.u64(0x11120000, 0x200, 0x11121100, 0x200)),
+    ]))
     return root
 
 

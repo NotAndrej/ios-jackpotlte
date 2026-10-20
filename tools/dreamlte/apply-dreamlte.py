@@ -221,6 +221,132 @@ edit('osfmk/vm/vm_resident.c', [
      '#endif\n', 1),
 ])
 
+# ---- Galaxy S8 internal UFS: the SWEET driver with the Exynos 8895 quirks ----
+# Proven by the loader probe (shim/dreamlte/ufs_probe.c, S8 boot 13): HCE
+# reads 0 while running, UTRD sizes in bytes, 16-byte PRDT entries of at
+# most 4 KiB, NEXUS_TYPE bit per SCSI slot, and the device stays NOT READY
+# (04/02) until START STOP UNIT (power condition ACTIVE) to W-LUN 0xD0.
+edit('bsd/dev/sweet_ufs.c', [
+    ('#if defined(ARM64_BOARD_CONFIG_SWEET)\n#include <sys/param.h>\n',
+     '#if defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_A5XELTE)\n'
+     '#include <sys/param.h>\n', 1),
+    ('#define CAP_64AS        (1u << 24)              /* 64-bit DMA addressing */\n',
+     '#define CAP_64AS        (1u << 24)              /* 64-bit DMA addressing */\n'
+     '\n'
+     '#if defined(ARM64_BOARD_CONFIG_A5XELTE)\n'
+     '/*\n'
+     ' * Galaxy S8 (Exynos 8895) host, per the Samsung 4.4 driver and the S8\n'
+     ' * loader probe (shim/dreamlte/ufs_probe.c): UTRD offsets and lengths are\n'
+     ' * in bytes (UFSHCD_QUIRK_BROKEN_DWORD_UTRD), PRDT entries are 16 bytes and\n'
+     ' * cover at most 4 KiB (HCI_TXPRDT_ENTRY_SIZE 12), each SCSI slot needs its\n'
+     ' * HCI_UTRL_NEXUS_TYPE bit, the standard HCE register reads 0 while the host\n'
+     ' * runs (UFSHCD_QUIRK_USE_OF_HCE) and UTRLCLR is inverted\n'
+     ' * (UFSHCD_QUIRK_BROKEN_REQ_LIST_CLR). S-Boot leaves the device stopped\n'
+     ' * (sense 02/04/02): START STOP UNIT, power condition ACTIVE, to the UFS\n'
+     ' * Device well-known LUN wakes it.\n'
+     ' */\n'
+     '#define EXYNOS_UFS              1\n'
+     '#define VS_UTRL_NEXUS_TYPE      0x40\n'
+     '#define UFS_WLUN_DEVICE         0xd0\n'
+     '#define UFS_ADT_NODE            "/dreamlte-ufs"\n'
+     '#define UFS_DEFAULT_PART        "USERDATA"\n'
+     '#define PRDT_BYTES(field)       (field)\n'
+     '#else\n'
+     '#define UFS_ADT_NODE            "/sweet-ufs"\n'
+     '#define UFS_DEFAULT_PART        "userdata"\n'
+     '#define PRDT_BYTES(field)       ((field) * 16u)\n'
+     '#endif\n', 1),
+    ('#define PRDT_CHUNK      (256u << 10)            /* PRDT byte count field: 18 bits */\n',
+     '#if defined(EXYNOS_UFS)\n'
+     '#define PRDT_CHUNK      4096u                   /* HCI_TXPRDT_ENTRY_SIZE 12 */\n'
+     '#else\n'
+     '#define PRDT_CHUNK      (256u << 10)            /* PRDT byte count field: 18 bits */\n'
+     '#endif\n', 1),
+    ('\tvm_offset_t regs;\n',
+     '\tvm_offset_t regs;\n\tvm_offset_t vs_regs;                    /* Exynos vendor HCI registers */\n', 1),
+    ('\tutrd->resp = (512u / 4) << 16 | (512u / 4);\n',
+     '#if defined(EXYNOS_UFS)\n'
+     '\tutrd->resp = 512u << 16 | 512u;\n'
+     '#else\n'
+     '\tutrd->resp = (512u / 4) << 16 | (512u / 4);\n'
+     '#endif\n', 1),
+    ('\t\tutrd->prdt = (1024u / 4) << 16 | n;\n',
+     '#if defined(EXYNOS_UFS)\n'
+     '\t\tutrd->prdt = 1024u << 16 | (n * (uint32_t)sizeof(ucd->prdt[0]));\n'
+     '#else\n'
+     '\t\tutrd->prdt = (1024u / 4) << 16 | n;\n'
+     '#endif\n', 1),
+    ('\t\t\t    (utrd->prdt & 0xffff) * sizeof(ucd->prdt[0]));\n',
+     '\t\t\t    PRDT_BYTES(utrd->prdt & 0xffff));\n', 1),
+    ('\tufs_wr(REG_UTRLDBR, 1);\n',
+     '#if defined(EXYNOS_UFS)\n'
+     '\t*(volatile uint32_t *)(su.vs_regs + VS_UTRL_NEXUS_TYPE) |= 1;  /* slot 0: SCSI */\n'
+     '#endif\n'
+     '\tufs_wr(REG_UTRLDBR, 1);\n', 1),
+    ('\t\t\tufs_wr(REG_UTRLCLR, ~1u);\n',
+     '#if !defined(EXYNOS_UFS)\n'
+     '\t\t\tufs_wr(REG_UTRLCLR, ~1u);\n'
+     '#endif\n', 1),
+    ('\tif (!(hce & 1) || !(hcs & HCS_DP) || !(hcs & HCS_UTRLRDY)) {\n',
+     '#if defined(EXYNOS_UFS)\n'
+     '\t(void)hce;\n'
+     '\tif (!(hcs & HCS_DP) || !(hcs & HCS_UTRLRDY)) {\n'
+     '#else\n'
+     '\tif (!(hce & 1) || !(hcs & HCS_DP) || !(hcs & HCS_UTRLRDY)) {\n'
+     '#endif\n', 1),
+    ('\tchar want[64] = "userdata";\n', '\tchar want[64] = UFS_DEFAULT_PART;\n', 1),
+    ('\tif (SecureDTLookupEntry(NULL, "/sweet-ufs", &node) != kSuccess ||\n'
+     '\t    SecureDTGetProperty(node, "reg", (void const **)&reg, &size) != kSuccess ||\n'
+     '\t    size < 2 * sizeof(uintptr_t)) {\n'
+     '\t\tprintf("SWEET UFS: no /sweet-ufs node in the device tree\\n");\n',
+     '\tif (SecureDTLookupEntry(NULL, UFS_ADT_NODE, &node) != kSuccess ||\n'
+     '\t    SecureDTGetProperty(node, "reg", (void const **)&reg, &size) != kSuccess ||\n'
+     '#if defined(EXYNOS_UFS)\n'
+     '\t    size < 4 * sizeof(uintptr_t)) {\n'
+     '#else\n'
+     '\t    size < 2 * sizeof(uintptr_t)) {\n'
+     '#endif\n'
+     '\t\tprintf("SWEET UFS: no " UFS_ADT_NODE " node in the device tree\\n");\n', 1),
+    ('\tsu.regs = ml_io_map(reg[0], reg[1]);\n',
+     '\tsu.regs = ml_io_map(reg[0], reg[1]);\n'
+     '#if defined(EXYNOS_UFS)\n'
+     '\tsu.vs_regs = ml_io_map(reg[2], reg[3]);\n'
+     '#endif\n', 1),
+    ('\terror = ufs_take_over_host();\n',
+     '\terror = ufs_take_over_host();\n'
+     '#if defined(EXYNOS_UFS)\n'
+     '\tif (!error) {\n'
+     '\t\tstatic const uint8_t ssu_active[6] = { 0x1b, 0, 0, 0, 0x10, 0 };\n'
+     '\t\tsu.lun = UFS_WLUN_DEVICE;\n'
+     '\t\terror = ufs_scsi(ssu_active, sizeof(ssu_active), 0, false);\n'
+     '\t\tsu.lun = 0;\n'
+     '\t\tprintf("SWEET UFS: START STOP UNIT (ACTIVE) to the device W-LUN: %d\\n", error);\n'
+     '\t}\n'
+     '#endif\n', 1),
+    ('\tsweet_sample_start();\n\t/* Input drivers (HID services in iokit/Kernel/arm/hid/SweetHID.cpp). */\n'
+     '\tsweet_keys_init();\n\tsweet_touch_init();\n\tsweet_usb_probe();\n',
+     '#if defined(ARM64_BOARD_CONFIG_SWEET)\n'
+     '\tsweet_sample_start();\n\t/* Input drivers (HID services in iokit/Kernel/arm/hid/SweetHID.cpp). */\n'
+     '\tsweet_keys_init();\n\tsweet_touch_init();\n\tsweet_usb_probe();\n'
+     '#endif\n', 1),
+])
+
+# rd=ufsroot0 also on the A5XELTE machine config (the S8 build).
+edit('iokit/bsddev/IOKitBSDInit.cpp', [
+    ('#if defined(ARM64_BOARD_CONFIG_SWEET)\n//\n//\tSWEET: root on a GPT partition of the internal UFS (bsd/dev/sweet_ufs.c)\n',
+     '#if defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_A5XELTE)\n//\n'
+     '//\tSWEET / Galaxy S8: root on a GPT partition of the internal UFS (bsd/dev/sweet_ufs.c)\n', 1),
+])
+
+# Console copy into sweet_ufs.c's ring (written to the end of the root
+# partition every ufslogsecs when ufsrw=1): longer than pstore, no bit flips.
+edit('osfmk/console/serial_console.c', [
+    ('#if defined(ARM64_BOARD_CONFIG_SWEET)\nextern void sweet_log_append',
+     '#if defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_A5XELTE)\nextern void sweet_log_append', 1),
+    ('#if defined(ARM64_BOARD_CONFIG_SWEET)\n\tsweet_log_append(c, size);',
+     '#if defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_A5XELTE)\n\tsweet_log_append(c, size);', 1),
+])
+
 # IOKit platform expert / CPU personalities: also match the S8 names.
 edit('iokit/KernelConfigTables.cpp', [
     ("    \"     'IONameMatch'     = 'samsung,a5xelte';\"\n",
@@ -229,6 +355,8 @@ edit('iokit/KernelConfigTables.cpp', [
 
 # A5 touch probe maps Exynos7580 I2C/GPIO blocks: a bus error on the S8.
 edit('bsd/dev/a5xelte_touch.c', [
+    ('#include <pexpert/pexpert.h>\n',
+     '#include <pexpert/pexpert.h>\n#include <pexpert/arm64/board_config.h>\n', 1),
     ('a5xelte_touch_probe(void)\n{\n\tint enabled = 1;\n',
      'a5xelte_touch_probe(void)\n{\n\tint enabled = A5_KEYS_DEFAULT; /* A5 board drivers: off on the S8 */\n', 1),
 ])

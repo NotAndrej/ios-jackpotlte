@@ -15,6 +15,9 @@
 #include <stdint.h>
 #include "../fdt.h"
 #include "../font.h"
+#include "ufs_probe.h"
+
+#define UFS_PROBE_DMA		0x8f0000000UL	/* high bank, outside XNU's window */
 
 /* ---- board facts (s8-probe v2-v7, live DT, /proc/iomem) ---- */
 #define FB_BASE			0xcc000000UL	/* s3cfb.bootloaderfb */
@@ -353,6 +356,8 @@ uint64_t dl_main(uintptr_t dtb, uint64_t el, uint64_t sctlr)
 		char c[2] = { p->cmdline[i], 0 };
 		out(c);
 	}
+	out("\n");
+	ufs_probe(kv, out, UFS_PROBE_DMA);
 	fg = 0xff40ff40U;
 	out("\nJUMP TO XNU\n");
 	reserve_marker();
