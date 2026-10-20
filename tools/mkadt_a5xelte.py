@@ -32,6 +32,11 @@ def build():
     set_prop(root, 'compatible', mkadt.cstr('samsung,a5xelte') +
              mkadt.cstr('samsung,exynos7580') + mkadt.cstr('AppleARM'))
     chosen = child(root, 'chosen')
+    buttons = child(root, 'buttons')
+    # Samsung's GPA2-5 mechanical key is the iOS Home (Menu) button.
+    set_prop(buttons, 'home-button-type', mkadt.u32(0))
+    set_prop(buttons, 'button-names', b''.join(mkadt.cstr(name) for name in
+                                       ('volup', 'voldown', 'hold', 'home')))
     set_prop(chosen, 'dram-base', mkadt.u64(0x80000000))
     set_prop(chosen, 'dram-size', mkadt.u64(0x20000000))
     set_prop(chosen, 'firmware-version', mkadt.cstr('a5xelte-entry'))
