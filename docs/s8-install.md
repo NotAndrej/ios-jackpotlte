@@ -1,79 +1,79 @@
-# Установка iOS на Galaxy S8 (SM-G950F)
+# Installing iOS on the Galaxy S8 (SM-G950F)
 
-> ⚠️ **Риски.** Это экспериментальная сборка. Установка **стирает USERDATA** (все данные Android). Нужен разблокированный загрузчик (Knox срабатывает). Пишутся только два раздела: **BOOT (`sda7`)** и **USERDATA (`sda24`)**. EFS, recovery и загрузчики не трогаются, но **сделайте полный бэкап** до начала.
+> ⚠️ **Risks.** This is an experimental build. Installing it **erases USERDATA** (all Android data). It needs an unlocked bootloader (Knox trips). Only two partitions are written: **BOOT (`sda7`)** and **USERDATA (`sda24`)**. EFS, recovery and the bootloaders are not touched, but **make a full backup** before you start.
 >
-> Только **SM-G950F** (Exynos 8895, `dreamlte`). Snapdragon-версии (G950U/W/0) и S8+ (G955F) не поддерживаются: у S8+ другой экран и раздел может иметь другой номер.
+> **SM-G950F** only (Exynos 8895, `dreamlte`). The Snapdragon models (G950U/W/0) and the S8+ (G955F) are not supported: the S8+ has a different panel and partition numbers may differ.
 
-## 0. Что нужно
+## 0. Requirements
 
-- Galaxy S8 SM-G950F, OEM unlock, установленный **TWRP**.
-- ПК: Linux или Windows 10/11 с **WSL Ubuntu**. Команды ниже для WSL/Linux; скрипты `.ps1` — для PowerShell на Windows.
+- Galaxy S8 SM-G950F, OEM unlock, **TWRP** installed.
+- PC: Linux, or Windows 10/11 with **WSL Ubuntu**. Shell commands below are for Linux/WSL; the `.ps1` scripts are for PowerShell on Windows.
 - `adb` (platform-tools), `python3`, `gh` (GitHub CLI).
-- В Linux/WSL: `gcc-aarch64-linux-gnu`, `hfsprogs` (`mkfs.hfsplus`, `fsck.hfsplus`), `rsync`, [`apfs-fuse`](https://github.com/sgan81/apfs-fuse) (собрать из исходников), модуль ядра `hfsplus` (в WSL его нужно собрать для ядра WSL и загрузить через `insmod`), [`ipsw`](https://github.com/blacktop/ipsw).
-- ~40 ГБ свободного места.
+- On Linux/WSL: `gcc-aarch64-linux-gnu`, `hfsprogs` (`mkfs.hfsplus`, `fsck.hfsplus`), `rsync`, [`apfs-fuse`](https://github.com/sgan81/apfs-fuse) (build from source), the `hfsplus` kernel module (on WSL, build it for the WSL kernel and load it with `insmod`), [`ipsw`](https://github.com/blacktop/ipsw).
+- About 40 GB of free space.
 
-## 1. Бэкап
+## 1. Backup
 
-Загрузитесь в TWRP, в «Backup» отметьте Boot, EFS, System, Data и сохраните на SD-карту или ПК. Дополнительно сырые копии:
+Boot into TWRP, select Boot, EFS, System and Data under "Backup" and save it to the SD card or the PC. Also keep a raw copy of BOOT:
 
 ```bash
 adb shell "dd if=/dev/block/sda7 of=/sdcard/BOOT.img"
 adb pull /sdcard/BOOT.img backup/BOOT.img
 ```
 
-`backup/BOOT.img` (стоковый BOOT) нужен дальше: из него берутся заголовок и DTBH.
+`backup/BOOT.img` (the stock BOOT) is needed later: it supplies the image header and the DTBH.
 
-## 2. Ядро XNU
+## 2. XNU kernel
 
-Ядро собирается в GitHub Actions на macOS (бесплатно для публичных репозиториев).
+The kernel is built on GitHub Actions macOS runners (free for public repositories).
 
-1. Сделайте fork этого репозитория.
-2. Actions → **xnu** → *Run workflow* (`machine_config` = `A5XELTE`, по умолчанию). Сборка также запускается сама при изменении `xnu/patches/**`.
-3. Скачайте артефакт:
+1. Fork this repository.
+2. Actions → **xnu** → *Run workflow* (`machine_config` = `A5XELTE`, the default). A build also starts on every change to `xnu/patches/**`.
+3. Download the artifact:
 
 ```bash
 gh run list -R YOU/REPO --workflow xnu --limit 1
 gh run download RUN_ID -R YOU/REPO -n xnu-kernel -D xnu/out
 ```
 
-Получится `xnu/out/kernel.development.a5xelte`. Конфиг называется A5XELTE, S8-часть добавляет патч `0124-dreamlte-s8.patch`.
+This gives `xnu/out/kernel.development.a5xelte`. The machine config is named A5XELTE; the S8 support comes from patch `0124-dreamlte-s8.patch`.
 
-## 3. Корень iOS
+## 3. iOS root
 
-1. Скачайте сами IPSW **iPhone X (iPhone10,3 / iPhone10,6) iOS 16.7.16 (20H392)** с серверов Apple (ссылки есть на ipsw.me). Здесь он не распространяется.
-2. Распакуйте IPSW (это zip). Имена образов OS, SystemOS и AppOS смотрите в `BuildManifest.plist`.
-3. Device Tree iPhone X для MobileGestalt:
+1. Download the **iPhone X (iPhone10,3 / iPhone10,6) iOS 16.7.16 (20H392)** IPSW from Apple's servers yourself (ipsw.me lists the links). It is not distributed here.
+2. Unpack the IPSW (it is a zip). The names of the OS, SystemOS and AppOS images are in `BuildManifest.plist`.
+3. The iPhone X device tree, which MobileGestalt needs:
 
 ```bash
 ipsw img4 im4p extract Firmware/all_flash/DeviceTree.d22ap.im4p -o research/ipsw-x/d22ap.adt
 ```
 
-4. Соберите образ (16 ГБ, HFS+) от root:
+4. Build the image (16 GB, HFS+) as root:
 
 ```bash
 sudo tools/mkiosroot.sh OS.dmg SystemOS.dmg AppOS.dmg ios16-root.img 16G
 sudo tools/dreamlte/finish-iosroot.sh ios16-root.img
 ```
 
-`finish-iosroot.sh` создаёт каталоги логов, применяет `tools/sweet-root-tweaks.py` (пропуск Setup, состояние активации, отключение вочдогов и т.п.) и проверяет ФС.
+`finish-iosroot.sh` creates the log directories, applies `tools/sweet-root-tweaks.py` (skips Setup, seeds the activation state, disables watchdogs, and so on) and checks the filesystem.
 
-## 4. Запись корня в USERDATA
+## 4. Write the root to USERDATA
 
-Телефон в TWRP. Образ пишется частями по 32 МиБ, каждая проверяется по SHA-256, после обрыва USB можно просто перезапустить.
+With the phone in TWRP. The image is written in 32 MiB chunks, each verified by SHA-256. After a USB drop, just run the command again.
 
 ```bash
 python3 tools/dreamlte/chunk-manifest.py ios16-root.img ios16-root.json
 ```
 
-В PowerShell:
+In PowerShell:
 
 ```powershell
 tools\dreamlte\flash-chunks.ps1 -Image \\wsl.localhost\Ubuntu\root\ios16-root.img -Manifest ios16-root.json -Partition USERDATA
 ```
 
-Последние 4 МиБ USERDATA ядро использует как кольцо лога, образ 16 ГБ их не задевает.
+The kernel uses the last 4 MiB of USERDATA as its log ring; a 16 GB image does not reach it.
 
-## 5. BOOT-образ
+## 5. BOOT image
 
 ```bash
 bash tools/dreamlte/make-boot.sh xnu/out/kernel.development.a5xelte backup/BOOT.img s8-ios-boot.img \
@@ -82,9 +82,9 @@ bash tools/dreamlte/make-boot.sh xnu/out/kernel.development.a5xelte backup/BOOT.
   launchd_unsecure_cache=1 wdt=-1 a5touchprobe=0 a5fb_keep_on=1 a5fb_noconsole=1 sweetfb_native=1
 ```
 
-Скрипт строит ADT (`tools/mkadt_dreamlte.py`), payload (`tools/mkpayload.py`), собирает загрузчик `shim/dreamlte` и упаковывает BOOT со стоковым заголовком.
+The script builds the ADT (`tools/mkadt_dreamlte.py`) and the payload (`tools/mkpayload.py`), compiles the `shim/dreamlte` loader and packs BOOT with the stock header.
 
-Запись (телефон в TWRP):
+Flash it (phone in TWRP):
 
 ```bash
 adb push s8-ios-boot.img /tmp/boot.img
@@ -92,40 +92,40 @@ adb shell "dd if=/tmp/boot.img of=/dev/block/sda7 bs=1048576 conv=fsync; sync"
 adb reboot
 ```
 
-Проверьте, что `sda7` — это BOOT: `adb shell ls -l /dev/block/by-name/BOOT` (путь может отличаться).
+First check that `sda7` really is BOOT: `adb shell ls -l /dev/block/by-name/BOOT` (the path may differ).
 
-## 6. Загрузка
+## 6. Booting
 
-- Сначала идут строки загрузчика, затем логотип Apple. До экрана блокировки **около 15 минут** (рисует CPU).
-- `cpus=1` стабильнее, `cpus=4` быстрее на старте, но пока может подвисать (см. README).
+- The loader's text comes first, then the Apple logo. Reaching the lock screen takes **about 15 minutes** (CPU rendering).
+- `cpus=1` is more stable; `cpus=4` is faster early on but can still stall (see the README).
 
-### Вернуться в TWRP
+### Back to TWRP
 
-Зажмите **Питание + Громкость вниз** (перезагрузка), сразу после гашения экрана — **Питание + Bixby + Громкость вверх**.
+Hold **Power + Volume Down** (reboot); as soon as the screen goes dark, hold **Power + Bixby + Volume Up**.
 
-### Логи
+### Logs
 
-В TWRP:
+In TWRP:
 
 ```powershell
 tools\dreamlte\pull-sweetlog.ps1 boot1
 ```
 
-Будут сохранены `logs/sweetlog-boot1.txt` (консоль ядра с диска) и `logs/pmsg-boot1.txt` (загрузчик и раннее ядро). Приложите их к issue.
+This saves `logs/sweetlog-boot1.txt` (the kernel console from disk) and `logs/pmsg-boot1.txt` (the loader and the early kernel). Attach both to issues.
 
-## Вернуть Android
+## Back to Android
 
-Восстановите BOOT и Data из бэкапа TWRP (или `dd` сохранённого `BOOT.img` в `sda7`), затем «Format Data» в TWRP.
+Restore BOOT and Data from the TWRP backup (or `dd` the saved `BOOT.img` back to `sda7`), then run "Format Data" in TWRP.
 
-## Параметры загрузки
+## Boot arguments
 
-| Параметр | Зачем |
+| Argument | Purpose |
 | --- | --- |
-| `cpus=N` | Сколько ядер A53 запускать (1–4) |
-| `rd=ufsroot0 ufsroot=USERDATA` | Корень — HFS+ в разделе USERDATA |
-| `ufsrw=1 rootrw=1` | Корень на запись |
-| `sweetfb_native=1` | Показывать iOS панель 1440×2960 (1125×2436 пока зависает) |
-| `a5fb_noconsole=1` | Не рисовать консоль ядра поверх iOS |
-| `a5touchprobe=0` | Отключить пробу тача от Galaxy A5 (на S8 вызывает abort) |
-| `wdt=-1 wdt_test=no_user_checkin` | Без сторожевых таймеров (система медленная) |
-| `ignition_level=1 launchd_unsecure_cache=1` | Загрузка shared cache из cryptex без проверки подписи |
+| `cpus=N` | How many A53 cores to start (1–4) |
+| `rd=ufsroot0 ufsroot=USERDATA` | Root is the HFS+ volume in USERDATA |
+| `ufsrw=1 rootrw=1` | Root mounted read/write |
+| `sweetfb_native=1` | Present the 1440×2960 panel to iOS (1125×2436 hangs for now) |
+| `a5fb_noconsole=1` | Do not draw the kernel console over iOS |
+| `a5touchprobe=0` | Disable the Galaxy A5 touch probe (it aborts on the S8) |
+| `wdt=-1 wdt_test=no_user_checkin` | No watchdogs (the system is slow) |
+| `ignition_level=1 launchd_unsecure_cache=1` | Load the shared cache from the cryptex without signature checks |

@@ -1,104 +1,103 @@
 # iOS on the Samsung Galaxy S8
 
-**iOS 16.7 на Samsung Galaxy S8 (SM-G950F, Exynos 8895, `dreamlte`).**
+**iOS 16.7 on the Samsung Galaxy S8 (SM-G950F, Exynos 8895, `dreamlte`).**
 
-Порт открытого ядра Apple XNU (xnu-8796, поколение iOS 16) на Galaxy S8. Поверх него работает **немодифицированный userland iOS 16.7.16 (20H392) от iPhone X**: launchd, системные демоны, backboardd и SpringBoard. Телефон доходит до **экрана блокировки iOS**.
+This project ports Apple's open-source XNU kernel (xnu-8796, the iOS 16 generation) to the Galaxy S8. On top of it runs the **unmodified iOS 16.7.16 (20H392) userland of the iPhone X**: launchd, the system daemons, backboardd and SpringBoard. The phone reaches the **iOS lock screen**.
 
-> ⚠️ Экспериментальный проект, а не рабочая прошивка. Он очень медленный, многое не работает (см. [Известные баги](#известные-баги)). Установка **стирает раздел USERDATA** (все данные Android). Только для Exynos-версии **SM-G950F**.
+> ⚠️ Experimental bring-up, not a usable phone OS. It is very slow and much is missing (see [Known bugs](#known-bugs)). Installing it **erases the USERDATA partition** (all Android data). Exynos **SM-G950F** only.
 
-English summary: [below](#english).
+## What works
 
-## Что работает
-
-| Область | Состояние |
+| Area | State |
 | --- | --- |
-| Загрузка | Стоковый Samsung S-Boot → наш загрузчик в разделе BOOT → XNU. Recovery (TWRP), EFS и загрузчики не трогаются |
-| CPU | 4 ядра Cortex-A53 (MPIDR 0x100–0x103), запуск через PMU + PSCI. Страницы 4 KiB, GIC-400, таймер 26 МГц |
-| Память | 512 MiB из верхнего банка `0x880000000` |
-| Хранилище | Свой драйвер Exynos UFS. Корень iOS — HFS+ в USERDATA (`sda24`), чтение/запись |
-| iOS userland | Корневая ФС и shared cache iPhone X 16.7.16; launchd, демоны, backboardd, SpringBoard |
-| Экран | Фреймбуфер S-Boot 1440×2960 (DECON в командном режиме). CoreAnimation рисует на CPU |
-| GUI | Логотип Apple, экран блокировки iOS (подтверждено фото) |
-| Кнопки | Питание, громкость +/−, Bixby (GPIO ALIVE) → HID-события (видно в логе) |
-| Тач | **В работе.** Контроллер S6SY761 на `hsi2c_23`; проба в загрузчике готова, драйвер XNU — следующий шаг |
-| Логи | Без фото экрана: лог загрузчика и ядра в ramoops (pmsg) + кольцо 4 MiB в конце USERDATA, читается из TWRP |
+| Boot | Stock Samsung S-Boot → our loader in the BOOT partition → XNU. Recovery (TWRP), EFS and the bootloaders are not touched |
+| CPU | 4 Cortex-A53 cores (MPIDR 0x100–0x103), started through the PMU + PSCI. 4 KiB pages, GIC-400, 26 MHz timer |
+| Memory | 512 MiB of the upper bank at `0x880000000` |
+| Storage | Own Exynos UFS driver. The iOS root is HFS+ in USERDATA (`sda24`), read/write |
+| iOS userland | iPhone X 16.7.16 root filesystem and shared cache; launchd, daemons, backboardd, SpringBoard |
+| Display | S-Boot framebuffer, 1440×2960 (DECON in command mode). CoreAnimation renders on the CPU |
+| GUI | Apple logo, iOS lock screen (confirmed on the device) |
+| Buttons | Power, volume up/down, Bixby (ALIVE GPIOs) → HID events (seen in the log) |
+| Touch | **In progress.** S6SY761 controller on `hsi2c_23`. The loader probe reaches the bus; the controller's power rails still need to be enabled |
+| Logs | No need to film the screen: loader and kernel log in ramoops (pmsg) plus a 4 MiB ring at the end of USERDATA, read from TWRP |
 
-## Известные баги
+## Known bugs
 
-- **Очень медленно и лагает.** Вся отрисовка на CPU, GPU нет. До экрана блокировки ~15 минут на одном ядре.
-- **С 4 ядрами отрисовка подвисает** через несколько кадров. Потоки на дополнительных ядрах не получают таймерные пробуждения. Исправление (физический таймер CNTP, INTID 30) в тесте.
-- **Тач пока не работает** в iOS (идёт разработка драйвера).
-- Режим 1125×2436 (как у iPhone X) зависает на первом кадре; используется нативный 1440×2960 (`sweetfb_native=1`).
-- Ядра Mongoose (большой кластер) не запускаются: нужно включить питание L2/кластера.
-- Дата 31.12.1969: нет драйвера RTC.
-- Нет батареи / зарядки (нет fuel gauge).
-- Нет Wi-Fi, Bluetooth, сети, звука, камер, датчиков, GPS, SEP/Face ID.
-- **Нет GPU.** Mali-G71 не может работать с Metal / драйверами AGX из iOS; ускорение графики нереально.
-- Безопасность выключена: AMFI/sandbox разрешающие, заглушка AppleKeyStore. Не храните личные данные.
+- **Very slow and laggy.** All rendering is on the CPU, there is no GPU. About 15 minutes to the lock screen on one core.
+- **With 4 cores, rendering stalls** after a few frames: threads on the secondary cores miss their timer wakeups. A fix (physical timer CNTP, INTID 30) is being tested.
+- **Touch does not work in iOS yet.** The touch controller is unpowered under our boot (its PMIC LDOs are off); the driver is being written.
+- The iPhone X 1125×2436 mode hangs on its first frame; the native 1440×2960 mode is used (`sweetfb_native=1`).
+- The Mongoose (big) cluster does not start yet: its L2/cluster power must be enabled.
+- The date shows 31 Dec 1969: no RTC driver.
+- No battery / charging readout (no fuel gauge driver).
+- No Wi-Fi, Bluetooth, cellular, audio, cameras, sensors, GPS or SEP / Face ID.
+- **No GPU.** The Mali-G71 cannot run iOS's Metal / AGX drivers, so hardware graphics is not realistic.
+- Security is off: permissive AMFI/sandbox, stub AppleKeyStore. Do not put anything personal on it.
 
-## Что можно добавить (roadmap)
+## Roadmap
 
-- [ ] Драйвер тача S6SY761 в XNU (опрос по линии прерывания `gpa1-0`) → `SweetHIDTouch`
-- [ ] Починить зависания на 4 ядрах, затем включить кластер Mongoose (ещё 4 ядра)
-- [ ] Ускорить вывод: слои DECON без копирования, G2D для копирования, меньшее разрешение
-- [ ] Режим 1125×2436 без зависания
-- [ ] RTC (дата/время), заглушка/драйвер батареи (fuel gauge MAX77865)
-- [ ] Больше ОЗУ (сейчас 512 MiB из 4 GiB)
-- [ ] Вибромотор, яркость подсветки
-- [ ] Wi-Fi (BCM4361) — большая работа
+- [ ] S6SY761 touch driver in XNU (power its LDOs, poll the `gpa1-0` interrupt line) → `SweetHIDTouch`
+- [ ] Fix the 4-core stalls, then bring up the Mongoose cluster (4 more cores)
+- [ ] Faster display path: zero-copy DECON layers, G2D for copies, lower resolution
+- [ ] 1125×2436 mode without the hang
+- [ ] RTC (date/time), battery stub or driver (MAX77865 fuel gauge)
+- [ ] More RAM (512 MiB of 4 GiB today)
+- [ ] Vibration motor, backlight brightness
+- [ ] Wi-Fi (BCM4361): a large job
 
-Помощь приветствуется: issues и pull request'ы.
+Help is welcome: issues and pull requests.
 
-## Установка
+## Installation
 
-Подробная инструкция: **[docs/s8-install.md](docs/s8-install.md)**.
+Step-by-step guide: **[docs/s8-install.md](docs/s8-install.md)**.
 
-Коротко:
-1. Разблокированный SM-G950F с TWRP, полный бэкап разделов.
-2. Ядро XNU собирается в GitHub Actions (workflow `xnu`, `MACHINE_CONFIG=A5XELTE`).
-3. Образ корня iOS собирается из IPSW iPhone X 16.7.16, который вы скачиваете сами, и записывается в USERDATA.
-4. `tools/dreamlte/make-boot.sh` собирает BOOT-образ (загрузчик + XNU + Apple Device Tree), он записывается в `sda7` из TWRP.
+In short:
+1. An unlocked SM-G950F with TWRP and a full partition backup.
+2. The XNU kernel is built on GitHub Actions (workflow `xnu`, `MACHINE_CONFIG=A5XELTE`).
+3. The iOS root image is built from the iPhone X 16.7.16 IPSW, which you download yourself, and is written to USERDATA.
+4. `tools/dreamlte/make-boot.sh` builds the BOOT image (loader + XNU + Apple Device Tree), which is written to `sda7` from TWRP.
 
-## Как это загружается
+## How it boots
 
 ```
-S-Boot (стоковый загрузчик Samsung, EL1, MMU выключен)
-  -> раздел BOOT: shim/dreamlte (наш загрузчик вместо Linux Image)
-     -> разблокирует триггер DECON, пишет лог в ramoops, будит UFS
-     -> копирует XNU + ADT из ramdisk в 0x880000000, boot_args
-        -> XNU (xnu-8796, конфиг A5XELTE + патч 0124-dreamlte-s8)
-           -> драйвер UFS -> HFS+ корень в USERDATA
+S-Boot (stock Samsung bootloader, EL1, MMU off)
+  -> BOOT partition: shim/dreamlte (our loader instead of a Linux Image)
+     -> unmasks the DECON trigger, logs to ramoops, wakes UFS
+     -> copies XNU + ADT from the ramdisk to 0x880000000, builds boot_args
+        -> XNU (xnu-8796, A5XELTE config + patch 0124-dreamlte-s8)
+           -> UFS driver -> HFS+ root in USERDATA
               -> dyld + shared cache -> launchd -> backboardd + SpringBoard
 ```
 
-## Структура
+## Layout
 
-| Путь | Что это |
+| Path | What it is |
 | --- | --- |
-| `shim/dreamlte/` | Загрузчик для S-Boot: `loader.c`, пробы UFS / SMP / тача |
-| `xnu/patches/` | Патчи XNU; S8-специфичный — `0124-dreamlte-s8.patch` |
-| `tools/dreamlte/apply-dreamlte.py` | Генератор патча 0124 |
-| `tools/mkadt_dreamlte.py` | Apple Device Tree для S8 |
-| `tools/dreamlte/make-boot.sh` | Ядро → BOOT-образ |
-| `tools/mkiosroot.sh`, `tools/dreamlte/finish-iosroot.sh` | Сборка корня iOS |
-| `tools/dreamlte/flash-chunks.ps1` | Запись образа в USERDATA по частям с проверкой |
-| `tools/dreamlte/pull-sweetlog.ps1` | Забрать логи загрузки из TWRP |
-| `DREAMLTE_PROGRESS.md` | Журнал порта: факты о железе, каждая загрузка |
+| `shim/dreamlte/` | Loader for S-Boot: `loader.c`, UFS / SMP / touch probes |
+| `xnu/patches/` | XNU patches; the S8-specific one is `0124-dreamlte-s8.patch` |
+| `tools/dreamlte/apply-dreamlte.py` | Generator of patch 0124 |
+| `tools/mkadt_dreamlte.py` | Apple Device Tree for the S8 |
+| `tools/dreamlte/make-boot.sh` | Kernel → BOOT image |
+| `tools/mkiosroot.sh`, `tools/dreamlte/finish-iosroot.sh` | iOS root image build |
+| `tools/dreamlte/flash-chunks.ps1` | Writes an image to USERDATA in verified chunks |
+| `tools/dreamlte/pull-sweetlog.ps1` | Pulls the boot logs from TWRP |
+| `DREAMLTE_PROGRESS.md` | Port log: hardware facts, every boot |
 
-## Благодарности
+## Authors
 
-- [orhunnx/ios-a5xelte](https://github.com/orhunnx/ios-a5xelte) — порт на Galaxy A5 2016 (4 KiB, Exynos, S-Boot), на котором основан этот проект
-- [dipa-studio/ios-sweet](https://github.com/dipa-studio/ios-sweet) — исходный порт iOS 16 на Redmi Note 10 Pro (README: [docs/upstream-README.md](docs/upstream-README.md))
-- [MakrSas/LinuxS8](https://github.com/MakrSas/LinuxS8) — mainline Linux на Galaxy S8, справочник по тачу, кнопкам и UFS
-- Mainline Linux (драйверы Exynos 8895, HSI2C, S6SY761), [uniLoader](https://github.com/ivoszbg/uniLoader)
-- Открытые релизы Apple (xnu, IOHIDFamily, hfs), [blacktop/darwin-xnu-build](https://github.com/blacktop/darwin-xnu-build), [ipsw](https://github.com/blacktop/ipsw), [apfs-fuse](https://github.com/sgan81/apfs-fuse)
+- [@Floppikrob](https://github.com/Floppikrob): Galaxy S8 port
+- [@MakrSas](https://github.com/MakrSas): contributor, mainline Linux on the S8 ([LinuxS8](https://github.com/MakrSas/LinuxS8))
 
-iOS принадлежит Apple и здесь не распространяется: IPSW нужно скачать самостоятельно.
+## Credits
 
-## Лицензия
+- [orhunnx/ios-a5xelte](https://github.com/orhunnx/ios-a5xelte): the Galaxy A5 2016 port (4 KiB pages, Exynos, S-Boot) this project is based on
+- [dipa-studio/ios-sweet](https://github.com/dipa-studio/ios-sweet): the original iOS 16 port to the Redmi Note 10 Pro (its README: [docs/upstream-README.md](docs/upstream-README.md))
+- [MakrSas/LinuxS8](https://github.com/MakrSas/LinuxS8): mainline Linux on the Galaxy S8, the reference for touch, buttons and UFS
+- Mainline Linux (Exynos 8895, HSI2C and S6SY761 drivers), [uniLoader](https://github.com/ivoszbg/uniLoader)
+- Apple's open-source releases (xnu, IOHIDFamily, hfs), [blacktop/darwin-xnu-build](https://github.com/blacktop/darwin-xnu-build), [ipsw](https://github.com/blacktop/ipsw), [apfs-fuse](https://github.com/sgan81/apfs-fuse)
 
-Патчи XNU производны от XNU и подчиняются [APSL 2.0](https://opensource.apple.com/apsl/). Код, написанный по мотивам драйверов Linux (например `shim/dreamlte/touch_probe.c`), — GPL-2.0, см. заголовки SPDX. Исходные проекты ios-sweet и ios-a5xelte не указали общую лицензию, поэтому для остальных файлов отдельной лицензии пока нет.
+iOS belongs to Apple and is not distributed here: download the IPSW yourself.
 
-## English
+## License
 
-An experimental port of Apple's open-source XNU kernel (xnu-8796) to the Samsung Galaxy S8 (SM-G950F, Exynos 8895), running the unmodified iPhone X iOS 16.7.16 userland. It boots from the stock Samsung bootloader through our loader in the BOOT partition and reaches the **iOS lock screen**. It has 4 Cortex-A53 cores, its own UFS driver with an HFS+ root in USERDATA, and hardware buttons. Rendering is CPU-only and very slow; touch is in progress. See the tables above, [docs/s8-install.md](docs/s8-install.md) for installation, and [DREAMLTE_PROGRESS.md](DREAMLTE_PROGRESS.md) for the bring-up log. Based on [orhunnx/ios-a5xelte](https://github.com/orhunnx/ios-a5xelte) and [dipa-studio/ios-sweet](https://github.com/dipa-studio/ios-sweet).
+The XNU patches are derived from XNU and fall under the [APSL 2.0](https://opensource.apple.com/apsl/). Code written after Linux drivers (for example `shim/dreamlte/touch_probe.c`) is GPL-2.0, see the SPDX headers. The upstream projects ios-sweet and ios-a5xelte did not state an overall license, so the remaining files have no separate license yet.
