@@ -316,10 +316,10 @@ index 63a3c37..b6ba676 100644
  	if (strcmp(rdBootVar, "ufsroot0") == 0) {
  		extern int sweet_ufs_rootdev(dev_t *dev);
 diff --git osfmk/arm64/arm_vm_init.c osfmk/arm64/arm_vm_init.c
-index fbc383d..3e38fd8 100644
+index fbc383d..78684b3 100644
 --- a/osfmk/arm64/arm_vm_init.c
 +++ b/osfmk/arm64/arm_vm_init.c
-@@ -1905,7 +1905,11 @@ arm_vm_init(uint64_t memory_size, boot_args * args)
+@@ -1905,10 +1905,17 @@ arm_vm_init(uint64_t memory_size, boot_args * args)
  #endif
  
  	// Slide the physical aperture to a random page-aligned location within the slide range
@@ -331,6 +331,12 @@ index fbc383d..3e38fd8 100644
  	assert(physmap_slide < ARM64_PHYSMAP_SLIDE_RANGE);
  
  	physmap_base += physmap_slide;
++#if defined(DREAMLTE) && !XNU_MONITOR
++	physmap_base = ROUND_TWIG(physmap_base);
++#endif
+ 
+ #if XNU_MONITOR
+ 	physmap_base = ROUND_TWIG(physmap_base);
 diff --git osfmk/arm64/start.s osfmk/arm64/start.s
 index 7da26d2..1606c91 100644
 --- a/osfmk/arm64/start.s

@@ -193,6 +193,14 @@ edit('osfmk/arm64/arm_vm_init.c', [
      '#else\n'
      '\tuint64_t physmap_slide = early_random() & ARM64_PHYSMAP_SLIDE_MASK & ~((uint64_t)PAGE_MASK);\n'
      '#endif\n', 1),
+    # Boot 14: a 4 MiB larger kernel (sweet_ufs log ring) moved
+    # topOfKernelData and hung pmap_startup again. Only XNU_MONITOR builds
+    # round physmap_base to a twig (2 MiB with 4 KiB pages); do it here too.
+    ('\tphysmap_base += physmap_slide;\n',
+     '\tphysmap_base += physmap_slide;\n'
+     '#if defined(DREAMLTE) && !XNU_MONITOR\n'
+     '\tphysmap_base = ROUND_TWIG(physmap_base);\n'
+     '#endif\n', 1),
 ])
 
 edit('osfmk/vm/vm_resident.c', [
