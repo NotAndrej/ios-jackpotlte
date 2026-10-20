@@ -196,6 +196,18 @@ edit('osfmk/arm64/arm_vm_init.c', [
     # Boot 14: a 4 MiB larger kernel (sweet_ufs log ring) moved
     # topOfKernelData and hung pmap_startup again. Only XNU_MONITOR builds
     # round physmap_base to a twig (2 MiB with 4 KiB pages); do it here too.
+    # The real cause of the vm_page_bootstrap hangs (boots 3-7, 14, 15):
+    # arm_vm_init pre-builds L3 tables only for (2 + 10 * 256 MiB-segments)
+    # MiB + the boot_args framebuffer past dynamic_memory_begin. Our loader
+    # passes no Video, yet the console maps the 17 MiB S8 framebuffer there
+    # first; when pmap_steal_memory then needs a table beyond the budget,
+    # pmap_enter cannot allocate one yet. With 4 KiB pages one L3 table spans
+    # 2 MiB (32 MiB with 16 KiB), so add room for the framebuffer and 64 MiB.
+    ('\tva_l1_end += round_page(args->Video.v_height * args->Video.v_rowBytes);\n',
+     '\tva_l1_end += round_page(args->Video.v_height * args->Video.v_rowBytes);\n'
+     '#if defined(DREAMLTE)\n'
+     '\tva_l1_end += round_page((vm_size_t)A5_FB_STRIDE * A5_FB_HEIGHT) + (64ULL << 20);\n'
+     '#endif\n', 1),
     ('\tphysmap_base += physmap_slide;\n',
      '\tphysmap_base += physmap_slide;\n'
      '#if defined(DREAMLTE) && !XNU_MONITOR\n'
