@@ -75,6 +75,21 @@ All on the SM-G950F, BOOT `sda7`, CI kernels from this branch, `cpus=1`:
 Logs: the loader and (since run 39445481053) the kernel console are written
 to the pmsg zone and read from TWRP as `/sys/fs/pstore/pmsg-ramoops-0`.
 
+## iOS on the S8 (2026-10-20/21)
+
+- Loader probe (`shim/dreamlte/ufs_probe.c`) read the GPT: S-Boot leaves the
+  UFS host running (HCS 0xf, HCE reads 0) but the device NOT READY (02/04/02);
+  START STOP UNIT ACTIVE to W-LUN 0xD0 wakes it. Ported into `sweet_ufs.c`.
+- Real fix for the early hangs: arm_vm_init's pre-built L3 budget for the
+  dynamic region did not include the 17 MiB framebuffer our console maps.
+- iPhone X 16.7.16 root (`tools/mkiosroot.sh` + `tools/dreamlte/finish-iosroot.sh`)
+  flashed to USERDATA with `tools/dreamlte/flash-chunks.ps1` (verified chunks).
+- Boot 16: `hfs: mounted iOSRoot`, launchd, boot tasks, SpringBoard exec
+  (aborted: no main display, AppleCLCD name match). Boot 17: AppleCLCD up,
+  backboardd frames, Apple logo. Boot 18 (1125x2436 presentation): first
+  SwapBegin never completed. **Boot 19 (`sweetfb_native=1`, 1440x2960): iOS
+  lock screen on the Galaxy S8**, one CPU, CPU rendering, ~15 min to reach it.
+
 ## Next
 
 1. CI kernel build; first boot target: loader log + XNU entry marker, then the

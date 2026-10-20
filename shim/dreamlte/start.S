@@ -61,6 +61,34 @@ _start:
 4:	wfe
 	b	4b
 
+/*
+ * smp_probe.c target: a started secondary marks smp_flags[(Aff1 & 1) << 2 |
+ * Aff0] (independent of the PSCI context id) and powers itself off again.
+ */
+	.globl smp_entry
+smp_entry:
+	msr	daifset, #0xf
+	mrs	x10, mpidr_el1
+	ubfx	x11, x10, #8, #1
+	and	x12, x10, #3
+	orr	x12, x12, x11, lsl #2
+	adr	x13, smp_flags
+	mov	x14, #1
+	str	x14, [x13, x12, lsl #3]
+	dsb	sy
+	movz	x0, #0x8400, lsl #16	/* PSCI CPU_OFF 0x84000002 */
+	movk	x0, #0x0002
+	smc	#0
+6:	wfe
+	b	6b
+
+	.data
+	.balign	8
+	.globl smp_flags
+smp_flags:
+	.space	64
+	.text
+
 .macro vent slot
 	.balign	0x80
 	mov	x0, #\slot

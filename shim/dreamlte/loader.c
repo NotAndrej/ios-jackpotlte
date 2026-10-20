@@ -16,6 +16,7 @@
 #include "../fdt.h"
 #include "../font.h"
 #include "ufs_probe.h"
+#include "smp_probe.h"
 
 #define UFS_PROBE_DMA		0x8f0000000UL	/* high bank, outside XNU's window */
 
@@ -358,6 +359,7 @@ uint64_t dl_main(uintptr_t dtb, uint64_t el, uint64_t sctlr)
 	}
 	out("\n");
 	ufs_probe(kv, out, UFS_PROBE_DMA);
+	smp_probe(kv, out);
 	fg = 0xff40ff40U;
 	out("\nJUMP TO XNU\n");
 	reserve_marker();

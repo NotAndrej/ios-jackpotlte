@@ -12,11 +12,12 @@ $CC $CFLAGS -c start.S -o out/start.o
 $CC $CFLAGS -c loader.c -o out/loader.o
 $CC $CFLAGS -c ../fdt.c -o out/fdt.o
 $CC $CFLAGS -c ufs_probe.c -o out/ufs_probe.o
+$CC $CFLAGS -c smp_probe.c -o out/smp_probe.o
 # Runs wherever S-Boot puts it with no relocation pass.
-abs=$(aarch64-linux-gnu-readelf -r out/loader.o out/fdt.o out/ufs_probe.o | grep -c ABS64 || true)
+abs=$(aarch64-linux-gnu-readelf -r out/loader.o out/fdt.o out/ufs_probe.o out/smp_probe.o | grep -c ABS64 || true)
 [ "$abs" = 0 ] || { echo "error: $abs absolute relocations" >&2; exit 1; }
 $CC $CFLAGS -static -T loader.ld -Wl,--build-id=none -Wl,--no-warn-rwx-segments -Wl,-N \
-	out/start.o out/loader.o out/fdt.o out/ufs_probe.o -o out/loader.elf
+	out/start.o out/loader.o out/fdt.o out/ufs_probe.o out/smp_probe.o -o out/loader.elf
 $OBJCOPY -O binary out/loader.elf out/Image
 size=$(aarch64-linux-gnu-nm out/loader.elf | awk '$3=="_end"{print strtonum("0x"$1)}')
 truncate -s "$size" out/Image
