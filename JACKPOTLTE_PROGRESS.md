@@ -57,8 +57,26 @@ Source: `arch/arm64/boot/dts/exynos/exynos7885.dtsi` and
   relocations, above the 16 KiB stub gate. Reproducible on this machine.
 - `tools/mkadt_jackpotlte.py` → ADT = 8,920 bytes (without the iPhone X
   `/product` node, which is an Apple artifact kept out of git).
+- `tools/jackpotlte/selftest.py` → the full pack chain (loader → ADT → payload
+  → Samsung pack → bootimg_info) passes on a synthetic Mach-O; the packed
+  header keeps the stock load addresses and the SEANDROIDENFORCE trailer.
+  This proves the pipeline is internally consistent, not that a kernel boots.
 - Packer round-trip tested with a synthetic stock image only, not a real
   SM-A530F BOOT dump. Real header values still required (see above).
+
+## CI status
+
+- `loader` (Linux): build + gates + ADT + pipeline self-test + repo validation.
+- `xnu` (macOS 15): builds `MACHINE_CONFIG=A5XELTE` with the A5 patch set +
+  `0124-dreamlte-s8`, newest installed Xcode (patch `0083` supplies the
+  `IORPC.kernelContent` field that Xcode 16+ `iig` emits), and now fails on a
+  stub kernel. First runs: macos-14 was rejected by the runner; fixed to
+  macos-15.
+
+## Device confirmation
+
+The owner confirmed the device is **SM-A530F (Exynos 7885)**, not the
+Snapdragon A530W/U. The mainline `exynos7885*` values above therefore apply.
 
 ## Next concrete action
 
