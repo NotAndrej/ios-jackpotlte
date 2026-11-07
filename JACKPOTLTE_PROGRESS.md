@@ -61,8 +61,11 @@ Source now includes the **Eureka-Kernel** Samsung 4.4 tree for this device
 
 ## Build results (local, not device)
 
-- `shim/jackpotlte/build.sh` → `out/Image` = **41,536 bytes**, 0 ABS64
+- `shim/jackpotlte/build.sh` → `out/Image` = **48,384 bytes**, 0 ABS64
   relocations, above the 16 KiB stub gate. Reproducible on this machine.
+- `shim/jackpotlte/build.sh --probe STOCK OUT` → shim-only flash image
+  (48,384-byte loader + a minimal newc cpio.gz ramdisk); 61,456 bytes with a
+  synthetic stock header. This is the stage-2 bring-up image.
 - `tools/mkadt_jackpotlte.py` → ADT = 8,920 bytes (without the iPhone X
   `/product` node, which is an Apple artifact kept out of git).
 - `tools/jackpotlte/selftest.py` → the full pack chain (loader → ADT → payload
@@ -75,11 +78,17 @@ Source now includes the **Eureka-Kernel** Samsung 4.4 tree for this device
 ## CI status
 
 - `loader` (Linux): build + gates + ADT + pipeline self-test + repo validation.
+  The ABS64 gate caught a real defect the local GCC hid: a `const char *names[]`
+  string-literal table in `dt_probe` became 12 absolute relocations under CI's
+  GCC (locally it folded to PC-relative). Replaced with a `node_line()` helper;
+  run 42413636860 is green.
 - `xnu` (macOS 15): builds `MACHINE_CONFIG=A5XELTE` with the A5 patch set +
   `0124-dreamlte-s8`, newest installed Xcode (patch `0083` supplies the
   `IORPC.kernelContent` field that Xcode 16+ `iig` emits), and now fails on a
   stub kernel. First runs: macos-14 was rejected by the runner; fixed to
-  macos-15.
+  macos-15. Run 42412221459 (success) produced `out/kernel.development.a5xelte`
+  = 16,553,272 bytes, retrievable as the `xnu-kernel` artifact (66 MB, not
+  expired) and kept as the `xnu-buildtree` artifact.
 
 ## Device confirmation
 
@@ -88,7 +97,13 @@ Snapdragon A530W/U. The mainline `exynos7885*` values above therefore apply.
 
 ## Next concrete action
 
-1. Read the unknowns above from the phone (TWRP) and Samsung source; record
-   them in `docs/jackpotlte-bringup.md`.
-2. Fill `shim/jackpotlte/board.h`: enable `JT_HAVE_FB` and `JT_HAVE_RAMOOPS`
-   with the read-back values so stage 2 can print a banner.
+1. Get `backup/BOOT.img` (the SM-A530F's own BOOT dump) from the phone:
+   `adb shell "dd if=/dev/block/by-name/BOOT of=/sdcard/BOOT.img"` then
+   `adb pull /sdcard/BOOT.img backup/BOOT.img`.
+2. Build and flash the shim-only probe image and photograph the screen:
+   `bash shim/jackpotlte/build.sh --probe backup/BOOT.img a8-probe.img`.
+   That reaches stage 2 and returns the live bootargs, initrd range, /memory
+   and the 7885 node presence — record them in `docs/jackpotlte-bringup.md`.
+3. Read the remaining unknowns (ramoops `log_pstore` offset, gpa1 bank offset,
+   eMMC timings) from the live DT / Samsung source and fill `board.h`; then
+   enable `JT_HAVE_RAMOOPS`.

@@ -62,24 +62,39 @@ Recorded:
 
 Everything below runs against `backup/BOOT.img` (the SM-A530F's own BOOT dump).
 
+### 2a. Probe image (shim only — the first flash)
+
+No kernel is needed. The loader prints its banner and the live-device-tree dump,
+then halts cleanly ("probe-only run") because the ramdisk carries no payload.
+
 ```sh
-# 1. Build the loader + a payload. Until a real XNU kernel exists, the payload
-#    is the ADT-only placeholder; the loader still runs and prints its banner.
+bash shim/jackpotlte/build.sh --probe backup/BOOT.img a8-probe.img
+python3 tools/jackpotlte_bootimg_info.py a8-probe.img   # sanity: addresses kept
+```
+
+### 2b. Full image (once a payload exists)
+
+```sh
 python3 tools/mkadt_jackpotlte.py shim/jackpotlte/out/jackpotlte.adt
 python3 tools/mkpayload.py <kernel> shim/jackpotlte/out/jackpotlte.adt \
     shim/jackpotlte/out/payload.bin --cmdline "debug=0xc serial=3 cpus=1"
 bash shim/jackpotlte/build.sh backup/BOOT.img shim/jackpotlte/out/payload.bin \
     a8-boot.img
 python3 tools/jackpotlte_bootimg_info.py a8-boot.img   # sanity: addresses kept
+```
 
-# 2. Flash BOOT only (in TWRP). Confirm the node first:
+### 2c. Flash BOOT only (in TWRP). Confirm the node first:
+
+```sh
 adb shell "ls -l /dev/block/by-name/BOOT"
-adb push a8-boot.img /tmp/boot.img
+adb push a8-probe.img /tmp/boot.img
 adb shell "dd if=/tmp/boot.img of=/dev/block/by-name/BOOT bs=1048576 conv=fsync; sync"
 adb reboot
 ```
 
 Stage 2 is reached only when a **photo of the phone screen** shows the
-`JACKPOTLTE LOADER BEGIN` banner (the loader now draws to the S-Boot
-framebuffer at `0xec000000`). A build is not a boot.
+`JACKPOTLTE LOADER BEGIN` banner (the loader draws to the S-Boot framebuffer at
+`0xec000000`). The probe dump also tells us the live bootargs, initrd range,
+`/memory` base/size and which 7885 nodes S-Boot actually leaves — record those
+here. A build is not a boot.
 
