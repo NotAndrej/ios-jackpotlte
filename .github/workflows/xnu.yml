@@ -34,9 +34,11 @@ env:
 
 jobs:
   build:
-    # macos-14 still ships Xcode 15.x: its iig matches the xnu-8796 IORPC ABI
-    # (Xcode 16's iig emits IORPC.kernelContent, which this xnu lacks)
-    runs-on: macos-14
+    # macos-15 ships Xcode 16 by default, but this xnu-8796 needs Xcode 15.x:
+    # its iig matches the IORPC ABI (Xcode 16 emits IORPC.kernelContent, which
+    # this xnu lacks). The Deps step selects the lowest installed Xcode and
+    # fails if none is < 16. (macos-14 was rejected by the runner config.)
+    runs-on: macos-15
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
@@ -65,12 +67,20 @@ jobs:
       - name: Deps
         run: |
           brew install jq gum bash cmake ninja
-          # build.sh only checks that xcodes exists (Xcode is preinstalled); no bottle on macOS 14
+          # build.sh only checks that xcodes exists (Xcode is preinstalled)
           printf '#!/bin/sh\nexit 0\n' | sudo tee /usr/local/bin/xcodes >/dev/null
           sudo chmod +x /usr/local/bin/xcodes
           sw_vers
           ls -d /Applications/Xcode*.app
-          XC=$(ls -d /Applications/Xcode_*.app | sort -V | head -1)
+          # xnu-8796 needs Xcode 15.x iig (see the runs-on comment). Pick the
+          # lowest installed Xcode and refuse to build if none is < 16.
+          XC=$(ls -d /Applications/Xcode*.app | sort -V | head -1)
+          VER=$(defaults read "$XC/Contents/Info" CFBundleShortVersionString)
+          echo "Selected Xcode: $XC ($VER)"
+          if [ "${VER%%.*}" -ge 16 ]; then
+            echo "::error::no Xcode < 16 on this runner; this xnu needs Xcode 15.x iig (see runs-on comment). Installed:"; ls -d /Applications/Xcode*.app
+            exit 1
+          fi
           echo "DEVELOPER_DIR=$XC/Contents/Developer" >> "$GITHUB_ENV"
           sudo xcode-select -s "$XC"
           xcodebuild -version
