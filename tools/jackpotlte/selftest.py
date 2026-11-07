@@ -139,6 +139,17 @@ def main():
         if ksz < 16384:
             failures.append(f'packed kernel too small: {ksz}')
 
+        # Shim-only probe image: no payload, empty ramdisk, must still pack.
+        probe = os.path.join(d, 'probe.img')
+        run('bash', os.path.join(ROOT, 'shim', 'jackpotlte', 'build.sh'),
+            '--probe', stock, probe)
+        pimg = open(probe, 'rb').read()
+        (pksz, _, prsz, _, _, _, _, _, _, _) = struct.unpack_from('<10I', pimg, 8)
+        if pksz < 16384:
+            failures.append(f'probe kernel too small: {pksz}')
+        if pimg[-len(b'SEANDROIDENFORCE'):] != b'SEANDROIDENFORCE':
+            failures.append('probe image missing SEANDROIDENFORCE trailer')
+
         print(info.strip())
 
     if failures:

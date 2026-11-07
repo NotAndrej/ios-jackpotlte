@@ -1,7 +1,8 @@
 #!/bin/bash
 # Build the Galaxy A8 2018 (SM-A530F, jackpotlte) XNU loader (Samsung S-Boot
 # "kernel" Image). Optionally pack a BOOT image:
-#   build.sh STOCK_BOOT.img PAYLOAD.bin OUT.img
+#   build.sh STOCK_BOOT.img PAYLOAD.bin OUT.img   full payload
+#   build.sh --probe STOCK_BOOT.img OUT.img       shim only (banner/probe)
 # (PAYLOAD from tools/mkpayload.py; STOCK_BOOT supplies header and DTBH.)
 #
 # Hard gates (no continue-on-error): the loader must build, carry no absolute
@@ -19,6 +20,14 @@ CFLAGS="-O2 -ffreestanding -nostdlib -fno-pic -mgeneral-regs-only -mstrict-align
 # irreducible core. dreamlte's loader (more probes, plus mngs) is ~59 KiB; the
 # jackpotlte one is smaller. Require at least 16 KiB so a stub cannot pass.
 MIN_IMAGE=$((16 * 1024))
+MIN_PAYLOAD=$((16 * 1024))
+
+# Parse an optional leading --probe (shim only, empty ramdisk).
+probe=0
+if [ "${1:-}" = "--probe" ]; then
+	probe=1
+	shift
+fi
 
 mkdir -p out
 $CC $CFLAGS -c start.S -o out/start.o
@@ -48,15 +57,32 @@ if [ "$img_size" -lt "$MIN_IMAGE" ]; then
 	exit 1
 fi
 
+if [ "$probe" = 1 ]; then
+	# Shim-only image: an empty ramdisk makes S-Boot hand the loader a
+	# ramdisk with no SWEETXNU payload; the loader prints its banner and the
+	# live-DT probe, then stops. This is the stage-2 bring-up image.
+	[ $# = 2 ] || { echo "usage: build.sh --probe STOCK_BOOT.img OUT.img" >&2; exit 1; }
+	# A minimal valid newc cpio.gz (canonical empty archive), so S-Boot never
+	# sees a zero-size ramdisk.
+	python3 - out/empty.rd <<'PY'
+import gzip, sys
+empty = b'070701' + b'0' * 104 + b'TRAILER!!!\x00'
+empty += b'\x00' * (-len(empty) % 4)
+open(sys.argv[1], 'wb').write(gzip.compress(empty, 9))
+PY
+	python3 ../../tools/jackpotlte_mkboot.py "$1" out/Image out/empty.rd "$2"
+	sha256sum "$2"
+	exit 0
+fi
+
 if [ $# = 3 ]; then
 	if [ ! -s "$2" ]; then
 		echo "error: payload $2 missing or empty" >&2
 		exit 1
 	fi
 	payload_size=$(stat -c %s "$2")
-	min_payload=$((16 * 1024))
-	if [ "$payload_size" -lt "$min_payload" ]; then
-		echo "error: payload $2 is $payload_size bytes, below the $min_payload-byte minimum (stub?)" >&2
+	if [ "$payload_size" -lt "$MIN_PAYLOAD" ]; then
+		echo "error: payload $2 is $payload_size bytes, below the $MIN_PAYLOAD-byte minimum (stub?)" >&2
 		exit 1
 	fi
 	python3 ../../tools/jackpotlte_mkboot.py "$1" out/Image "$2" "$3"

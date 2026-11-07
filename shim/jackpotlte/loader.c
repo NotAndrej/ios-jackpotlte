@@ -168,6 +168,23 @@ static void kv(const char *k, uint64_t v)
 	out(" ");
 }
 
+/* decimal, for sizes the reader can compare at a glance */
+static void dec(uint64_t v)
+{
+	char b[24];
+	int n = 0;
+	if (v == 0) {
+		b[n++] = '0';
+	} else {
+		while (v && n < 23) {
+			b[n++] = (char)('0' + v % 10);
+			v /= 10;
+		}
+	}
+	while (n)
+		log_ch(b[--n]);
+}
+
 /* MMU off: everything is Device memory, keep accesses naturally aligned. */
 static void copy(uintptr_t dst, uintptr_t src, uint64_t n)
 {
@@ -217,6 +234,46 @@ static uint64_t fail(const char *why)
 	return 0;
 }
 
+/* Dump the facts we can only confirm on the phone. Runs before any payload
+ * work, so a first flash teaches us the real device even without a payload. */
+static void dt_probe(uintptr_t dtb)
+{
+	out("--- live device tree ---\n");
+	char buf[80];
+
+	if (fdt_node_str(dtb, "chosen", "bootargs", buf, sizeof(buf)) > 0) {
+		out("bootargs: ");
+		out(buf);
+		out("\n");
+	}
+	uint64_t v;
+	if (fdt_chosen_u64(dtb, "linux,initrd-start", &v))
+		kv("initrd-start", v);
+	if (fdt_chosen_u64(dtb, "linux,initrd-end", &v))
+		kv("initrd-end", v);
+	out("\n");
+	uint64_t base, size;
+	if (fdt_memory(dtb, &base, &size)) {
+		kv("mem base", base);
+		kv("mem size", size);
+		out(" (");
+		dec(size >> 20);
+		out(" MiB)\n");
+	} else {
+		out("no /memory node parsed\n");
+	}
+	const char *names[] = { "chosen", "memory", "reserved-memory",
+				"framebuffer", "decon_f", "dwmmc0", "dwmmc_0",
+				"dwmmc1", "dwmmc2", "system-controller",
+				"interrupt-controller", "ramoops", 0 };
+	for (int i = 0; names[i]; i++) {
+		out(fdt_has_node(dtb, names[i]) ? "has " : "no  ");
+		out(names[i]);
+		out("\n");
+	}
+	out("------------------------\n");
+}
+
 uint64_t jt_main(uintptr_t dtb, uint64_t el, uint64_t sctlr)
 {
 #if JT_HAVE_FB && JT_DECON_TRIG
@@ -241,6 +298,7 @@ uint64_t jt_main(uintptr_t dtb, uint64_t el, uint64_t sctlr)
 	kv("SCTLR", sctlr);
 	kv("DTB", dtb);
 	out("\n");
+	dt_probe(dtb);
 	if (el != 1)
 		return fail("not entered at EL1");
 
@@ -256,8 +314,16 @@ uint64_t jt_main(uintptr_t dtb, uint64_t el, uint64_t sctlr)
 
 	const volatile struct payload *p = (const volatile struct payload *)rd_start;
 	uint64_t length = rd_end - rd_start;
-	if (length < sizeof(struct payload) || !magic_ok(p->magic) || p->version != 1)
-		return fail("initrd is not a SWEETXNU v1 payload");
+	if (length < sizeof(struct payload) || !magic_ok(p->magic) || p->version != 1) {
+		/* Stage 2: the loader has printed the banner and the DT facts; a
+		 * missing/placeholder payload is expected until a kernel exists.
+		 * Stop cleanly (green) instead of a red FAIL, so the screen shows
+		 * the probe result rather than looking like a crash. */
+		fg = 0xff40ff40U;
+		out("no SWEETXNU payload in the ramdisk; probe-only run\n");
+		for (;;)
+			__asm__ volatile("wfe");
+	}
 	uint64_t nsegs = p->nsegs;
 	kv("segs", nsegs);
 	kv("virt", p->virt_base);
