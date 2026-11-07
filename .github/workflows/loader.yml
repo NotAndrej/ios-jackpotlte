@@ -1,0 +1,41 @@
+name: loader
+
+# Fast, cheap Linux checks: the jackpotlte loader builds with no absolute
+# relocations and is not a stub, and the repository scripts/patches validate.
+# The XNU kernel itself is built by the macOS "xnu" workflow.
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "shim/**"
+      - "tools/**"
+      - "docs/**"
+      - ".github/workflows/loader.yml"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu device-tree-compiler
+
+      - name: Build the loader (fails on a stub)
+        run: bash shim/jackpotlte/build.sh
+
+      - name: Check the loader has no absolute relocations
+        run: |
+          abs=$(aarch64-linux-gnu-readelf -r shim/jackpotlte/out/loader.o shim/jackpotlte/out/fdt.o | grep -c ABS64 || true)
+          echo "ABS64 relocations: $abs"
+          [ "$abs" = 0 ]
+
+      - name: Validate repository scripts and patches
+        run: python3 tools/validate-repo.py
+
+      - name: Build the jackpotlte ADT
+        run: python3 tools/mkadt_jackpotlte.py shim/jackpotlte/out/jackpotlte.adt

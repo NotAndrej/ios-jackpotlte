@@ -77,7 +77,7 @@ def validate_patches(verbose=False):
 
 def validate_python_scripts(verbose=False):
     tools_dir = os.path.join(REPO_ROOT, 'tools')
-    py_files = sorted(glob.glob(os.path.join(tools_dir, '*.py')))
+    py_files = sorted(glob.glob(os.path.join(tools_dir, '**/*.py'), recursive=True))
     errors = []
 
     for path in py_files:
@@ -101,8 +101,8 @@ def validate_python_scripts(verbose=False):
 
 def validate_shell_scripts(verbose=False):
     sh_files = sorted(
-        glob.glob(os.path.join(REPO_ROOT, 'tools/*.sh')) +
-        glob.glob(os.path.join(REPO_ROOT, 'shim/*.sh')) +
+        glob.glob(os.path.join(REPO_ROOT, 'tools/**/*.sh'), recursive=True) +
+        glob.glob(os.path.join(REPO_ROOT, 'shim/**/*.sh'), recursive=True) +
         glob.glob(os.path.join(REPO_ROOT, 'xnu/patches/*.sh'))
     )
     errors = []

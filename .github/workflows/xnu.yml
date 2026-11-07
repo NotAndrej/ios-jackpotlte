@@ -16,7 +16,7 @@ on:
         description: make -k (collect all compile errors in one run)
         default: "true"
   push:
-    branches: [main, codex/a5xelte-bringup, s8-dreamlte]
+    branches: [main, s8-dreamlte]
     paths:
       - "xnu/patches/**"
       - ".github/workflows/xnu.yml"
@@ -124,6 +124,29 @@ jobs:
           cp -R dxb/fakeroot/System/Library/Kernels/. out/ 2>/dev/null || true
           ls -la out
           (cd out && shasum -a 256 kernel.* > SHA256SUMS) || true
+
+      - name: Fail on a stub kernel
+        if: always()
+        run: |
+          # A real xnu-8796 kernel is tens of megabytes. A tiny file means the
+          # build silently produced nothing; fail loudly instead of uploading it.
+          min=$((4 * 1024 * 1024))
+          found=0
+          for k in out/kernel.*; do
+            case "$k" in *.link|*.dSYM|*SHA256SUMS) continue ;; esac
+            [ -f "$k" ] || continue
+            found=1
+            size=$(stat -f %z "$k")
+            echo "$k: $size bytes"
+            if [ "$size" -lt "$min" ]; then
+              echo "::error::$k is $size bytes, below the $min-byte kernel minimum (stub?)"
+              exit 1
+            fi
+          done
+          if [ "$found" = 0 ]; then
+            echo "::error::no kernel.* artifact produced"
+            exit 1
+          fi
 
       - name: Check for ARMv8.1 LSE instructions (Cortex-A53 has none)
         if: always()

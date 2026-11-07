@@ -1,5 +1,13 @@
 # iOS on the Samsung Galaxy S8
 
+> **This repository is the Galaxy A8 2018 (`jackpotlte`) port.** It is derived
+> from [Floppikrob/ios-galaxy-s8](https://github.com/Floppikrob/ios-galaxy-s8),
+> the finished Galaxy S8 (`dreamlte`) port. The README below describes the S8
+> and is kept as the reference for what the S8 achieved. The A8's own status is
+> in **[JACKPOTLTE_PROGRESS.md](JACKPOTLTE_PROGRESS.md)**, its device layer is
+> `shim/jackpotlte/`, `tools/jackpotlte*`, and the readings to gather are in
+> **[docs/jackpotlte-bringup.md](docs/jackpotlte-bringup.md)**.
+
 **iOS 16.7 on the Samsung Galaxy S8 (SM-G950F, Exynos 8895, `dreamlte`).**
 
 This project ports Apple's open-source XNU kernel (xnu-8796, the iOS 16 generation) to the Galaxy S8. On top of it runs the **unmodified iOS 16.7.16 (20H392) userland of the iPhone X**: launchd, the system daemons, backboardd and SpringBoard. The phone reaches the **iOS lock screen**.
