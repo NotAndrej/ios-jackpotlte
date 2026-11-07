@@ -55,4 +55,31 @@ Needed for: DECON register map, PMU secondary-core power-up, eMMC CIU timing,
 value used.
 
 Recorded:
-- source tag / URL: _pending_
+- source tag / URL: `eurekadevelopment/Eureka-Kernel`, "Release R24U sources"
+  (Linux 4.4.302). DTS: `arch/arm64/boot/dts/exynos/dtb/exynos7885*.dts[i]`.
+
+## Stage 2 flash procedure (once the BOOT dump is in place)
+
+Everything below runs against `backup/BOOT.img` (the SM-A530F's own BOOT dump).
+
+```sh
+# 1. Build the loader + a payload. Until a real XNU kernel exists, the payload
+#    is the ADT-only placeholder; the loader still runs and prints its banner.
+python3 tools/mkadt_jackpotlte.py shim/jackpotlte/out/jackpotlte.adt
+python3 tools/mkpayload.py <kernel> shim/jackpotlte/out/jackpotlte.adt \
+    shim/jackpotlte/out/payload.bin --cmdline "debug=0xc serial=3 cpus=1"
+bash shim/jackpotlte/build.sh backup/BOOT.img shim/jackpotlte/out/payload.bin \
+    a8-boot.img
+python3 tools/jackpotlte_bootimg_info.py a8-boot.img   # sanity: addresses kept
+
+# 2. Flash BOOT only (in TWRP). Confirm the node first:
+adb shell "ls -l /dev/block/by-name/BOOT"
+adb push a8-boot.img /tmp/boot.img
+adb shell "dd if=/tmp/boot.img of=/dev/block/by-name/BOOT bs=1048576 conv=fsync; sync"
+adb reboot
+```
+
+Stage 2 is reached only when a **photo of the phone screen** shows the
+`JACKPOTLTE LOADER BEGIN` banner (the loader now draws to the S-Boot
+framebuffer at `0xec000000`). A build is not a boot.
+
