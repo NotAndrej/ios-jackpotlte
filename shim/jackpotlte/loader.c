@@ -234,6 +234,17 @@ static uint64_t fail(const char *why)
 	return 0;
 }
 
+/* Print one "has/no <node>" line. Kept as a function (not a pointer table) so
+ * the loader needs no absolute relocations at all: a table of string-literal
+ * addresses is a link-time-address array, which cannot survive being loaded at
+ * an arbitrary address with no relocation pass. */
+static void node_line(uintptr_t dtb, const char *name)
+{
+	out(fdt_has_node(dtb, name) ? "has " : "no  ");
+	out(name);
+	out("\n");
+}
+
 /* Dump the facts we can only confirm on the phone. Runs before any payload
  * work, so a first flash teaches us the real device even without a payload. */
 static void dt_probe(uintptr_t dtb)
@@ -262,15 +273,18 @@ static void dt_probe(uintptr_t dtb)
 	} else {
 		out("no /memory node parsed\n");
 	}
-	const char *names[] = { "chosen", "memory", "reserved-memory",
-				"framebuffer", "decon_f", "dwmmc0", "dwmmc_0",
-				"dwmmc1", "dwmmc2", "system-controller",
-				"interrupt-controller", "ramoops", 0 };
-	for (int i = 0; names[i]; i++) {
-		out(fdt_has_node(dtb, names[i]) ? "has " : "no  ");
-		out(names[i]);
-		out("\n");
-	}
+	node_line(dtb, "chosen");
+	node_line(dtb, "memory");
+	node_line(dtb, "reserved-memory");
+	node_line(dtb, "framebuffer");
+	node_line(dtb, "decon_f");
+	node_line(dtb, "dwmmc0");
+	node_line(dtb, "dwmmc_0");
+	node_line(dtb, "dwmmc1");
+	node_line(dtb, "dwmmc2");
+	node_line(dtb, "system-controller");
+	node_line(dtb, "interrupt-controller");
+	node_line(dtb, "ramoops");
 	out("------------------------\n");
 }
 
