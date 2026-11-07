@@ -34,10 +34,9 @@ env:
 
 jobs:
   build:
-    # macos-15 ships Xcode 16 by default, but this xnu-8796 needs Xcode 15.x:
-    # its iig matches the IORPC ABI (Xcode 16 emits IORPC.kernelContent, which
-    # this xnu lacks). The Deps step selects the lowest installed Xcode and
-    # fails if none is < 16. (macos-14 was rejected by the runner config.)
+    # macos-15 ships Xcode 16+, whose iig emits IORPC.kernelContent. Patch
+    # 0083-xcode27-iig-kernel-content.patch adds that field to xnu-8796, so the
+    # modern SDK builds this kernel. (macos-14 was rejected by the runner.)
     runs-on: macos-15
     timeout-minutes: 120
     steps:
@@ -72,15 +71,11 @@ jobs:
           sudo chmod +x /usr/local/bin/xcodes
           sw_vers
           ls -d /Applications/Xcode*.app
-          # xnu-8796 needs Xcode 15.x iig (see the runs-on comment). Pick the
-          # lowest installed Xcode and refuse to build if none is < 16.
-          XC=$(ls -d /Applications/Xcode*.app | sort -V | head -1)
-          VER=$(defaults read "$XC/Contents/Info" CFBundleShortVersionString)
-          echo "Selected Xcode: $XC ($VER)"
-          if [ "${VER%%.*}" -ge 16 ]; then
-            echo "::error::no Xcode < 16 on this runner; this xnu needs Xcode 15.x iig (see runs-on comment). Installed:"; ls -d /Applications/Xcode*.app
-            exit 1
-          fi
+          # macos-15 ships Xcode 16+/26; patch 0083 adds the IORPC.kernelContent
+          # field those iig versions emit, so the newest Xcode is fine. Sort by
+          # version and take the highest.
+          XC=$(ls -d /Applications/Xcode*.app | sort -V | tail -1)
+          echo "Selected Xcode: $XC"
           echo "DEVELOPER_DIR=$XC/Contents/Developer" >> "$GITHUB_ENV"
           sudo xcode-select -s "$XC"
           xcodebuild -version
@@ -119,7 +114,9 @@ jobs:
         if: always()
         run: |
           mkdir -p out/kdk-libs
+          shopt -s nullglob
           for lib in /Library/Developer/KDKs/*/System/Library/KernelSupport/lib*.a; do
+            [ -f "$lib" ] || continue
             b=$(basename "$lib" .a)
             ar t "$lib" > "out/kdk-libs/$b.members.txt" 2>&1 || true
             nm -m "$lib" > "out/kdk-libs/$b.nm.txt" 2>&1 || true
