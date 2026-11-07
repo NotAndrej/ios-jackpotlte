@@ -39,3 +39,6 @@ jobs:
 
       - name: Build the jackpotlte ADT
         run: python3 tools/mkadt_jackpotlte.py shim/jackpotlte/out/jackpotlte.adt
+
+      - name: Pipeline self-test (loader -> ADT -> payload -> pack)
+        run: python3 tools/jackpotlte/selftest.py
