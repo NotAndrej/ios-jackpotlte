@@ -23,8 +23,10 @@ DRAM_BASE = 0x880000000
 # 512 MiB, the size that boots on dreamlte/A5XELTE in the 39-bit 4K layout.
 # TODO(PHONE): grow once the kernel VA layout is proven on jackpotlte.
 DRAM_SIZE = 0x20000000
-TIMEBASE = 26000000                      # MAINLINE oscclk 26 MHz
-GICD, GICC = 0x12301000, 0x12302000      # MAINLINE gic@12301000
+TIMEBASE = 26000000                      # Eureka/mainline oscclk 26 MHz
+GICD, GICC = 0x12301000, 0x12302000      # Eureka gic@123001000
+FB_PHYS = 0xec000000                     # Eureka fb_handover (exynos,dpu_fb_handover)
+FB_W, FB_H = 1080, 2220                  # Eureka panel s6e3fa7 (1080x2220)
 SOC_BASE = 0x01000000                    # /arm-io ranges base (unchanged from donor)
 
 
@@ -112,9 +114,9 @@ def build():
         ('virtual-timer-intid', mkadt.u32(30)),
         ('reg', mkadt.u64(GICD - SOC_BASE, 0x1000, GICC - SOC_BASE, 0x1000)),
     ]))
-    # No display node yet: the jackpotlte framebuffer/panel facts are unknown
-    # (shim/jackpotlte/board.h). Adding a guessed one would let AppleCLCD drive
-    # an address that is not the panel.
+    # No display node yet: AppleCLCD on the 7885 needs S-Boot actually having
+    # scanned out the framebuffer at 0xEC000000, which is not yet observed.
+    # Adding one now would let the kernel drive a possibly-blank panel.
     root.children = [n for n in root.children if n.prop('name') not in
                      (mkadt.cstr('sweet-fbcon'), mkadt.cstr('sweet-ufs'))]
     return root

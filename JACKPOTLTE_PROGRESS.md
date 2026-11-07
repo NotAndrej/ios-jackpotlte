@@ -20,34 +20,42 @@ output from the phone.**
 | 6 | Root filesystem mounts | not started |
 | 7 | launchd, then SpringBoard | not started |
 
-## Hardware facts (mainline device tree; NOT yet confirmed on the phone)
+## Hardware facts (from Samsung's own 4.4 source and the mainline DT; NOT yet confirmed on the phone)
 
-Source: `arch/arm64/boot/dts/exynos/exynos7885.dtsi` and
-`exynos7885-jackpotlte.dts`. See `shim/jackpotlte/board.h` for the full list.
+Source now includes the **Eureka-Kernel** Samsung 4.4 tree for this device
+(`eurekadevelopment/Eureka-Kernel`, tag "Release R24U sources",
+`arch/arm64/boot/dts/exynos/dtb/exynos7885*.dts[i]`, `drivers/`). See
+`shim/jackpotlte/board.h` for the full list with a citation per value.
 
-- RAM: low `0x80000000 + 0x3da00000`, mid `0xc0000000 + 0x40000000`,
-  high `0x880000000 + 0x80000000`.
+- RAM: low `0x80000000 + 0x3da00000`, mid `0xc0000000 + 0x40000000`, high
+  `0x880000000 + 0x40000000`. S-Boot's own `/chosen` sets
+  `linux,initrd = 0x84000000..0x840fffff`.
 - CPU: 6x Cortex-A53 (MPIDR `0x100..0x103`, `0x200..0x201`), 2x Cortex-A73
   (`0x0..0x1`). Boot core expected at MPIDR `0x100` (unconfirmed).
 - GIC-400: GICD `0x12301000`, GICC `0x12302000`, GICH `0x12304000`,
   GICV `0x12306000`.
-- Timer: arch timer + 26 MHz oscclk; non-secure phys timer = PPI 14 (INTID 30).
-- PMU: `0x11c80000`.
-- Storage: **eMMC** `samsung,exynos7885-dw-mshc-smu` @ `0x13500000`
-  (the S8 uses UFS; the A5XELTE port's `bsd/dev/a5xelte_emmc.c` is the base).
-- Buttons: GP1 on `pinctrl_alive` `0x11cb0000` — vol-up p5, vol-down p6,
-  power p7 (active low).
-- Panel: 1080x2220 class (not yet confirmed).
+- Timer: arch timer + 26 MHz; non-secure phys timer PPI 14 (INTID 30).
+- PMU: `0x11c80000`. Secondary-core power: `PMU_CPU_CONFIG_BASE 0x2000`,
+  status `0x2004`, step `0x80`, `CPU_LOCAL_PWR_CFG 0xF`; clusters 0/1/2 map to
+  core slots 0/4/6 (Exynos7885-specific numbering in `exynos-pmu.c`).
+- Storage: **eMMC** `samsung,exynos-dw-mshc` `dwmmc0@13500000` (+ cmdq
+  `0x13508000`); the S8 uses UFS, so storage adapts from the A5XELTE eMMC
+  driver, not the S8's UFS.
+- Display: bootloader framebuffer **`0xec000000`**, 20 MiB
+  (`fb_handover`/`exynos,dpu_fb_handover`). Panel **s6e3fa7, 1080x2220**, MIPI
+  command mode. **DECON_F @ `0x14860000`**, `HW_SW_TRIG_CONTROL` at `+0x70`;
+  the panel runs HW trigger from the DSI TE line, so the loader does not force
+  a software trigger.
+- Buttons: `gpa1` (pinctrl alive `0x11cb0000`) — vol-down p6, vol-up p5,
+  power p7 (active low). Bank offset still to read from the driver.
 
 ## Unknowns (do NOT guess; read from the named source)
 
 | Item | Read from |
 | --- | --- |
-| Framebuffer base + geometry (`s3cfb.bootloaderfb` or reserved-memory node) | live DT (`/sys/firmware/fdt` in TWRP) |
-| DECON base + trigger register/mask | Samsung 7885 kernel source |
-| PMU secondary-core power-up sequence | Samsung 7885 kernel (`drivers/soc/samsung/exynos-pmu.c`) |
-| ramoops/pstore zones (log channel) | live DT ramoops node, TWRP `/proc/iomem` |
-| eMMC CIU timing / card setup | Samsung 7885 kernel, mainline `dw-mshc` timings |
+| ramoops/pstore zone (exact offset of the "log_pstore" item) | Eureka `drivers/trace/exynos-ss.c` ESS layout, or live DT / TWRP `/proc/iomem` |
+| gpa1 bank offset inside pinctrl_0 | Eureka pinctrl bank table, or live DT |
+| eMMC CIU timing / card setup | Eureka `samsung,exynos-dw-mshc` driver |
 | Stock boot.img header (kaddr/raddr/tags/os_version, DTBH) | the SM-A530F's own BOOT dump |
 | EL at handoff, x0 register, load addresses | loader banner + a probe image on the phone |
 

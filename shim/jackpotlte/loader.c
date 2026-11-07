@@ -95,7 +95,7 @@ static volatile uint32_t *const fb = (volatile uint32_t *)JT_FB_BASE;
 #define CELL_H	(16 * SCALE + 6)
 #define COLS	((JT_FB_WIDTH - 48) / CELL_W)
 #define ROWS	((JT_FB_HEIGHT - 160) / CELL_H)
-static int row, col;
+static unsigned int row, col;
 
 static void fill(int x0, int y0, int w, int h, uint32_t c)
 {
