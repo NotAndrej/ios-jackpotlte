@@ -1,9 +1,9 @@
 #!/bin/bash
 # Apply the donor (SWEET) iOS-root tweaks to the jackpotlte iOS root image.
 #
-#   sudo tools/jackpotlte/apply-root-tweaks.sh [IMAGE]
+#   pkexec tools/jackpotlte/apply-root-tweaks.sh [IMAGE]
 #
-# IMAGE defaults to /var/tmp/iosroot/iOSRoot.img (the raw master; the sparse
+# IMAGE defaults to /var/tmp/iosroot/IOSRoot.img (the raw master; the sparse
 # copy flashed to USERDATA is derived from it).
 #
 # Why this exists: tools/mkiosroot.sh builds the plain root, and the donor's
@@ -33,28 +33,50 @@
 # The volume is journaled. Linux refuses it read-write until fsck.hfsplus has
 # repaired the volume header, hence `-o force`; and it must be unmounted
 # cleanly or XNU has to replay the journal on first boot.
+#
+# Host quirk (2026-11-08): the ext4 directory index for this image is damaged,
+# so a fresh lookup of the *absolute* path intermittently returns ENOENT while
+# readdir still lists the entry (the inode is fine: debugfs shows Links 1 and
+# the full block list). Running from inside the directory with a relative name,
+# and priming with a readdir of that directory before each attempt, makes it
+# resolve. Hence the cd + retries below.
 set -euo pipefail
 
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 img=${1:-/var/tmp/iosroot/IOSRoot.img}
+imgabs=$img
 
-[ "$(id -u)" -eq 0 ] || { echo "error: run as root (sudo $0 $img)" >&2; exit 1; }
+[ "$(id -u)" -eq 0 ] || { echo "error: run as root (sudo/pkexec $0 $img)" >&2; exit 1; }
+[ -d "$(dirname "$img")" ] || { echo "error: no directory for $img" >&2; exit 1; }
 
-# This host intermittently returns ENOENT for an entry that readdir still
-# lists (an ext4 dentry quirk seen after the earlier OOM). Retry the check
-# rather than failing a multi-minute job on a transient lookup.
+# Work from inside the image's directory with a relative name (see the host
+# quirk note above), and prime the dentry with a readdir each time.
+imgdir=$(cd "$(dirname "$img")" && pwd)
+imgbase=$(basename "$img")
+cd "$imgdir"
+img=./$imgbase
+
+prime() { ls -la . >/dev/null 2>&1 || true; }
+
 n=0
 until [ -f "$img" ]; do
+	prime
 	n=$((n + 1))
-	if [ "$n" -ge 15 ]; then
-		echo "error: no image at $img (after $n tries)" >&2
+	if [ "$n" -ge 300 ]; then
+		echo "error: no image at $imgabs (after $n tries)" >&2
 		exit 1
 	fi
 	sleep 1
 done
+echo "image: $imgabs ($(stat -c %s "$img" 2>/dev/null || echo '?') bytes)"
 
 echo "--- fsck before (repairs the header Linux objects to) ---"
-fsck.hfsplus -fy "$img" || true
+for n in $(seq 1 60); do
+	prime
+	if fsck.hfsplus -fy "$img"; then break; fi
+	echo "  ... fsck attempt $n failed (transient lookup?), retrying"
+	sleep 1
+done
 
 mnt=$(mktemp -d /tmp/iosroot-XXXXXX)
 cleanup() {
@@ -65,15 +87,17 @@ trap cleanup EXIT
 
 echo "--- mount read-write ---"
 mounted=0
-for n in $(seq 1 20); do
+for n in $(seq 1 300); do
+	prime
 	if mount -t hfsplus -o loop,rw,force "$img" "$mnt" 2>/tmp/iosroot-mount.err; then
 		mounted=1
 		break
 	fi
+	[ $((n % 30)) -eq 0 ] && echo "  ... mount attempt $n still failing"
 	sleep 1
 done
 if [ "$mounted" != 1 ]; then
-	echo "error: cannot mount $img after 20 tries:" >&2
+	echo "error: cannot mount $imgabs after $n tries:" >&2
 	cat /tmp/iosroot-mount.err >&2
 	exit 1
 fi
@@ -91,10 +115,10 @@ echo "--- fsck after ---"
 fsck.hfsplus -fy "$img" || true
 
 echo
-echo "OK: tweaks applied to $img"
+echo "OK: tweaks applied to $imgabs"
 echo
 echo "Next (host): free the old sparse copy first, there is not room for two."
 echo "  rm /var/tmp/iosroot/IOSRoot.sparse.img"
-echo "  img2simg $img /var/tmp/iosroot/IOSRoot.sparse.img"
+echo "  img2simg $imgabs /var/tmp/iosroot/IOSRoot.sparse.img"
 echo "Then, with the phone in fastboot:"
 echo "  fastboot flash USERDATA /var/tmp/iosroot/IOSRoot.sparse.img"

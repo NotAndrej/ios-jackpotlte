@@ -931,8 +931,8 @@ merged to `main` (`c55c7bb`).
 
 **Gated by `a8wifi=1`.** A default boot maps PMU + MIF DRAM only and reads
 four always-on PMU registers; the mailbox is mapped only when `a8wifi=1`.
-NDA: neither patch has been compiled or booted yet — CI `42512239378` is the
-compile verdict. DT values: R4 `0x120c0000`/`0x180`, M4 `0x120e0000`/`0x180`,
+CI `42512239378` built `0138`+`0139` **green** (Build, stub and LSE gates all
+passed), so the port compiles; it has **not** been booted. DT values: R4 `0x120c0000`/`0x180`, M4 `0x120e0000`/`0x180`,
 IRQs `<0 57 4>`/`<0 21 4>`/`<0 286 4>`, PMU `0x11c80000`/`0x10000`, MIF
 `0xE9000000`/`0x400000` (`exynos7885.dtsi:1798-1803`, `:1291`,
 `exynos7885-rmem.dtsi:55-58`). Firmware: 54 files / 7.2 MB in
@@ -956,10 +956,26 @@ Prepared (host-side only, no kernel change, no patch):
 `{success, buildVersion: 20H392}` (the key HakiOS / danstronics /
 `lechaukha12/xnu-xzs` ship; one line to drop), and
 `tools/jackpotlte/apply-root-tweaks.sh` drives fsck -> mount `loop,rw,force` ->
-tweaks -> clean umount -> fsck. It has **not been run**; it needs root on this
-host. Next: `sudo tools/jackpotlte/apply-root-tweaks.sh
-/var/tmp/iosroot/iOSRoot.img`, then delete `IOSRoot.sparse.img`, re-sparse with
+tweaks -> clean umount -> fsck. Runs have been attempted but no lookup window
+held long enough to reach `mount`; it needs root on this host
+(`pkexec tools/jackpotlte/apply-root-tweaks.sh ...` prompts on the desktop).
+Next: run it on
+`/var/tmp/iosroot/iOSRoot.img`, then delete `IOSRoot.sparse.img`, re-sparse with
 `img2simg` and flash USERDATA (destructive, needs the owner's confirmation).
+
+**Host filesystem hazard (2026-11-08, still present).** `/var/tmp/iosroot/
+iOSRoot.img` lookup is intermittently `ENOENT` while `readdir` still lists it
+(it flips between ~0/20 and 20/20 failures within seconds, for user and root
+alike; `open()` fails in the same windows). `debugfs -R 'stat ...' /dev/sda2`
+prints `Inode bitmap checksum does not match bitmap` and refuses to open
+without `-c`. The raw image is inode 548316; the sparse (inode 526689) checks
+out as a normal 12,145,430,824-byte regular file. The root filesystem is ~98%
+full, so an in-place mount is the only option — copying the image out needs
+16 GiB free and there is not room. `apply-root-tweaks.sh` therefore retries
+both the existence check and `mount`; if the raw ever becomes permanently
+unopenable, `simg2img IOSRoot.sparse.img ...` is the fallback (needs the
+corrupt raw deleted first, for space). Do **not** run `fsck.ext4` on the
+mounted root.
 
 ## Hardware facts (from Samsung's own 4.4 source and the mainline DT; NOT yet confirmed on the phone)
 
