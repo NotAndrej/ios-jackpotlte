@@ -996,6 +996,34 @@ so a main-repo 0146 left a 0139 -> 0146 gap. A branch `jackpotlte-cpus8`
 carries it as 0146 purely for a compile verdict; renumber on merge. The
 owner has parked 8 cores for now.
 
+**`0146` compile-verified and the kernel is built** (2026-11-08): branch run
+`42519017042` (`a6a47f6`) **succeeded** in 9m39s. Artifact
+`/tmp/opencode/art0146/kernel.development.a5xelte`, 16,553,800 B, sha256
+`8782aa4e06cf50e43a5332dfd4aba6de93a0301ce3fb8a70667b9760c5f4e664`. The
+personality table inside that binary reads
+`'IONameMatch' = ('arm,cortex-a53', 'arm,cortex-a73')` for `SweetCPU`, so
+the fix is linked in, not just applied to source. Image
+`/var/tmp/a8-xnu-jt20-cpus8.img` (jt17 cmdline with `cpus=8`), 17,485,840 B,
+sha256 `129bd8eabae57464a8bf870c1491669c789cba31187592a92258625edcba0e8e`.
+Not flashed.
+
+**No renumbering is needed after all.** The six subsystem tracks each add
+exactly one patch and together occupy 0140-0145 with nothing left over:
+
+| track | branch | patch |
+| --- | --- | --- |
+| BT | `jackpotlte-bt` `abd8999` | `0140-jackpotlte-scsc-bt-transport` |
+| audio | `jackpotlte-audio` `52e8c61` | `0141-jackpotlte-audio-probe` |
+| camera | `jackpotlte-camera` `77704d1` | `0142-jackpotlte-camera-probe` |
+| sensors | `jackpotlte-sensors` `0fed091` | `0143-jackpotlte-sensors-probe` |
+| flashlight | `jackpotlte-flashlight` `702718d` | `0144-jackpotlte-flashlight-probe` |
+| mic | `jackpotlte-mic` `6b4e5bb` | `0145-jackpotlte-mic-probe` |
+
+So merging the six in that order makes `xnu/patches/` run 0001-0145
+contiguous and 0146 can then be moved out of `docs/drafts/` unchanged. Every
+track's own `loader` CI red is only the gap error
+(`expected 0140, found 014N`), which that merge clears everywhere.
+
 Interim 6-core image (A53s only, skips the A73 pair): **flashed 2026-11-08
 ~21:15** after the owner asked for 6 cores for now, and the owner
 reports it **boots properly**. `/var/tmp/a8-xnu-jt17-cpus6.img`, 17,485,840 B,
@@ -1044,6 +1072,15 @@ Because kprintf spam paints over the framebuffer console, jt17 can show logs
 `a8fbf0073aa424fb51038cb1605f8882bdfdbf30c8696872e4f5b8161967865a`) is the
 jt17 cmdline **plus** `sweetfb_noconsole=1`, nothing else changed. Not
 flashed yet.
+
+**Correction (owner, 2026-11-08 ~21:25): the extra boot args were not needed
+and `jt19` should be ignored.** Plain `jt17-cpus6` **does draw the Apple logo
+properly**. The earlier raw log output before the Apple logo was simply the
+early-boot console phase before userland's `BootProgress` took the panel, not
+a suppressed UI. So `-noprogress` is confirmed inert on this kernel by
+observation, matching `pe_init.c:287`, and `jt19`/`jt20`'s UI experiments are
+unnecessary for this question. The jt18 "Assertion failed" therefore was
+**not** a cmdline effect and remains unexplained; it did not recur on jt17.
 
 ### SCSC/Maxwell WiFi port start (`0138`, `0139`, 2026-11-08)
 
