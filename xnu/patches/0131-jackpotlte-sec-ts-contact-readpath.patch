@@ -1,0 +1,164 @@
+--- a/bsd/dev/a5xelte_touch.c
++++ b/bsd/dev/a5xelte_touch.c
+@@ -995,9 +995,13 @@
+ #define JTTS_READ_PANEL_INFO	0x23u
+ #define JTTS_READ_ID		0x52u
+ #define JTTS_READ_BOOT_STATUS	0x55u
++#define JTTS_READ_ONE_EVENT	0x60u
++#define JTTS_READ_ALL_EVENT	0x61u
+ #define JTTS_READ_FW_VERSION	0xa3u
+ #define JTTS_STATUS_BOOT_MODE	0x10u
+ #define JTTS_STATUS_APP_MODE	0x20u
++#define JTTS_EVENT_COORDINATE	0x00u
++#define JTTS_EVENT_STATUS	0x01u
+ 
+ static vm_offset_t jt_ts_bus;
+ 
+@@ -1157,6 +1161,139 @@
+ 	    gpa0_dat, gpa0_dat & 1u);
+ }
+ 
++/*
++ * Read-only mode-0 contact path.  It polls the sec_ts event queue and feeds
++ * SweetHIDTouch, exactly like the native driver's coordinate event, but it
++ * writes nothing to the controller: no SENSE_ON, no TOUCH_FUNCTION, no
++ * regulator or PMIC write.  It starts only when S-Boot already left the
++ * controller in application mode; otherwise a power/mode enable would be
++ * needed and the code logs that and stops at the boundary.
++ */
++static int jt_ts_sleep;
++static vm_offset_t jt_ts_pinctrl0;
++static bool jt_ts_down[5];
++static uint16_t jt_ts_x[5];
++static uint16_t jt_ts_y[5];
++
++static void
++jackpotlte_touch_wait(unsigned ms)
++{
++	uint64_t deadline;
++	clock_interval_to_deadline(ms, NSEC_PER_MSEC, &deadline);
++	(void)assert_wait_deadline(&jt_ts_sleep, THREAD_UNINT, deadline);
++	thread_block(THREAD_CONTINUE_NULL);
++}
++
++/* Decode one 8-byte sec_ts coordinate event exactly like the native driver
++ * (Eureka drivers/input/touchscreen/sec_ts/sec_ts.c:1099-1105): tid is
++ * 1-based, x = x_11_4 << 4 | x_3_0, y = y_11_4 << 4 | y_3_0, and the action
++ * is tchsta (app/move/release).  The 8-byte bit layout is sec_ts.h:595-609. */
++static void
++jackpotlte_touch_report(const uint8_t *ev)
++{
++	unsigned eid = ev[0] & 0x3u;
++	unsigned tid = (ev[0] >> 2) & 0xfu;
++	unsigned action = (ev[0] >> 6) & 0x3u;
++	unsigned x;
++	unsigned y;
++
++	if (eid != JTTS_EVENT_COORDINATE || tid == 0 || tid > 5) {
++		return;
++	}
++	tid -= 1;
++	x = ((unsigned)ev[1] << 4) | (ev[3] >> 4);
++	y = ((unsigned)ev[2] << 4) | (ev[3] & 0xfu);
++	/* Raw 12-bit panel coordinates (DTS sec,max_coords = <4096 4096>,
++	 * line 638) into SweetHIDTouch's 1080x1920 A5XELTE space. */
++	x = x * 1080u / 4096u;
++	y = y * 1920u / 4096u;
++	if (x > 1079u) {
++		x = 1079u;
++	}
++	if (y > 1919u) {
++		y = 1919u;
++	}
++	if (action == 1u || action == 2u) {		/* press, move */
++		if (!jt_ts_down[tid]) {
++			printf("A8 TOUCH: down id=%u x=%u y=%u\n", tid, x, y);
++		}
++		jt_ts_down[tid] = true;
++		jt_ts_x[tid] = (uint16_t)x;
++		jt_ts_y[tid] = (uint16_t)y;
++		sweet_hid_touch((int)tid, 1, (int)x, (int)y);
++	} else if (action == 3u && jt_ts_down[tid]) {	/* release */
++		jt_ts_down[tid] = false;
++		sweet_hid_touch((int)tid, 0, jt_ts_x[tid], jt_ts_y[tid]);
++	}
++}
++
++static void
++jackpotlte_touch_thread(void *arg, wait_result_t result)
++{
++	uint8_t buf[8 * 4];
++	unsigned errors = 0;
++	(void)arg;
++	(void)result;
++	printf("A8 TOUCH: contact worker started (read only)\n");
++	for (;;) {
++		/* IRQ gpa0-0 (DTS line 635) is level low while events queue. */
++		if (a5touch_read(jt_ts_pinctrl0,
++		    JTTS_GPA0_OFF + JTTS_PIN_DAT) & 1u) {
++			jackpotlte_touch_wait(8);
++			continue;
++		}
++		if (!jtts_read_reg(JTTS_READ_ONE_EVENT, buf, 8)) {
++			if (++errors <= 8 || !(errors & 255)) {
++				printf("A8 TOUCH: event read failed (%u)\n", errors);
++			}
++			jackpotlte_touch_wait(20);
++			continue;
++		}
++		unsigned left = buf[7] & 0x3fu;
++		if (buf[0] && left >= 1u && left <= 2u &&
++		    !jtts_read_reg(JTTS_READ_ALL_EVENT, buf + 8, left * 8)) {
++			left = 0;
++		}
++		if (!buf[0]) {
++			jackpotlte_touch_wait(4);	/* empty queue */
++			continue;
++		}
++		for (unsigned i = 0; i <= left; i++) {
++			if (buf[i * 8]) {
++				jackpotlte_touch_report(buf + i * 8);
++			}
++		}
++		errors = 0;
++	}
++}
++
++static void
++jackpotlte_touch_contacts(uint8_t boot)
++{
++	thread_t thread;
++	int enabled = 0;
++	(void)PE_parse_boot_argn("a8touchlog", &enabled, sizeof(enabled));
++	if (!enabled) {
++		return;
++	}
++	if (boot != JTTS_STATUS_APP_MODE) {
++		printf("A8 TOUCH: boot status %#x; contact path needs a SENSE_ON/power enable, stopping at the boundary (no write)\n",
++		    boot);
++		return;
++	}
++	jt_ts_pinctrl0 = ml_io_map(JTTS_PINCTRL0, 0x1000);
++	if (!jt_ts_pinctrl0) {
++		printf("A8 TOUCH: contact pinctrl mapping failed\n");
++		return;
++	}
++	if (kernel_thread_start(jackpotlte_touch_thread, NULL, &thread) ==
++	    KERN_SUCCESS) {
++		thread_deallocate(thread);
++	} else {
++		printf("A8 TOUCH: contact thread start failed\n");
++	}
++}
++
+ static void
+ jackpotlte_touch_probe(void)
+ {
+@@ -1213,6 +1350,7 @@
+ 		printf("A8 TOUCH: fw version %02x%02x%02x%02x\n",
+ 		    fw[0], fw[1], fw[2], fw[3]);
+ 	}
++	jackpotlte_touch_contacts(boot);
+ }
+ #endif /* JACKPOTLTE */
+ 
