@@ -84,6 +84,80 @@ jobs:
           xcodebuild -version
           xcrun --find iig
 
+      - name: Install KDK with retries
+        env:
+          MANIFEST: https://raw.githubusercontent.com/dortania/KdkSupportPkg/gh-pages/manifest.json
+        run: |
+          set -euo pipefail
+          # build.sh otherwise downloads the 13.5 KDK itself with a single
+          # `curl -L` and no sanity check. The dortania release CDN
+          # intermittently answers with an HTTP 5xx and a ~92-byte HTML body;
+          # curl then writes that error page to /tmp/KDK.dmg and
+          # `hdiutil attach` fails with "image not recognized" (runs
+          # 42465218978 / 42465363837). Download here with retries and a real
+          # disk-image check, trying the 13.5, 13.5.1 and 13.5.2 KDK builds in
+          # turn, then hand the installed path to build.sh via KDKROOT so it
+          # skips its own download entirely.
+          curl -fsSL --retry 5 --retry-all-errors --retry-delay 10 \
+            --connect-timeout 60 --max-time 120 \
+            -o /tmp/kdk-manifest.json "$MANIFEST"
+          names=(
+            "Kernel Debug Kit 13.5 build 22G74"
+            "Kernel Debug Kit 13.5.1 build 22G90"
+            "Kernel Debug Kit 13.5.2 build 22G91"
+          )
+          min_bytes=$((100 * 1024 * 1024))
+          ok=0
+          for name in "${names[@]}"; do
+            url=$(jq -r --arg n "$name" '.[] | select(.name==$n) | .url' /tmp/kdk-manifest.json)
+            if [ -z "$url" ] || [ "$url" = "null" ]; then
+              echo "::warning::manifest has no entry for '$name'"
+              continue
+            fi
+            echo "⇒ KDK candidate: $name"
+            echo "  $url"
+            attempt=0
+            while [ "$attempt" -lt 5 ]; do
+              attempt=$((attempt + 1))
+              rm -f /tmp/KDK.dmg
+              if curl --fail --location --progress-bar \
+                   --retry 3 --retry-all-errors --retry-delay 10 \
+                   --connect-timeout 60 --max-time 1800 \
+                   -o /tmp/KDK.dmg "$url"; then
+                size=$(stat -f %z /tmp/KDK.dmg)
+                if [ "$size" -gt "$min_bytes" ] && hdiutil imageinfo /tmp/KDK.dmg >/dev/null 2>&1; then
+                  echo "  OK: /tmp/KDK.dmg is a disk image ($size bytes)"
+                  ok=1
+                  break 2
+                fi
+                echo "::warning::$name attempt $attempt: download is not a valid disk image (size=$size)"
+              else
+                echo "::warning::$name attempt $attempt: download failed"
+              fi
+              sleep 15
+            done
+          done
+          if [ "$ok" != 1 ]; then
+            echo "::error::could not download a valid 13.5 KDK (22G74/22G90/22G91) from the dortania manifest"
+            exit 1
+          fi
+          echo "⇒ Installing KDK"
+          hdiutil attach /tmp/KDK.dmg
+          if [ ! -d " /Library/Developer/KDKs" ]; then
+            sudo mkdir -p /Library/Developer/KDKs
+            sudo chmod 755 /Library/Developer/KDKs
+          fi
+          sudo installer -pkg '/Volumes/Kernel Debug Kit/KernelDebugKit.pkg' -target /
+          hdiutil detach '/Volumes/Kernel Debug Kit' || true
+          ls -lah /Library/Developer/KDKs
+          kdkroot=$(ls -d /Library/Developer/KDKs/KDK_13.5*.kdk 2>/dev/null | sort -V | tail -1 || true)
+          if [ ! -d "$kdkroot" ]; then
+            echo "::error::no 13.5 KDK was installed"
+            exit 1
+          fi
+          echo "KDKROOT=$kdkroot" >> "$GITHUB_ENV"
+          echo "Installed KDK: $kdkroot"
+
       - name: Build
         working-directory: dxb
         env:
