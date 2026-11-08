@@ -798,9 +798,21 @@ and the generic `(Aff1<<2)|Aff0` formula agree.
 
 That isolates the remaining failure to the other two clusters: 2x A53 at MPIDR
 `0x200-0x201` (PMU slots 2-3) and 2x A73 at `0x0-0x1` (PMU slots 0-1). The
-`cpus=8` panic text was not captured yet; it decides whether this needs
-cluster-level power (`PMU_CPUSEQ_OPTION_BASE 0x2488 + cluster*0x20`, non-CPU and
-L2 power at `0x2404`/`0x2604` in SAM-K `exynos-pmu.c`) or something else.
+`cpus=8` panic was not photographed, so `0136` makes the next run answer it
+instead of guessing:
+
+- Log, per secondary, `CPU_CONFIG`, `CPU_STATUS`, `CPU_RESET` (`0x200c + off`,
+  the `DISABLE_*_RESET` bits), plus the cluster registers `CPUSEQ_OPTION`
+  (`0x2488 + cluster*0x20`), non-CPU power status (`0x2404 + ...`) and L2 status
+  (`0x2604 + ...`), before and after the power-up.
+- Do what SAM-K `exynos_cluster_up()` does on the first core of each cluster:
+  clear bit 0 of `CPUSEQ_OPTION`, which re-enables the PMU's power-up sequence
+  for that cluster (`exynos_cluster_down()` sets it). Only the boot cluster is
+  known to have it enabled; the other two are not.
+
+If the sequence enable was the missing piece, `cpus=8` comes up. If it does not,
+the logged `status`, `reset`, `noncpu` and `l2` values say whether the core is
+unpowered, held in reset, or powered with the cluster still off.
 
 ### iOS root image (host build, not a device result)
 
