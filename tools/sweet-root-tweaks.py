@@ -130,9 +130,17 @@ def main():
     containers(root)
     activation(root)
     audio(root)
+    # DMLastMigrationResults is the extra key that HakiOS, danstronics and
+    # lechaukha12/xnu-xzs (iOS 16.7.16, same as ours) ship; the in-file comment
+    # on theirs reads "without this record of the build that last ran the data
+    # migration, backboardd runs all the migrators (the progress bar under the
+    # logo) each time." The donor's own proven set for 20H392 is
+    # LastSystemVersion + DMUserDataDisposition; this key is additive, so drop
+    # it here if a run ever misbehaves and we want the donor set exactly.
     merge_pref(root, 'com.apple.migration', {
         'LastSystemVersion': BUILD,
-        'DMUserDataDisposition': {'SyntheticDidUpgrade': False, 'buildVersion': BUILD}})
+        'DMUserDataDisposition': {'SyntheticDidUpgrade': False, 'buildVersion': BUILD},
+        'DMLastMigrationResults': {'success': True, 'buildVersion': BUILD}})
     merge_pref(root, 'com.apple.springboard', {
         'BKNoWatchdogs': True,
         'FBLaunchWatchdogExceptions': {'com.apple.purplebuddy': 100.0},
