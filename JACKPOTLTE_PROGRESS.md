@@ -152,7 +152,22 @@ The first CI run of `0126` (`42469107466`) failed to compile on one line:
 The TU is compiled with `-I<obj>/EXPORT_HDRS/pexpert`, so the header is
 reached as `<pexpert/pexpert.h>` (the spelling `vm_resident.c` already uses);
 fixed in commit `29c6175`. Every other TU in `0126` compiled with zero
-errors in that run. Re-dispatch is `42470560244`.
+errors in that run.
+
+Re-dispatch `42470560244` is **green**:
+
+- kernel `kernel.development.a5xelte` = 16,552,752 B,
+  sha256 `1ebf8835465feeb4bc418f233c729a1ae32d854fc12e251b026d226c8bed4aa2`;
+- all nine marker families present in the binary (`A5 pg: va=`, `A5 pg: ok`,
+  `A5 steal: done`, `A5 avm:`, `A5 expand:`, `A5 tt_alloc:`, `A5 ptd: feed`,
+  `A5 pv: feed`, `A5 pgalloc:`), and `0125`'s `A5 steal: map=` correctly gone;
+- BOOT image `/var/tmp/a8-xnu4.img` = 17,481,744 B,
+  sha256 `fc0779607d4a70a09f228b3eae07cdd33d4727940b6b87a04956aa837a4da5e6`
+  (shim 48,480 B, payload 16,546,816 B, DT 882,688 B).
+
+**Not flashed yet:** no device was attached when the image was built
+(`fastboot devices` and `adb devices` empty). This is a built artifact, not
+a phone result; stage 4 stays as-is until the new screen tail is captured.
 
 ### iOS root image (host build, not a device result)
 
