@@ -15,7 +15,7 @@ new file mode 100644
 index 0000000..bd01079
 --- /dev/null
 +++ b/bsd/dev/jackpotlte_pmic.c
-@@ -0,0 +1,367 @@
+@@ -0,0 +1,368 @@
 +/*
 + * Galaxy A8 2018 (SM-A530F, jackpotlte, Exynos 7885) power probe.
 + *
@@ -47,6 +47,7 @@ index 0000000..bd01079
 +#if defined(ARM64_BOARD_CONFIG_A5XELTE) && defined(JACKPOTLTE)
 +#include <sys/param.h>
 +#include <sys/systm.h>
++#include <kern/clock.h>
 +#include <machine/machine_routines.h>
 +#include <pexpert/pexpert.h>
 +
