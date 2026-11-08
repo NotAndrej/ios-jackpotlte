@@ -629,6 +629,13 @@ Verified on a pristine `xnu-8796.141.3` tree: run the three stage scripts
 (`0019` libpthread, `0020` BearSSL, `0026` HFS), then `git apply` `0001-0133` in
 order → **0 failures**. `tools/validate-repo.py` passes (133 patches, no gaps).
 
+First-flag build failure and fix: with `-DJACKPOTLTE=1` the ports compile for
+the first time, and `jackpotlte_pmic.c` called `delay()` without a declaring
+header (CI `42493189603`: `bsd/dev/jackpotlte_pmic.c:118: error: call to
+undeclared function 'delay'`). Fixed by adding `#include <kern/clock.h>` to
+`0129` (the same header `0133` uses); the patch still applies cleanly after
+`0128`.
+
 ### iOS root image (host build, not a device result)
 
 - Built with `tools/mkiosroot.sh OS.dmg SYSTEMOS.dmg APPOS.dmg
