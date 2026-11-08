@@ -16,8 +16,8 @@ output from the phone.**
 | 2 | Loader runs on the A8 and prints the banner | **reached (screen output, 2026-11-08)** |
 | 3 | Payload passes its check; jump to XNU | **reached (loader prints through `JUMP TO XNU`)** |
 | 4 | XNU prints to the framebuffer (log or panic) | **reached (screen output, 2026-11-08)** |
-| 5 | Storage (eMMC) detected | **next / blocker** — XNU now waits on `IOMedia`/`Apple_HFS` (`0129`, 2026-11-08) |
-| 6 | Root filesystem mounts | blocked on 5 |
+| 5 | Storage (eMMC) detected | **reached (screen output, 2026-11-08)** — `0130` maps `dwmmc0@13500000` and reads the GPT (`SYSTEM` LBA 409600, 11,078,400 sectors) |
+| 6 | Root filesystem mounts | **next / blocker** — needs the iOS root written to `USERDATA` (approval + confirm), then `rd=emmcroot0 emmcpart=USERDATA` |
 | 7 | launchd, then SpringBoard | not started |
 
 ### Stage 2 evidence
@@ -386,6 +386,38 @@ applies cleanly on the `0128`-applied tree (the file also has `0108`/`0110`/
 `0118` on top of `0104`) and reproduces the edited file. The probe run adds
 `emmcprobe=1` to the cmdline; `rd=emmcroot0` selects the eMMC root.
 
+### `0130` flashed and decoded (2026-11-08) — eMMC host maps, GPT read (stage 5)
+
+CI run `42478756712` (`-DJACKPOTLTE=1`, commit `fbf89d4`) built the kernel,
+sha256 `71c3eea3eb3244c971d535e2152437fa03881c68ad6de847b50b25b22b3e0caa`,
+16,553,152 B (matches the artifact's `SHA256SUMS`). Image
+`/var/tmp/a8-xnu-jt4.img` 17,485,840 B, sha256
+`01faaf7592e3205a99de4d9b9f057317590e69c3080f2e4c1312d329a5a6e54d`, flashed to
+`BOOT` (`fastboot flash BOOT`, RC=0), then booted.
+
+Photo `IMG_20261108_132650156.jpg` shows the probe pass (read directly):
+
+```
+A5XELTE KEYS: GPA2 con=0x1111 dat=0xf pud=0x3300 (read only)
+A5XELTE eMMC: host ctrl=10 status=0896 clk=1 hcon=0x42541
+A5XELTE eMMC: GPT SYSTEM first=409600 sectors=11078400 read-only
+Waiting on <dict ID="0">... IOProviderClass=IOMedia ... Content=Apple_HFS ...</dict>
+```
+
+Reading: the driver mapped the 7885 `dwmmc0` window at `0x13500000`
+(`host` non-zero, `ctrl=0x10` = FIFO reset cleared, `clk=1` = CLKENA set,
+`hcon=0x42541` = 8-bit bus, IDMAC capable), then read and CRC-checked the GPT
+and found `SYSTEM` at **LBA 409600, 11,078,400 sectors** (5,672,140,800 B).
+`read-only` is by design: `a5xelte_emmc.c` only enables writes for `USERDATA`
+with `emmcwrite=1`; the default/`SYSTEM` path is read-only. So **stage 5 is
+reached** — the eMMC is detected and its partition table read on the phone.
+The boot still waits on `IOMedia`/`Apple_HFS` because `emmcprobe=1` only
+probes; it does not publish a root device.
+
+Next: the iOS root is **not yet on the device**, so stage 6 needs the
+`/var/tmp/iosroot/iOSRoot.img` (16 GiB HFS+) written to `USERDATA` (destructive
+→ confirm), then `rd=emmcroot0 emmcpart=USERDATA`.
+
 ### Display: DECON trigger ported into the jackpotlte shim (2026-11-08)
 
 Stage 2/4 were reached with the **S8 `shim/dreamlte`** loader, which is what
@@ -540,24 +572,16 @@ Snapdragon A530W/U. The mainline `exynos7885*` values above therefore apply.
 
 ## Next concrete action
 
-1. Storage bring-up (stage 5) — the current blocker. XNU waits on
-   `IOMedia`/`Apple_HFS`; the A8 eMMC is `samsung,exynos-dw-mshc`
-   `dwmmc0@13500000` (+ cmdq `0x13508000`) per Samsung's `exynos7885.dtsi`.
-   Two concrete gaps found in the tree:
-   - `tools/mkadt_jackpotlte.py` adds **no** eMMC ADT node, but
-     `bsd/dev/a5xelte_emmc.c` (patch `0104`) probes
-     `SecureDTLookupEntry(NULL, "/a5xelte-emmc", ...)`. Add that node with
-     `reg = <0x13500000 0x2000>`.
-   - `a5xelte_emmc.c` hard-checks `reg[0] != 0x13540000u`, which is the
-     **A5 (Exynos7580)** base (`tools/mkadt_a5xelte.py`), not the 7885's
-     `0x13500000`. Make the driver accept both (or gate on
-     `ARM64_BOARD_CONFIG_A5XELTE && JACKPOTLTE`).
-2. Rebuild the ADT + image (shim-side only, no XNU patch needed for the node),
-   add `emmcprobe=1` to the cmdline first, flash, and photograph the GPT
-   probe output (system/userdata partition LBA+size). Then switch to
-   `emmcroot0` to mount the root.
-3. Only once the eMMC path is proven: the iOS root in `userdata` (approved
-   direction), then stage 6/7.
-4. Older housekeeping (still open): read the remaining board unknowns (ramoops
+1. **Stage 5 is reached** (`0130`): the eMMC host maps and the GPT reads on the
+   phone (`SYSTEM` LBA 409600, 11,078,400 sectors). Remainder of the eMMC work:
+   - Read the `USERDATA` GPT entry too (the probe currently reports the
+     selected partition; default `SYSTEM`). A probe with `emmcpart=USERDATA`
+     (read only) would print its LBA+sectors.
+   - **Stage 6:** write `/var/tmp/iosroot/iOSRoot.img` (16 GiB HFS+) into
+     `USERDATA` (destructive; the owner approved the direction on 2026-10-15
+     and confirmed the partition choice — confirm the actual write before it
+     runs), then boot with `rd=emmcroot0 emmcpart=USERDATA`.
+2. Then stage 7: launchd, then SpringBoard.
+3. Older housekeeping (still open): read the remaining board unknowns (ramoops
    `log_pstore` offset, gpa1 bank offset, eMMC CIU timings) from the live DT /
    Samsung source and fill `board.h`, then enable `JT_HAVE_RAMOOPS`.
