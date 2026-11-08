@@ -1,0 +1,362 @@
+diff --git a/bsd/conf/files b/bsd/conf/files
+index 051083d..4c12085 100644
+--- a/bsd/conf/files
++++ b/bsd/conf/files
+@@ -106,6 +106,7 @@ bsd/dev/random/randomdev.c		standard
+ bsd/dev/memdev.c			standard
+ bsd/dev/sweet_ufs.c			standard
+ bsd/dev/a5xelte_emmc.c			standard
++bsd/dev/a5xelte_audio.c			standard
+ bsd/dev/a5xelte_keys.c			standard
+ bsd/dev/a5xelte_panel.c			standard
+ bsd/dev/a5xelte_touch.c			standard
+diff --git a/bsd/dev/a5xelte_audio.c b/bsd/dev/a5xelte_audio.c
+new file mode 100644
+index 0000000..c8fdde2
+--- /dev/null
++++ b/bsd/dev/a5xelte_audio.c
+@@ -0,0 +1,169 @@
++/*
++ * Galaxy A8 2018 (SM-A530F, jackpotlte, Exynos7885) audio probe, step 1:
++ * read and print the ABOX identity and the state of the codec's bus.
++ *
++ * This is a PROBE, not a driver.  It maps the ABOX SFR window, the ABOX's own
++ * little GIC and the SPEEDY controller, reads their identity / status
++ * registers, and prints them on the framebuffer console.  It does not start
++ * the Calliope audio core, does not load any firmware, does not configure a
++ * UAIF (I2S) port and does not touch the codec or the speaker amp.  The point
++ * is the first honest reading: what the ABOX is and whether S-Boot left it up.
++ *
++ * The codec (cod3035x) has no memory-mapped register window: it is a client of
++ * Samsung's private SPEEDY serial bus (speedy@11CE0000).  Reading a codec
++ * register therefore needs a SPEEDY transaction, and this probe does not
++ * implement one -- so the codec ID is reported as STUBBED, not faked.  What is
++ * read here is the SPEEDY controller's own registers (AP side).
++ *
++ * Everything is opt-in: the probe returns immediately and silently unless the
++ * boot argument "a8audio" is 1, so a default boot is byte-for-byte the same as
++ * before (the audio stack stays off -- see docs/research/jackpotlte-audio.md).
++ * The ABOX and its GIC live in pd_dispaud, which DECON shares; on this port
++ * DECON is scanning the handover framebuffer, so pd_dispaud is powered.  The
++ * PMU (always on) is read first, and the SPEEDY controller last, because its
++ * clock domain is not known to be up at handoff.
++ *
++ * This file is compiled for the A5XELTE machine config and emits code only for
++ * JACKPOTLTE, matching the other A8 device files (e.g. bsd/dev/a5xelte_scsc.c).
++ */
++#if defined(ARM64_BOARD_CONFIG_A5XELTE) && defined(JACKPOTLTE)
++
++#include <sys/param.h>
++#include <sys/systm.h>
++#include <sys/errno.h>
++#include <machine/machine_routines.h>
++#include <pexpert/pexpert.h>
++
++#include "a5xelte_audio.h"
++
++extern vm_offset_t ml_io_map(vm_offset_t, vm_size_t);
++
++void a5xelte_audio_probe(void);
++
++/* ---- register access (32-bit, little-endian AP) --------------------------- */
++
++static inline uint32_t
++a5audio_rd(vm_offset_t base, uint32_t off)
++{
++	uint32_t value = *(volatile uint32_t *)(base + off);
++	__asm__ volatile ("dmb oshld" ::: "memory");
++	return value;
++}
++
++/* ---- device state --------------------------------------------------------- */
++
++struct a5audio_softc {
++	vm_offset_t pmu;     /* PMU syscon VA            */
++	vm_offset_t sfr;     /* ABOX SFR VA              */
++	vm_offset_t gicd;    /* ABOX GIC distributor VA  */
++	vm_offset_t gicc;    /* ABOX GIC CPU interface VA */
++	vm_offset_t speedy;  /* SPEEDY controller VA     */
++};
++static struct a5audio_softc a5audio;
++
++/* Turn a packed Calliope version word into four printable characters.  The
++ * vendor prints the raw bytes as a string (abox.c:4436-4437). */
++static void
++a5audio_verstr(uint32_t version, char out[5])
++{
++	int i;
++	for (i = 0; i < 4; i++) {
++		unsigned char c = (unsigned char)(version >> (8 * i));
++		out[i] = (c >= 0x20 && c < 0x7f) ? (char)c : '.';
++	}
++	out[4] = '\0';
++}
++
++/* ---- entry point ---------------------------------------------------------- */
++
++void
++a5xelte_audio_probe(void)
++{
++	int enabled = 0;
++	char ver[5];
++
++	/* Default-inert: no mapping, no reads, no output unless asked. */
++	(void)PE_parse_boot_argn("a8audio", &enabled, sizeof(enabled));
++	if (enabled != 1) {
++		return;
++	}
++
++	printf("A5XELTE AUDIO: probe (a8audio=1)\n");
++
++	/* PMU first: always-on, cannot stall the audio bus. */
++	a5audio.pmu = ml_io_map(A5AUDIO_PMU_PA, A5AUDIO_PMU_SIZE);
++	if (a5audio.pmu == 0) {
++		printf("A5XELTE AUDIO: PMU map failed; stopping\n");
++		return;
++	}
++	{
++		uint32_t pd = a5audio_rd(a5audio.pmu, A5AUDIO_PD_DISPAUD_REG);
++		uint32_t ca7 = a5audio_rd(a5audio.pmu, A5AUDIO_ABOX_CA7_STATUS);
++		printf("A5XELTE AUDIO: PMU pd-dispaud@0x11c84020 = 0x%08x\n",
++		    pd);
++		printf("A5XELTE AUDIO: PMU ABOX_CA7_STATUS@0x2524 = 0x%08x"
++		    " (run=%d wfi=%d wfe=%d)\n", ca7,
++		    !!(ca7 & A5AUDIO_ABOX_CA7_STAT_RUN),
++		    !!(ca7 & A5AUDIO_ABOX_CA7_STAT_WFI),
++		    !!(ca7 & A5AUDIO_ABOX_CA7_STAT_WFE));
++	}
++
++	/* ABOX SFR: same power domain as DECON, which is up. */
++	a5audio.sfr = ml_io_map(A5AUDIO_ABOX_SFR_PA, A5AUDIO_ABOX_SFR_SIZE);
++	if (a5audio.sfr != 0) {
++		uint32_t index = a5audio_rd(a5audio.sfr, A5AUDIO_ABOX_IP_INDEX);
++		uint32_t ver_r = a5audio_rd(a5audio.sfr, A5AUDIO_ABOX_VERSION);
++		uint32_t pc = a5audio_rd(a5audio.sfr, A5AUDIO_ABOX_SYSPOWER_CTRL);
++		uint32_t ps = a5audio_rd(a5audio.sfr, A5AUDIO_ABOX_SYSPOWER_STAT);
++		a5audio_verstr(ver_r, ver);
++		printf("A5XELTE AUDIO: ABOX sfr@0x14a50000 ip_index=0x%08x"
++		    " version=0x%08x '%s'\n", index, ver_r, ver);
++		printf("A5XELTE AUDIO: ABOX syspower ctrl=0x%08x status=0x%08x\n",
++		    pc, ps);
++	} else {
++		printf("A5XELTE AUDIO: ABOX sfr map failed\n");
++	}
++
++	/* ABOX's own GIC. */
++	a5audio.gicd = ml_io_map(A5AUDIO_ABOX_GICD_PA, A5AUDIO_ABOX_GICD_SIZE);
++	a5audio.gicc = ml_io_map(A5AUDIO_ABOX_GICC_PA, A5AUDIO_ABOX_GICC_SIZE);
++	if (a5audio.gicd != 0 && a5audio.gicc != 0) {
++		printf("A5XELTE AUDIO: ABOX gicd ctlr=0x%08x gicc ctlr=0x%08x"
++		    " (AP line SPI %u)\n",
++		    a5audio_rd(a5audio.gicd, 0x000),
++		    a5audio_rd(a5audio.gicc, 0x000),
++		    A5AUDIO_ABOX_SPI);
++	} else {
++		printf("A5XELTE AUDIO: ABOX gic map failed\n");
++	}
++
++	/* SPEEDY controller last: its clock domain is the one unknown here, and
++	 * a read of an unclocked block can stall the bus.  Opt-in only. */
++	a5audio.speedy = ml_io_map(A5AUDIO_SPEEDY_PA, A5AUDIO_SPEEDY_SIZE);
++	if (a5audio.speedy != 0) {
++		printf("A5XELTE AUDIO: SPEEDY@0x11ce0000 ctrl=0x%08x"
++		    " fifo_status=0x%08x ctrl_status=0x%08x\n",
++		    a5audio_rd(a5audio.speedy, A5AUDIO_SPEEDY_CTRL),
++		    a5audio_rd(a5audio.speedy, A5AUDIO_SPEEDY_FIFO_STATUS),
++		    a5audio_rd(a5audio.speedy, A5AUDIO_SPEEDY_CTRL_STATUS));
++	} else {
++		printf("A5XELTE AUDIO: SPEEDY map failed\n");
++	}
++
++	/* The codec itself lives behind SPEEDY; its registers are not MMIO. */
++	printf("A5XELTE AUDIO: codec cod3035x on SPEEDY addr 0x%02x;"
++	    " codec register read STUBBED (needs a SPEEDY transfer)\n",
++	    A5AUDIO_CODEC_SPEEDY_ADDR);
++	printf("A5XELTE AUDIO: speaker amp tfa98xx on I2C3@0x13860000 addr 0x%02x;"
++	    " not probed\n", A5AUDIO_AMP_I2C_ADDR);
++	printf("A5XELTE AUDIO: nothing started; ABOX firmware and UAIF untouched\n");
++}
++
++#else   /* ARM64_BOARD_CONFIG_A5XELTE && JACKPOTLTE */
++
++void
++a5xelte_audio_probe(void)
++{
++}
++
++#endif  /* ARM64_BOARD_CONFIG_A5XELTE && JACKPOTLTE */
+diff --git a/bsd/dev/a5xelte_audio.h b/bsd/dev/a5xelte_audio.h
+new file mode 100644
+index 0000000..edfac79
+--- /dev/null
++++ b/bsd/dev/a5xelte_audio.h
+@@ -0,0 +1,145 @@
++/*
++ * Galaxy A8 2018 (SM-A530F, jackpotlte, Exynos7885) audio (ABOX + codec):
++ * hardware facts.
++ *
++ * This header carries only addresses, register offsets and bit positions that
++ * are quoted from Samsung's own sources.  Nothing here is guessed.  Every
++ * constant names the file and line it came from:
++ *
++ *   DT     = Eureka-Kernel/arch/arm64/boot/dts/exynos/dtb/exynos7885.dtsi
++ *   DT-JT  = Eureka-Kernel/arch/arm64/boot/dts/exynos/dtb/
++ *            exynos7885-jackpotlte_common.dtsi
++ *   DT-PD  = Eureka-Kernel/arch/arm64/boot/dts/exynos/dtb/
++ *            exynos7885-pm-domains.dtsi
++ *   DT-MEM = Eureka-Kernel/arch/arm64/boot/dts/exynos/dtb/exynos7885-rmem.dtsi
++ *   ABOXH  = Eureka-Kernel/sound/soc/samsung/abox/abox.h
++ *   ABOXC  = Eureka-Kernel/sound/soc/samsung/abox/abox.c
++ *   SPEEDY = Eureka-Kernel/drivers/i2c/busses/i2c-speedy.c
++ *
++ * Status of each item is marked implemented / stubbed / unknown in
++ * docs/research/jackpotlte-audio.md.
++ */
++#ifndef _A5XELTE_AUDIO_H_
++#define _A5XELTE_AUDIO_H_
++
++#include <sys/types.h>
++
++/* ---- ABOX (Audio BoX) ------------------------------------------------------
++ * abox@0x14A50000, exynos7885.dtsi:1427-1457.  The front-end for every audio
++ * stream: an on-die Cortex-A7 ("Calliope") runs Samsung's audio firmware and
++ * owns the RDMA/WDMA DMA engines and the UAIF (I2S) ports.  Three windows:
++ *   sfr     0x14A50000 + 0x10000  (system registers)   DT:1429
++ *   sysreg  0x14820000 + 0x10000                       DT:1429
++ *   sram    0x14B00000 + 0x28000                       DT:1429
++ * It sits in the pd_dispaud power domain (DT:1437) and is clocked from
++ * PLL_OUT_AUD / GATE_ABOX_ABOX / the UAIF bclk gates (DT:1444-1449).  It has
++ * no GIC line of its own; interrupts arrive through its own little GIC.
++ */
++#define A5AUDIO_ABOX_SFR_PA       0x14A50000u    /* exynos7885.dtsi:1429 */
++#define A5AUDIO_ABOX_SFR_SIZE     0x10000u       /* exynos7885.dtsi:1429 */
++#define A5AUDIO_ABOX_SYSREG_PA    0x14820000u    /* exynos7885.dtsi:1429 */
++#define A5AUDIO_ABOX_SYSREG_SIZE  0x10000u       /* exynos7885.dtsi:1429 */
++#define A5AUDIO_ABOX_SRAM_PA      0x14B00000u    /* exynos7885.dtsi:1429 */
++#define A5AUDIO_ABOX_SRAM_SIZE    0x28000u       /* exynos7885.dtsi:1429 */
++
++/* abox_gic@0x14AF0000, exynos7885.dtsi:1420-1425.  The ABOX has its own GIC so
++ * the Calliope core can be interrupted without wiring every source to the AP
++ * GIC.  The AP sees exactly one line, SPI 119 (DT:1424) -> GICv2 ID 151.
++ *   gicd  0x14AF1000 + 0x1000   DT:1422
++ *   gicc  0x14AF2000 + 0x1004   DT:1422
++ * The vendor driver writes these registers through EL3 SMC (abox_gic.c:118,
++ * 127-131), i.e. the block is TrustZone-protected on the AP side. */
++#define A5AUDIO_ABOX_GICD_PA      0x14AF1000u    /* exynos7885.dtsi:1422 */
++#define A5AUDIO_ABOX_GICD_SIZE    0x1000u        /* exynos7885.dtsi:1422 */
++#define A5AUDIO_ABOX_GICC_PA      0x14AF2000u    /* exynos7885.dtsi:1422 */
++#define A5AUDIO_ABOX_GICC_SIZE    0x1004u        /* exynos7885.dtsi:1422 */
++#define A5AUDIO_ABOX_SPI          119u           /* exynos7885.dtsi:1424 -> ID 151 */
++
++/* sysmmu_abox@14A30000, exynos7885.dtsi:1405-1418.  The Calliope core reaches
++ * the audio firmware DRAM and the SRAM through an SMMU (DT:1455 lists
++ * iommus = <&sysmmu_abox>).  SPI 129 (DT:1408) -> GICv2 ID 161. */
++#define A5AUDIO_SYSMMU_PA         0x14A30000u    /* exynos7885.dtsi:1407 */
++#define A5AUDIO_SYSMMU_SIZE       0x9000u        /* exynos7885.dtsi:1407 */
++#define A5AUDIO_SYSMMU_SPI        129u           /* exynos7885.dtsi:1408 -> ID 161 */
++
++/* ABOX SFR register offsets, abox.h:27-30.  ABOX_VERSION packs the firmware
++ * ("Calliope") version as four bytes; the vendor prints it as a 4-char string
++ * (abox.c:4436-4437, macro CALLIOPE_VERSION abox.h:378-383). */
++#define A5AUDIO_ABOX_IP_INDEX      0x0000u       /* abox.h:27 */
++#define A5AUDIO_ABOX_VERSION       0x0004u       /* abox.h:28 */
++#define A5AUDIO_ABOX_SYSPOWER_CTRL 0x0010u       /* abox.h:29 */
++#define A5AUDIO_ABOX_SYSPOWER_STAT 0x0014u       /* abox.h:30 */
++
++/* IPC / mailbox offsets inside the ABOX SFR window, exynos7885.dtsi:1438-1442.
++ * The AP<->Calliope IPC queues live in SFR+0x22000.. and the mailbox at
++ * 0x22600; recorded here for the next stage, not touched by this probe. */
++#define A5AUDIO_ABOX_IPC_TX        0x22000u      /* exynos7885.dtsi:1438 */
++#define A5AUDIO_ABOX_IPC_RX        0x22300u      /* exynos7885.dtsi:1439 */
++#define A5AUDIO_ABOX_IPC_TX_ACK    0x222FCu      /* exynos7885.dtsi:1440 */
++#define A5AUDIO_ABOX_IPC_RX_ACK    0x225FCu      /* exynos7885.dtsi:1441 */
++#define A5AUDIO_ABOX_MAILBOX       0x22600u      /* exynos7885.dtsi:1442 */
++
++/* ---- PMU: pd_dispaud + the ABOX CA7 status --------------------------------
++ * pd_dispaud@0x11c84020, exynos7885-pm-domains.dtsi:18-26.  Gates ABOX, DECON
++ * and the DPPs (exynos7885.dtsi:1247..1341, 1437).  cal_id 0xB1380000 (PD:21)
++ * is the CAL firmware id; need_smc 0x148F0000 (PD:24) is a TZ register the
++ * vendor saves/restores around a power transition (exynos-pd.c:83-88).  Power
++ * state is normally read via CAL, not MMIO (exynos-pd.c:50-62); the raw PMU
++ * register is reported here only as a value, not interpreted.
++ * PMU base pmu_system_controller@11c80000, exynos7885.dtsi:1289-1292. */
++#define A5AUDIO_PMU_PA            0x11c80000u    /* exynos7885.dtsi:1291 */
++#define A5AUDIO_PMU_SIZE          0x10000u       /* exynos7885.dtsi:1291 */
++#define A5AUDIO_PD_DISPAUD_REG    0x4020u        /* exynos7885-pm-domains.dtsi:20, base 0x11c84020 */
++
++/* ABOX_CA7_STATUS is a PMU register (offset from the PMU base) that reports
++ * the Calliope core state; the vendor reads it through pmu_alive, ioremap'd at
++ * 0x11C80000 (abox.c:75-78, 4854, 5875).  Bit 0 is the "running" status, bit
++ * 28 the core is in WFI, bit 29 it is in WFE. */
++#define A5AUDIO_ABOX_CA7_STATUS   0x2524u        /* abox.c:75 */
++#define A5AUDIO_ABOX_CA7_STAT_RUN 0x00000001u    /* abox.c:78 */
++#define A5AUDIO_ABOX_CA7_STAT_WFI 0x10000000u    /* abox.c:77 */
++#define A5AUDIO_ABOX_CA7_STAT_WFE 0x20000000u    /* abox.c:76 */
++
++/* ---- SPEEDY: the bus the audio codec hangs off ----------------------------
++ * speedy@11CE0000, exynos7885.dtsi:664-675.  SPEEDY is Samsung's private
++ * serial control bus, not I2C, with its own controller.  The codec is its only
++ * client here (speedy_bus pins, one gate GATE_SPEEDY_APM, DT:672).  Register
++ * offsets from i2c-speedy.c:43-54. */
++#define A5AUDIO_SPEEDY_PA         0x11CE0000u    /* exynos7885.dtsi:666 */
++#define A5AUDIO_SPEEDY_SIZE       0x2000u        /* exynos7885.dtsi:666 */
++#define A5AUDIO_SPEEDY_CTRL       0x000u         /* i2c-speedy.c:43 */
++#define A5AUDIO_SPEEDY_FIFO_CTRL  0x004u         /* i2c-speedy.c:44 */
++#define A5AUDIO_SPEEDY_CMD        0x008u         /* i2c-speedy.c:45 */
++#define A5AUDIO_SPEEDY_FIFO_STATUS 0x030u        /* i2c-speedy.c:48 */
++#define A5AUDIO_SPEEDY_TX_DATA    0x034u         /* i2c-speedy.c:49 */
++#define A5AUDIO_SPEEDY_RX_DATA    0x038u         /* i2c-speedy.c:50 */
++#define A5AUDIO_SPEEDY_CTRL_STATUS 0x104u        /* i2c-speedy.c:54 */
++
++/* ---- codec (cod3035x) and speaker amp (tfa98xx) ---------------------------
++ * audio_codec_cod3035x: cod3035x@03, exynos7885-jackpotlte_common.dtsi:172-194:
++ *   compatible = "codec,cod3035x"      (DT-JT:173)
++ *   reg        = <0x03>                (DT-JT:174, SPEEDY client address)
++ *   vdd-supply = <&l36_reg>            (DT-JT:176)
++ * The codec driver is sound/soc/codecs/cod3033x.c (of_match "codec,cod3033x",
++ * cod3033x.c:1684); its registers are 8-bit reg / 8-bit value, 0x00..0xff
++ * (cod3033x.c:111-122), reachable only through a SPEEDY transaction.
++ * The speaker runs through an NXP TFA98xx smart amp on the standard I2C3 bus,
++ * tfa98xx@34 on i2c_3@0x13860000 (DT-JT:1855-1860; bus node DT:1049-1052,
++ * "samsung,s3c2440-i2c", IRQ SPI 251 -> ID 283). */
++#define A5AUDIO_CODEC_SPEEDY_ADDR 0x03u          /* exynos7885-jackpotlte_common.dtsi:174 */
++#define A5AUDIO_CODEC_REG_MAX     0xFFu          /* sound/soc/codecs/cod3033x.c:115 */
++#define A5AUDIO_CODEC_BASE_REG    0x00u          /* sound/soc/codecs/cod3033x.h:107 */
++#define A5AUDIO_AMP_I2C_PA        0x13860000u    /* exynos7885.dtsi:1051 */
++#define A5AUDIO_AMP_I2C_SIZE      0x100u         /* exynos7885.dtsi:1051 */
++#define A5AUDIO_AMP_I2C_ADDR      0x34u          /* exynos7885-jackpotlte_common.dtsi:1860 */
++
++/* ---- ABOX firmware / reserved memory --------------------------------------
++ * The Calliope core is not usable until two firmware images are loaded into
++ * its DRAM and SRAM (request_firmware_nowait at abox.c:5520-5522 and
++ * 5866-5868) and the on-die extras in exynos7885.dtsi:1574-1593.  Its DMA
++ * buffers come from the abox_rmem reserved region (exynos7885-rmem.dtsi:60-64).
++ * None of this is touched by the read-only probe. */
++#define A5AUDIO_ABOX_RMEM_PA      0xE9400000u    /* exynos7885-rmem.dtsi:62 */
++#define A5AUDIO_ABOX_RMEM_SIZE    0x400000u      /* exynos7885-rmem.dtsi:62 */
++
++#endif /* _A5XELTE_AUDIO_H_ */
+diff --git a/iokit/bsddev/IOKitBSDInit.cpp b/iokit/bsddev/IOKitBSDInit.cpp
+index d4f573f..6a3fb27 100644
+--- a/iokit/bsddev/IOKitBSDInit.cpp
++++ b/iokit/bsddev/IOKitBSDInit.cpp
+@@ -69,6 +69,7 @@ extern int IODTGetDefault(const char *key, void *infoAddr, unsigned int infoSize
+ extern boolean_t cpuid_vmm_present(void);
+ #if defined(ARM64_BOARD_CONFIG_A5XELTE)
+ extern void a5xelte_emmc_probe(void);
++extern void a5xelte_audio_probe(void);
+ extern void a5xelte_keys_init(void);
+ extern void a5xelte_panel_init(void);
+ extern void a5xelte_touch_probe(void);
+@@ -782,6 +783,11 @@ IOFindBSDRoot( char * rootName, unsigned int rootNameSize,
+ 	a5xelte_keys_init();
+ 	a5xelte_touch_probe();
+ 	a5xelte_panel_init();
++#if defined(JACKPOTLTE)
++	/* Galaxy A8 2018: read-only ABOX + SPEEDY audio identity probe, off
++	 * unless "a8audio" is 1 (bsd/dev/a5xelte_audio.c). */
++	a5xelte_audio_probe();
++#endif
+ #if defined(JACKPOTLTE)
+ 	jackpotlte_pmic_probe();
+ #endif
