@@ -64,7 +64,19 @@ cleanup() {
 trap cleanup EXIT
 
 echo "--- mount read-write ---"
-mount -t hfsplus -o loop,rw,force "$img" "$mnt"
+mounted=0
+for n in $(seq 1 20); do
+	if mount -t hfsplus -o loop,rw,force "$img" "$mnt" 2>/tmp/iosroot-mount.err; then
+		mounted=1
+		break
+	fi
+	sleep 1
+done
+if [ "$mounted" != 1 ]; then
+	echo "error: cannot mount $img after 20 tries:" >&2
+	cat /tmp/iosroot-mount.err >&2
+	exit 1
+fi
 
 if ! touch "$mnt/.rwcheck" 2>/dev/null; then
 	echo "error: $mnt is not writable (journal not repaired?)" >&2
