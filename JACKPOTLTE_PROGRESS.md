@@ -61,7 +61,40 @@ output from the phone.**
   the partition is named `BOOT` uppercase in this fastbootd. The earlier
   "stuck at JUMP TO XNU" photo was the previous image, not this one.
 
-### Next step for the stage-4 hang (patch `0125`, built, not yet flashed)
+### Flashed 2026-11-08 09:32 UTC (USERDATA root + trace kernel)
+
+- **USERDATA**: `IOSRoot.sparse.img`, 12,145,430,824 B, sha256
+  `5a8129778da7ea8d739fd1946083e0679ba1a7ce341d7f858232785d7b80e4ed`.
+  Structure checked by walking every chunk: 27,811/27,811 chunks,
+  4,194,304/4,194,304 blocks, 0 errors; block 0 carries the HFSX volume
+  header. Flashed with `fastboot flash USERDATA` as a **sparse** image:
+  47/47 chunks, `Finished. Total time: 499.6s`, RC=0.
+- **BOOT**: `/var/tmp/a8-xnu3.img`, 17,481,744 B, sha256
+  `0936f33fa5edaafe97a27fd856c2b9ba7dfec44d52b2be1866eecd67ef5e298e`
+  (shim 48,480 B, ramdisk 16,546,816 B, DT 882,688 B). Kernel from CI run
+  `42466539728` (`kernel.development.a5xelte`, 16,552,752 B, sha256
+  `2c591d90e3386c393c8cacf434edd0663c1497a1b537a7e6400b3888ac5a352d`)
+  with the `0125` markers verified in the binary. Flashed to `BOOT`, OK,
+  rebooted 09:32 UTC.
+- The flash writes do **not** by themselves make stage 5 or 6: eMMC
+  detection and the root mount still need evidence from the phone.
+
+Why the image had to be sparse (recorded so nobody repeats it): fastboot
+loads a raw image whole — with `IOSRoot.img` it sat at
+`total-vm: 16785176 kB` and was OOM-killed three times on this 7.8 GB host,
+taking the desktop session with it. `-S` does not change this. A sparse
+image streams in ~256 MiB chunks with a few hundred MB of RSS; the 512 MiB
+test image flashed fine under a 400 MB `ulimit -v`. The final flash ran
+under a 1 GB cap.
+
+Note: after the OOM reboots the ext4 dentry for `IOSRoot.img` became
+unresolvable (`ls` shows it, `stat`/`open` return ENOENT) while the sparse
+file stayed intact. The sparse image is therefore the surviving copy of
+the root; `simg2img` restores the raw image when there is 16 GiB free
+(the host has 3.2 GiB free now). The IPSW DMGs were removed earlier with
+owner approval, so a rebuild would start from a fresh IPSW download.
+
+### Next step for the stage-4 hang (patch `0125`, built and flashed)
 
 The last line is printed by `vm_resident.c` immediately *before* it calls
 `pmap_startup()`. Nothing after it appears, and the framebuffer console
