@@ -114,11 +114,17 @@ def build():
         ('virtual-timer-intid', mkadt.u32(30)),
         ('reg', mkadt.u64(GICD - SOC_BASE, 0x1000, GICC - SOC_BASE, 0x1000)),
     ]))
-    # No display node yet: AppleCLCD on the 7885 needs S-Boot actually having
-    # scanned out the framebuffer at 0xEC000000, which is not yet observed.
-    # Adding one now would let the kernel drive a possibly-blank panel.
-    root.children = [n for n in root.children if n.prop('name') not in
-                     (mkadt.cstr('sweet-fbcon'), mkadt.cstr('sweet-ufs'))]
+    # The framebuffer is confirmed live: after the DECON trigger the loader's
+    # banner appears at 0xec000000 (phone screen, 2026-11-08). The A5XELTE
+    # serial driver looks for "a5xelte-fbcon" with reg/width/height/stride.
+    root.children = [n for n in root.children if n.prop('name') !=
+                     mkadt.cstr('sweet-ufs')]
+    root.children.append(mkadt.node('a5xelte-fbcon', [
+        ('reg', mkadt.u64(FB_PHYS, 0x01400000)),
+        ('width', mkadt.u32(FB_W)),
+        ('height', mkadt.u32(FB_H)),
+        ('stride', mkadt.u32(FB_W * 4)),
+    ]))
     return root
 
 
