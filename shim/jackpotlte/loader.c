@@ -299,13 +299,23 @@ static void dt_probe(uintptr_t dtb)
 	if (fdt_chosen_u64(dtb, "linux,initrd-end", &v))
 		kv("initrd-end", v);
 	out("\n");
-	uint64_t base, size;
-	if (fdt_memory(dtb, &base, &size)) {
-		kv("mem base", base);
-		kv("mem size", size);
-		out(" (");
-		dec(size >> 20);
-		out(" MiB)\n");
+	uint64_t mbase[8], msize[8];
+	int nm = fdt_memory_all(dtb, mbase, msize, 8);
+	if (nm > 0) {
+		uint64_t total = 0;
+		for (int i = 0; i < nm; i++) {
+			out("mem bank ");
+			dec((uint64_t)i);
+			kv(" base", mbase[i]);
+			kv("size", msize[i]);
+			out("(");
+			dec(msize[i] >> 20);
+			out(" MiB)\n");
+			total += msize[i];
+		}
+		out("mem total ");
+		dec(total >> 20);
+		out(" MiB\n");
 	} else {
 		out("no /memory node parsed\n");
 	}

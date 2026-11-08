@@ -221,16 +221,14 @@ int fdt_has_node(uintptr_t fdt, const char *name)
 	}
 }
 
-int fdt_memory(uintptr_t fdt, uint64_t *base, uint64_t *size)
+int fdt_memory_all(uintptr_t fdt, uint64_t *base, uint64_t *size, int max)
 {
-	if (!fdt || be32(fdt) != FDT_MAGIC)
+	if (!fdt || be32(fdt) != FDT_MAGIC || max <= 0)
 		return 0;
 	uintptr_t p = fdt + be32(fdt + 8);
 	uintptr_t strings = fdt + be32(fdt + 12);
 	/* Root #address-cells/#size-cells default to 2 and 1 per spec. */
-	int ac = 2, sc = 1, depth = 0, match = -1;
-	uint32_t len = 0, nameoff = 0;
-	uintptr_t val = 0;
+	int ac = 2, sc = 1, depth = 0, mem_depth = -1, n = 0;
 
 	for (;;) {
 		uint32_t tok = be32(p);
@@ -242,30 +240,28 @@ int fdt_memory(uintptr_t fdt, uint64_t *base, uint64_t *size)
 				ac = 2;
 				sc = 1;
 			}
-			if (match < 0 && name_is((const char *)p, "memory"))
-				match = depth;
+			if (mem_depth < 0 && name_is((const char *)p, "memory"))
+				mem_depth = depth;
 			p = align4(skip_str(p));
 			break;
 		case FDT_END_NODE:
-			if (depth == match)
-				return 0;
+			if (depth == mem_depth)
+				mem_depth = -1;
 			depth--;
 			break;
 		case FDT_PROP: {
-			len = be32(p);
-			nameoff = be32(p + 4);
-			val = p + 8;
+			uint32_t len = be32(p), nameoff = be32(p + 4);
+			uintptr_t val = p + 8;
 			const char *pn = (const char *)(strings + nameoff);
 			if (depth == 1 && streq(pn, "#address-cells") && len == 4)
 				ac = (int)be32(val);
 			if (depth == 1 && streq(pn, "#size-cells") && len == 4)
 				sc = (int)be32(val);
-			if (depth == match && streq(pn, "reg")) {
+			if (depth == mem_depth && mem_depth > 0 && streq(pn, "reg")) {
 				/* reg = <base(ac cells) size(sc cells)> */
 				uint64_t b = 0, s = 0;
-				int cells = 0;
+				int cells = 0, cell = 0;
 				int need = ac + sc;
-				int cell = 0;
 				for (cell = 0; cell < need && (uint32_t)(cell * 4) < len; cell++) {
 					uint64_t v = be32(val + cell * 4);
 					cells++;
@@ -274,10 +270,10 @@ int fdt_memory(uintptr_t fdt, uint64_t *base, uint64_t *size)
 					else
 						s = (s << 32) | v;
 				}
-				if (cells == need && s) {
-					*base = b;
-					*size = s;
-					return 1;
+				if (cells == need && s && n < max) {
+					base[n] = b;
+					size[n] = s;
+					n++;
 				}
 			}
 			p = align4(val + len);
@@ -285,8 +281,13 @@ int fdt_memory(uintptr_t fdt, uint64_t *base, uint64_t *size)
 		}
 		case FDT_NOP:
 			break;
-		default:
-			return 0;
+		default:	/* FDT_END or garbage */
+			return n;
 		}
 	}
+}
+
+int fdt_memory(uintptr_t fdt, uint64_t *base, uint64_t *size)
+{
+	return fdt_memory_all(fdt, base, size, 1);
 }

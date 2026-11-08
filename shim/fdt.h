@@ -19,5 +19,14 @@ int fdt_node_str(uintptr_t fdt, const char *node, const char *prop, char *buf, i
  */
 int fdt_memory(uintptr_t fdt, uint64_t *base, uint64_t *size);
 
+/*
+ * Enumerate every /memory node, in tree order. The Exynos 7885 handover DT
+ * can describe several DRAM banks (the jackpotlte source has low/mid/high),
+ * and XNU takes only one window, so the loader needs to see them all. Fills
+ * up to `max` base/size pairs and returns how many were found (0 if none, or
+ * if the blob is not a valid FDT).
+ */
+int fdt_memory_all(uintptr_t fdt, uint64_t *base, uint64_t *size, int max);
+
 /* True if the blob has a node whose name is `name` (any level). */
 int fdt_has_node(uintptr_t fdt, const char *name);
