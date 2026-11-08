@@ -17,7 +17,7 @@ output from the phone.**
 | 3 | Payload passes its check; jump to XNU | **reached (loader prints through `JUMP TO XNU`)** |
 | 4 | XNU prints to the framebuffer (log or panic) | **reached (screen output, 2026-11-08)** |
 | 5 | Storage (eMMC) detected | **reached (screen output, 2026-11-08)** — `0130` maps `dwmmc0@13500000` and reads the GPT (`SYSTEM` LBA 409600, 11,078,400 sectors) |
-| 6 | Root filesystem mounts | **next / blocker** — needs the iOS root written to `USERDATA` (approval + confirm), then `rd=emmcroot0 emmcpart=USERDATA` |
+| 6 | Root filesystem mounts | **next** — iOS root already in `USERDATA` (`IOSRoot.sparse.img`, flashed 2026-11-08 09:32); boot `rd=emmcroot0 emmcroot=USERDATA` to mount |
 | 7 | launchd, then SpringBoard | not started |
 
 ### Stage 2 evidence
@@ -414,9 +414,10 @@ reached** — the eMMC is detected and its partition table read on the phone.
 The boot still waits on `IOMedia`/`Apple_HFS` because `emmcprobe=1` only
 probes; it does not publish a root device.
 
-Next: the iOS root is **not yet on the device**, so stage 6 needs the
-`/var/tmp/iosroot/iOSRoot.img` (16 GiB HFS+) written to `USERDATA` (destructive
-→ confirm), then `rd=emmcroot0 emmcpart=USERDATA`.
+Next: the iOS root **is already on `USERDATA`** — `IOSRoot.sparse.img` was
+flashed on 2026-11-08 09:32 UTC (47/47 chunks, RC=0; see the top section). So
+stage 6 is only the mount: boot `rd=emmcroot0 emmcroot=USERDATA` (and
+`emmcwrite=1` for a writable root) with the `0130` kernel.
 
 ### Display: DECON trigger ported into the jackpotlte shim (2026-11-08)
 
@@ -486,8 +487,8 @@ XNU and the `0127` layout probe (see the `0127` decode above).
   journaled volume (a fresh, never-mounted `mkfs.hfsplus -s -J` image does
   the same), so it cannot be used as a pass/fail check. The script now
   verifies with a second repair pass and requires "appears to be OK".
-- Not flashed: the iOS root goes to USERDATA only after approval. This is a
-  host build result, not stage 6.
+- **Flashed 2026-11-08 09:32 UTC** (see the top "Flashed" section):
+  `IOSRoot.sparse.img`, 47/47 chunks, RC=0. The *mount* result is still stage 6.
 
 
 ## Hardware facts (from Samsung's own 4.4 source and the mainline DT; NOT yet confirmed on the phone)
@@ -573,15 +574,13 @@ Snapdragon A530W/U. The mainline `exynos7885*` values above therefore apply.
 ## Next concrete action
 
 1. **Stage 5 is reached** (`0130`): the eMMC host maps and the GPT reads on the
-   phone (`SYSTEM` LBA 409600, 11,078,400 sectors). Remainder of the eMMC work:
-   - Read the `USERDATA` GPT entry too (the probe currently reports the
-     selected partition; default `SYSTEM`). A probe with `emmcpart=USERDATA`
-     (read only) would print its LBA+sectors.
-   - **Stage 6:** write `/var/tmp/iosroot/iOSRoot.img` (16 GiB HFS+) into
-     `USERDATA` (destructive; the owner approved the direction on 2026-10-15
-     and confirmed the partition choice — confirm the actual write before it
-     runs), then boot with `rd=emmcroot0 emmcpart=USERDATA`.
-2. Then stage 7: launchd, then SpringBoard.
-3. Older housekeeping (still open): read the remaining board unknowns (ramoops
+   phone (`SYSTEM` LBA 409600, 11,078,400 sectors).
+2. **Stage 6 (mount):** the iOS root is already on `USERDATA` (`IOSRoot.sparse.img`
+   flashed 2026-11-08 09:32 UTC). Boot `rd=emmcroot0 emmcroot=USERDATA
+   emmcwrite=1` with the `0130` kernel and look for `hfs: mounted` / launchd.
+   A read-only probe with `emmcprobe=1 emmcroot=USERDATA` first prints the
+   `USERDATA` LBA+sectors if the mount needs debugging.
+3. Then stage 7: launchd, then SpringBoard.
+4. Older housekeeping (still open): read the remaining board unknowns (ramoops
    `log_pstore` offset, gpa1 bank offset, eMMC CIU timings) from the live DT /
    Samsung source and fill `board.h`, then enable `JT_HAVE_RAMOOPS`.
