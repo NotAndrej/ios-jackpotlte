@@ -1014,6 +1014,26 @@ sha256 `129bd8eabae57464a8bf870c1491669c789cba31187592a92258625edcba0e8e`.
 Built from the branch kernel; not flashed. A main-built kernel with 0140
 should be rebuilt from the main CI run before flashing.
 
+**`0140` main build is green** (`42520231344`, `b2b8f0f`): the main-built
+kernel `/tmp/opencode/art0140/kernel.development.a5xelte`, 16,553,800 B,
+sha256 `930af8d2ee9342dbd809a4188e8df1e98a22025db93eca02067c3151bc435157`,
+contains `'IONameMatch' = ('arm,cortex-a53', 'arm,cortex-a73')` for
+`SweetCPU`, so the merged patch is really compiled in. From it:
+`/var/tmp/a8-xnu-jt21-cpus8.img`, 17,485,840 B, sha256
+`17dd819c03dbf261d5f5b6406dd22c06906f60d858bf3e8d89d6359b6a75c946` -- 8
+cores, same quiet-log cmdline as jt19 (`sweetfb_noconsole=1`). Not flashed;
+jt19 (6 cores) is what is on the phone.
+
+**No progress bar is expected on this port.** No patch in `xnu/patches/`
+draws a boot progress bar or reports boot progress; the Apple logo is drawn
+by iOS userland through the port's framebuffer. Logo-without-bar therefore
+means launchd is not reporting progress increments -- normal when migration
+is skipped or there is nothing to migrate -- and is neither a fault nor
+evidence of a completed boot. The DataMigration tweaks only make
+`com.apple.migration.plist` look already-migrated (`LastSystemVersion`
+20H392, `DMUserDataDisposition=SyntheticDidUpgrade`,
+`DMLastMigrationResults.success=true`); they do not make SpringBoard launch.
+
 Subsystem track numbering, for whoever merges them next:
 
 | track | branch | patch (was) | becomes |
