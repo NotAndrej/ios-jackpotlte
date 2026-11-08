@@ -114,6 +114,18 @@ def build():
         ('virtual-timer-intid', mkadt.u32(30)),
         ('reg', mkadt.u64(GICD - SOC_BASE, 0x1000, GICC - SOC_BASE, 0x1000)),
     ]))
+    # Display service. The A5XELTE build's AppleCLCD personality matches
+    # 'samsung,a5xelte-display' (xnu/patches/0109 + 0124 in
+    # KernelConfigTables.cpp), so the A8 publishes that same compatible and
+    # AppleCLCD binds to the S-Boot handover framebuffer at 0xec000000. The
+    # panel is the s6e3fa7 at 1080x2220 (Eureka exynos7885-display-lcd.dtsi:
+    # 173-193); IOMobileFramebuffer reads canvas-width/height from this node.
+    arm_io.children.append(mkadt.node('disp0', [
+        ('device_type', mkadt.cstr('display-subsystem')),
+        ('compatible', mkadt.cstr('samsung,a5xelte-display')),
+        ('canvas-width', mkadt.u32(FB_W)),
+        ('canvas-height', mkadt.u32(FB_H)),
+    ]))
     # The framebuffer is confirmed live: after the DECON trigger the loader's
     # banner appears at 0xec000000 (phone screen, 2026-11-08). The A5XELTE
     # serial driver looks for "a5xelte-fbcon" with reg/width/height/stride.

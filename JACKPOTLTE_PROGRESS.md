@@ -553,6 +553,38 @@ panel showed the `JACKPOTLTE LOADER BEGIN` banner and the device-tree dump —
 stage 2 re-confirmed with the device's own shim. The full image then reached
 XNU and the `0127` layout probe (see the `0127` decode above).
 
+### Display: panel/DSIM bring-up written (2026-11-08, NOT yet on the phone)
+
+Merged onto main as `xnu/patches/0133-jackpotlte-panel-dsim-bringup.patch`
+(it was `0131` on the `a8-panel` branch). It adds
+`bsd/dev/a5xelte_panel.c` (registered in `bsd/conf/files`, called from
+`IOKitBSDInit.cpp` next to the other `a5xelte_*` entry points). It is the
+first patch that touches the A8's own display IP:
+
+- Default is **log-only** (`a5panelprobe`, on by default, read only): it prints
+  the DSIM `SWRST`/`CLK_CTRL`/`CONFIG`/`RESOL`/`PLLCTRL`/`LINK_STATUS3`, the
+  DECON trigger word, and the `gpg1`/`gpg2` CON/DAT state. It writes nothing,
+  so it cannot regress the working DECON handover.
+- Active bring-up is opt-in (`a5panel=1`, default off) and mirrors the vendor
+  driver: it re-reads `DSIM_LINK_STATUS3.PLL_STABLE` first and, if S-Boot
+  already brought the link up, skips all link/panel init (`dsim_drv.c:826-832`,
+  `dsim_reg.c:1355-1360`). Only when the PLL is *not* stable does it reset the
+  D-PHY, program the PLL, D-PHY timings and command-mode config, pulse `gpg1-7`
+  (`lcd_rst`) and send the s6e3fa7 init sequence.
+- No PMIC/LDO/regulator write exists in the patch. The panel rails (`gpg2-7`
+  ldo_3p0, `gpg2-6` vddr_en) are read and printed only; DECON is read-only.
+
+`tools/mkadt_jackpotlte.py` now publishes a `disp0` node under `arm-io`
+(`device_type display-subsystem`, `compatible samsung,a5xelte-display`,
+`canvas 1080x2220`) so the A5XELTE `AppleCLCD` personality
+(`KernelConfigTables.cpp`, patches 0109/0124) binds to the handover
+framebuffer at `0xec000000`.
+
+Not yet claimed: nothing of this has been flashed. On the merged tree it
+applies as `0133` after `0001-0132`. The
+`a5panel=1` path is untested and should be tried only after the log-only boot
+confirms S-Boot's DSIM/rail state.
+
 ### iOS root image (host build, not a device result)
 
 - Built with `tools/mkiosroot.sh OS.dmg SYSTEMOS.dmg APPOS.dmg
