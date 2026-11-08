@@ -13,12 +13,22 @@ output from the phone.**
 | Stage | Description | Status |
 | --- | --- | --- |
 | 1 | Repo skeleton, S8 port imported, builds reproducibly | **in progress (built)** |
-| 2 | Loader runs on the A8 and prints the banner | not started |
-| 3 | Payload passes its check; jump to XNU | not started |
+| 2 | Loader runs on the A8 and prints the banner | **reached (screen output, 2026-11-08)** |
+| 3 | Payload passes its check; jump to XNU | **in progress (payload packed + flashed)** |
 | 4 | XNU prints to the framebuffer (log or panic) | not started |
 | 5 | Storage (eMMC) detected | not started |
 | 6 | Root filesystem mounts | not started |
 | 7 | launchd, then SpringBoard | not started |
+
+### Stage 2 evidence
+
+- Image `/home/not_andrej/Downloads/boot-jackpotlte-shim.img`, 933,904 B,
+  sha256 `a651f02badf6cf24f68bc22077aaf396a352c26f05d43167e5fb38c8ff4ad627`,
+  shim kernel 46,144 B, empty ramdisk, packed on `boot_a530f_q.img`.
+- Owner saw **`A8LOADER BEGIN  (jackpotlte Exynos XNU loader)`** on the phone
+  after `fastboot flash BOOT` + reboot. This is the S8 `shim/dreamlte` loader
+  with only: FB base `0xec000000`, 1080x2220, `DECON_TRIG 0x14860070 = 0x1281`,
+  log zone at `0xc0000000`, and the probe calls removed.
 
 ## Hardware facts (from Samsung's own 4.4 source and the mainline DT; NOT yet confirmed on the phone)
 
@@ -43,9 +53,13 @@ Source now includes the **Eureka-Kernel** Samsung 4.4 tree for this device
   driver, not the S8's UFS.
 - Display: bootloader framebuffer **`0xec000000`**, 20 MiB
   (`fb_handover`/`exynos,dpu_fb_handover`). Panel **s6e3fa7, 1080x2220**, MIPI
-  command mode. **DECON_F @ `0x14860000`**, `HW_SW_TRIG_CONTROL` at `+0x70`;
-  the panel runs HW trigger from the DSI TE line, so the loader does not force
-  a software trigger.
+  command mode. **DECON_F @ `0x14860000`**, `HW_SW_TRIG_CONTROL` at `+0x70`.
+  **Confirmed on the phone (2026-11-08):** the loader must write `0x1281` to
+  `0x14860070` before touching the framebuffer. Without it DECON never latches
+  a shadow update, no frames are scanned, and the panel keeps showing the
+  S-Boot logo out of its own GRAM (the "stuck on Samsung Galaxy" symptom).
+  The loader's earlier shadow-update pokes (`+0x60`) are what broke scanout;
+  the `+0x70` trigger is the one that works.
 - Buttons: `gpa1` (pinctrl alive `0x11cb0000`) — vol-down p6, vol-up p5,
   power p7 (active low). Bank offset still to read from the driver.
 

@@ -1460,7 +1460,7 @@ diff --git pexpert/pexpert/arm64/A5XELTE.h pexpert/pexpert/arm64/A5XELTE.h
 index e6718d4..b6f812d 100644
 --- a/pexpert/pexpert/arm64/A5XELTE.h
 +++ b/pexpert/pexpert/arm64/A5XELTE.h
-@@ -24,6 +24,43 @@
+@@ -24,6 +24,64 @@
  #define HAS_GIC_V3                    0
  #define A5XELTE_VTIMER_INTID         27
  
@@ -1469,6 +1469,26 @@ index e6718d4..b6f812d 100644
 + * Same Samsung S-Boot handoff, GIC-400, 26 MHz timer and Cortex-A53 boot
 + * cluster as the A5; the board facts that differ are below.
 + */
++#if defined(JACKPOTLTE)
++/*
++ * Galaxy A8 2018 (SM-A530F, jackpotlte, Exynos 7885). Same S-Boot handoff
++ * and GIC-400 as the donor, but the framebuffer handed over by S-Boot lives
++ * at 0xec000000 (live kernel log: dpu_fb_handover_setup base=0xec000000).
++ * Build as MACHINE_CONFIG=A5XELTE with -DJACKPOTLTE=1.
++ */
++#define A5_FB_PHYS                    0xec000000
++#define A5_FB_WIDTH                   1080
++#define A5_FB_HEIGHT                  2220
++#define A5_FB_STRIDE                  4320        /* bytes per row */
++#define A5_FB_2M_BLOCKS               5           /* 1080*2220*4 = 9,590,400 */
++#define A5_ENTRY_MARKER_PHYS          0xc8000000  /* free mid-bank RAM */
++#define A5_BOOT_MPIDR                 0x100       /* first Cortex-A53 */
++#define A5_KEYS_DEFAULT               1
++#define A5_TOUCH_DEFAULT              0
++#define A5_USE_PHYS_TIMER             1           /* mainline 7885: CNTP, INTID 30 */
++#undef A5XELTE_VTIMER_INTID
++#define A5XELTE_VTIMER_INTID         30
++#else
 +#define DREAMLTE                      1
 +#if defined(DREAMLTE)
 +#define A5_FB_PHYS                    0xcc000000  /* s3cfb.bootloaderfb */
@@ -1499,6 +1519,7 @@ index e6718d4..b6f812d 100644
 +#define A5_BOOT_MPIDR                 0
 +#define A5_KEYS_DEFAULT               1
 +#define A5_TOUCH_DEFAULT              1
++#endif
 +#endif
 +
  #ifndef ASSEMBLER

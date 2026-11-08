@@ -15,6 +15,9 @@ on:
       keep_going:
         description: make -k (collect all compile errors in one run)
         default: "true"
+      extra_cflags:
+        description: Extra MACHINE_FLAGS (e.g. -DJACKPOTLTE=1 for the A8 donor build)
+        default: ""
   push:
     branches: [main, s8-dreamlte]
     paths:
@@ -86,6 +89,8 @@ jobs:
         env:
           # keep going after errors so one run reports every compile failure
           MAKEFLAGS: ${{ inputs.keep_going == 'false' && '' || '-k' }}
+          # appended to MACHINE_FLAGS_ARM64_<config> by patch 0085
+          EXTRA_MACHINE_FLAGS: ${{ inputs.extra_cflags }}
         run: bash build.sh
 
       - name: Package build tree for local compiles
