@@ -771,6 +771,21 @@ name the CPU and both `rc` values, and a `cpus=2` image (same kernel, cmdline
 only) is kept on disk to tell "no secondary can start" apart from "only the other
 clusters fail".
 
+CI `42501037411` built `0135` green in 11m40s. Kernel
+`kernel.development.a5xelte` sha256
+`32734fbead24e42e8b1f143131822dda0a8d8cf9f23632f6f71e268a97832ba7`; the binary
+carries the new strings (`via low trampoline`, `PMU core=%u cfg=0x%x
+status=0x%x`), so the jackpotlte branch really compiled in. Images:
+
+- **`/var/tmp/a8-xnu-jt12.img`** — 17,485,840 B, sha256
+  `fb77c1a162ea893264a30982df990466760297c498eb3b4bd095780d9a99500b`,
+  cmdline `... cpus=8 ...` (verified in the image).
+- `/var/tmp/a8-xnu-jt12-cpus2.img` — sha256
+  `6c419ccd8bc8f6d9173cfc58436cededafcfe7a693949f886cc498b7f12aea5f`,
+  `cpus=2`, diagnostic only.
+
+Not yet flashed. `jt10` (working single-core boot) is untouched on disk.
+
 ### iOS root image (host build, not a device result)
 
 - Built with `tools/mkiosroot.sh OS.dmg SYSTEMOS.dmg APPOS.dmg
