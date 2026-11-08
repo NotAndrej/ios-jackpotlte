@@ -996,10 +996,18 @@ so a main-repo 0146 left a 0139 -> 0146 gap. A branch `jackpotlte-cpus8`
 carries it as 0146 purely for a compile verdict; renumber on merge. The
 owner has parked 8 cores for now.
 
-Interim 6-core image (A53s only, skips the A73 pair): **flashed** after the
-owner asked for 6 cores for now.
-`/var/tmp/a8-xnu-jt17-cpus6.img`, 17,485,840 B, sha256
-`fd3ab067e97131079c30881cc6336156bf61e432fbe22396fd8bb8c4f5e8408a`.
+Interim 6-core image (A53s only, skips the A73 pair): **flashed 2026-11-08
+~21:15** after the owner asked for 6 cores for now, and the owner
+reports it **boots properly**. `/var/tmp/a8-xnu-jt17-cpus6.img`, 17,485,840 B,
+sha256 `fd3ab067e97131079c30881cc6336156bf61e432fbe22396fd8bb8c4f5e8408a`.
+
+Evidence level: **owner statement, no photo yet**. That covers "no panic,
+kernel comes up with 6 CPUs"; it does **not** yet cover how far userland got.
+The open question for this image is unchanged: does the progress bar run past
+the old stall (the `com.apple.migration.plist` / `DMLastMigrationResults`
+tweaks, verified in the image but never booted) and does SpringBoard appear.
+`jt10` already reached logo + bar, so "boots properly" is progress on
+stability, not yet proof of stage 8.
 
 ### SCSC/Maxwell WiFi port start (`0138`, `0139`, 2026-11-08)
 
