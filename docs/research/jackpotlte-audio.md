@@ -167,13 +167,20 @@ The patch was produced with `git diff` in a private copy of
   `bsd/sweet_hfs` tree staged by `0026-stage-hfs.sh`; they are unrelated to this
   patch's files.
 
-Compile verdict is the CI run named in the handoff (this document does not claim
-it passed until the run is green).
+Compile verdict: `xnu.yml` run
+[42518060847](https://github.com/NotAndrej/ios-jackpotlte/actions/runs/42518060847)
+built the branch with `machine_config=A5XELTE` and `extra_cflags=-DJACKPOTLTE=1`
+and **passed** (10m51s). The log shows
+`clang ... -DARM64_BOARD_CONFIG_A5XELTE ... -DJACKPOTLTE=1 ... a5xelte_audio.c`,
+so this file really was compiled, and the only diagnostic it raised was a
+`-Wshadow` warning on the local helper parameter; that has since been renamed
+(`version` → `raw`) and the patch regenerated (sha256 `633e124f…`) — a rebuild
+is expected to be warning-free, but the green run above predates that rename.
 
 ## Not verified
 
 - Nothing has been compiled locally (XNU needs macOS tooling); CI is the first
-  compiler to see `bsd/dev/a5xelte_audio.c`.
+  compiler to see `bsd/dev/a5xelte_audio.c`, and it compiled it (run above).
 - Nothing has been booted. No claim is made that the ABOX or SPEEDY reads
   succeed, or that any register value above is what the A8 returns.
 - The DT/register values are quoted from the donor vendor tree; they have not
@@ -183,8 +190,7 @@ it passed until the run is green).
 
 ## Next step
 
-Build the `0141` kernel (`xnu.yml`, `EXTRA_MACHINE_FLAGS=-DJACKPOTLTE=1`) and
-boot it **without** `a8audio` to confirm a default boot is unchanged and silent;
-then boot with `a8audio=1` and read the ABOX version / CA7 state / SPEEDY
-status lines on the framebuffer console. Those four lines decide A1 (SPEEDY
-driver) versus A2 (ABOX power + Calliope).
+The `0141` kernel is built (run above). Boot it **without** `a8audio` to confirm
+a default boot is unchanged and silent; then boot with `a8audio=1` and read the
+ABOX version / CA7 state / SPEEDY status lines on the framebuffer console. Those
+four lines decide A1 (SPEEDY driver) versus A2 (ABOX power + Calliope).

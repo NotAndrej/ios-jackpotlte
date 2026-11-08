@@ -12,7 +12,7 @@ index 051083d..4c12085 100644
  bsd/dev/a5xelte_touch.c			standard
 diff --git a/bsd/dev/a5xelte_audio.c b/bsd/dev/a5xelte_audio.c
 new file mode 100644
-index 0000000..c8fdde2
+index 0000000..4ee08c4
 --- /dev/null
 +++ b/bsd/dev/a5xelte_audio.c
 @@ -0,0 +1,169 @@
@@ -82,11 +82,11 @@ index 0000000..c8fdde2
 +/* Turn a packed Calliope version word into four printable characters.  The
 + * vendor prints the raw bytes as a string (abox.c:4436-4437). */
 +static void
-+a5audio_verstr(uint32_t version, char out[5])
++a5audio_verstr(uint32_t raw, char out[5])
 +{
 +	int i;
 +	for (i = 0; i < 4; i++) {
-+		unsigned char c = (unsigned char)(version >> (8 * i));
++		unsigned char c = (unsigned char)(raw >> (8 * i));
 +		out[i] = (c >= 0x20 && c < 0x7f) ? (char)c : '.';
 +	}
 +	out[4] = '\0';
