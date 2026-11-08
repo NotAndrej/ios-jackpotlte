@@ -894,6 +894,73 @@ Scoping only — nothing applied and no boot-path change. Full write-up:
   not, no GPU register read works until the power/clock sequence runs. Source
   cannot answer this; one readback can. That is what M0 is for.
 
+### All eight cores in one logical cluster (`0137`) + the iOS-root gap (2026-11-08)
+
+`0137-jackpotlte-single-logical-cluster.patch` (31 insertions, 2 hunks) takes
+`cpu->cluster_id` from the ADT `cluster-id` and registers
+`cluster_phys_to_logical[]` for **every** CPU, not only the first per physical
+cluster. `tools/mkadt_jackpotlte.py` publishes `cluster-id = 0` for all eight
+CPU nodes, so one `pset` is built under `pset_node0` and the half-owned ticket
+lock at `lock_ticket.c:143` is not reached. The ADT byte-diff showed exactly
+`1->0, 1->0, 2->0, 2->0`; the remaining differing bytes are `random-seed`.
+
+CI `42510117442` (xnu) built `0137` green in 9m29s; `loader` `42510117397`
+regenerated the ADT green. Kernel `kernel.development.a5xelte`
+16,553,232 B, sha256
+`d47087a240a4334d6fcb357850839037d6ff3b4ac973865efdd79cbfb7c4b32f`.
+
+- **`/var/tmp/a8-xnu-jt14-cpus8.img`** — 17,473,552 B, sha256
+  `aeb3a9791fbbe94fa966fa0dd90426e9c162002ce06f5417260fbf7e98e427a9`,
+  built from the `0137` kernel with `tools/jackpotlte/make-boot.sh`; cmdline
+  `... cpus=8 ...` (verified in the image) and the built ADT shows
+  `cluster-id = 0` for all eight CPUs. **Not yet flashed.** `jt13` (from
+  `0136`) was also never flashed, so if `jt14` boots the result is the
+  single-cluster change on top of `0136`; a `jt13` control is on disk
+  (`a8-xnu-jt13.img`).
+
+### SCSC/Maxwell WiFi port start (`0138`, `0139`, 2026-11-08)
+
+`0138-jackpotlte-scsc-mx-transport.patch` adds `bsd/dev/a5xelte_scsc.{c,h}`:
+PMU/mailbox/MIF mapping, mailbox bit ops, a bump MIF-DRAM allocator, the
+`mx140.bin` read and "smxf" header parse, the MBOX0-3 startup contract and the
+PMU reset-release handshake. `0139-jackpotlte-apple80211-glue.patch` adds
+`bsd/dev/a5xelte_wifi.c`: an `en0` ifnet with `SIOCS/GA80211` handling for
+POWER/STATE, `EOPNOTSUPP` for the rest, and an IEEE-80211 power `kev_msg`.
+Both are wired through `bsd/conf/files` + `iokit/bsddev/IOKitBSDInit.cpp` and
+merged to `main` (`c55c7bb`).
+
+**Gated by `a8wifi=1`.** A default boot maps PMU + MIF DRAM only and reads
+four always-on PMU registers; the mailbox is mapped only when `a8wifi=1`.
+NDA: neither patch has been compiled or booted yet — CI `42512239378` is the
+compile verdict. DT values: R4 `0x120c0000`/`0x180`, M4 `0x120e0000`/`0x180`,
+IRQs `<0 57 4>`/`<0 21 4>`/`<0 286 4>`, PMU `0x11c80000`/`0x10000`, MIF
+`0xE9000000`/`0x400000` (`exynos7885.dtsi:1798-1803`, `:1291`,
+`exynos7885-rmem.dtsi:55-58`). Firmware: 54 files / 7.2 MB in
+`/var/tmp/opencode-keep/jackpotlte-wifi-fw/` from `VDavid003/samsung_jackpotlte_dump`
+(`A530FXXS8CSK2`), `mx140.bin` sha256
+`004e5982d658099a412f4f388f3aac7554a2e1fd63e7f988c3918ac6a6c88d07`. Details:
+`docs/drafts/jackpotlte-wifi/PORT-START.md`.
+
+### The flashed iOS root has none of the donor tweaks (2026-11-08)
+
+A `7z l` listing of `/var/tmp/iosroot/iOSRoot.img` (the image flashed to
+USERDATA) shows the plain `tools/mkiosroot.sh` output: **no**
+`/private/var/mobile/Library/Preferences/com.apple.migration.plist`, no
+purplebuddy `SetupDone`, no `BKNoWatchdogs`, no mobileactivationd data ark, no
+`private/var/containers`, VirtualAudio still installed. `mkiosroot.sh` never
+calls `tools/sweet-root-tweaks.py`; that is the donor's pre-v12 state, which
+is the endless-DataMigration boot (bar runs, SpringBoard held in `_checkIn`).
+
+Prepared (host-side only, no kernel change, no patch):
+`tools/sweet-root-tweaks.py` now also writes `DMLastMigrationResults`
+`{success, buildVersion: 20H392}` (the key HakiOS / danstronics /
+`lechaukha12/xnu-xzs` ship; one line to drop), and
+`tools/jackpotlte/apply-root-tweaks.sh` drives fsck -> mount `loop,rw,force` ->
+tweaks -> clean umount -> fsck. It has **not been run**; it needs root on this
+host. Next: `sudo tools/jackpotlte/apply-root-tweaks.sh
+/var/tmp/iosroot/iOSRoot.img`, then delete `IOSRoot.sparse.img`, re-sparse with
+`img2simg` and flash USERDATA (destructive, needs the owner's confirmation).
+
 ## Hardware facts (from Samsung's own 4.4 source and the mainline DT; NOT yet confirmed on the phone)
 
 Source now includes the **Eureka-Kernel** Samsung 4.4 tree for this device
@@ -977,42 +1044,40 @@ Snapdragon A530W/U. The mainline `exynos7885*` values above therefore apply.
 
 ## Next concrete action
 
-1. **Stage 5 is reached** (`0127`, was `0130`): the eMMC host maps and the GPT
-   reads on the phone (`SYSTEM` LBA 409600, 11,078,400 sectors).
-2. **Stage 6 is reached** (`jt6`): the `USERDATA` HFS root mounts and
-   `/sbin/launchd` executes.
-3. **Stage 7 (launchd):** the A5 VM/pmap diagnostic patches were removed and the
-   rest renumbered, so the console no longer drowns in
-   `A5 expand`/`pgalloc`/`steal` lines. CI `42486906977` built that clean kernel
-   (`kernel.development.a5xelte`, 16,553,272 B, sha256
-   `a0b451285c3aa34298ddfbbf5eaeceb92104ab661674070444fc7614b9764756`, **zero**
-   `A5 expand|pgalloc|tt_alloc|steal|pg|dg|de` strings) and
-   `/var/tmp/a8-xnu-jt9.img` (sha256
-   `267262398cc113b22504aab0fa23b604ccb3b0bb9153bf7ede82e8bdc5f0d59b`) packed it
-   with the multi-bank shim and the `jt8` cmdline. **But jt9 was built without
-   `-DJACKPOTLTE=1`, so it is the image that panicked** in
-   `dreamlte_battery_read` on physical `0x10970000` (photo
-   `IMG_20261108_152844733`; see "Port merge + the `-DJACKPOTLTE=1` root cause").
-   The fix is the workflow flag, not a kernel patch. That is done: CI
-   `42494206360` built the flag-fixed kernel and the image is
-   **`/var/tmp/a8-xnu-jt10.img`** (see the `jt10` section) — flash it next as the
-   real stage-7 trial (launchd / `launchd_unsecure_cache=1` / AMFI), now with the
-   five ports live.
-4. **DRAM map (for "all 4 GB"):** `shim/fdt.c` gained `fdt_memory_all()`, which
-   enumerates every `/memory` node; `dt_probe()` now prints each bank
-   (`mem bank N base=.. size=.. (MiB)`) plus the total. Host-verified against a
-   synthetic 3-bank DTB. On the phone this line reports the real banks in one
-   flash. Source banks (Eureka `exynos7885-jackpotlte_common.dtsi:28-41`): low
+Current state: stage 7 reached (`jt10`, iOS logo + progress bar; then `cpus=4`
+`jt12` reaches 50% promptly and at least the migration screen). `0137` (one
+logical cluster) and `0138`/`0139` (WiFi transport/glue, gated by `a8wifi=1`)
+are merged to `main`. The donor root tweaks were never applied to the flashed
+image (see "The flashed iOS root has none of the donor tweaks").
+
+1. **8 cores:** flash **`/var/tmp/a8-xnu-jt14-cpus8.img`** (sha256
+   `aeb3a979...e427a9`, kernel = `0137`) to `BOOT` and look for
+   `requested=8 selected=8` with no ticket-lock panic. If it still panics, the
+   `jt13` image on disk (`0136` kernel) is the control for the single-cluster
+   change. BOOT-only flash; capture a **serial** log, not a photo, to see the
+   MPIDRs attempted.
+2. **WiFi compile verdict:** CI `42512239378` builds `0138`+`0139`. If green,
+   boot that kernel **without** `a8wifi` and confirm only the
+   `A5XELTE SCSC: PMU ...` identity lines appear; then try `a8wifi=1`.
+3. **iOS root (DataMigration gate):** run
+   `sudo tools/jackpotlte/apply-root-tweaks.sh /var/tmp/iosroot/iOSRoot.img`,
+   then delete `IOSRoot.sparse.img`, re-sparse with `img2simg` and flash
+   USERDATA (needs the owner's confirmation). This is the host-side fix for the
+   endless progress bar; no kernel change.
+4. **DRAM map (for "all 4 GB"):** `shim/fdt.c`'s `fdt_memory_all()` enumerates
+   every `/memory` node and `dt_probe()` prints each bank plus the total. Source
+   banks (Eureka `exynos7885-jackpotlte_common.dtsi:28-41`): low
    `0x80000000+0x3DA00000` (986 MiB), mid `0xC0000000+0x40000000` (1024 MiB),
    high `0x880000000+0x40000000` (1024 MiB) ≈ 3034 MiB. XNU takes one
    contiguous window (`arm_init.c` → `gPhysBase`/`gPhysSize`; ADT
    `DRAM_BASE=0x880000000`/`DRAM_SIZE=0x20000000` today), so widening it to
    fill the largest contiguous bank is the follow-up.
 5. **Ports on the phone:** the five component ports are merged onto `main`
-   (`0128`–`0133`, see the merge section). Their drivers are log-only or
-   read-only by default, so the next boot with the flag-fixed kernel should also
-   print the USB / PMIC / touch / buttons / panel state — the first device
-   evidence for them.
-6. Older housekeeping (still open): read the remaining board unknowns (ramoops
+   (`0128`–`0133`). Their drivers are log-only or read-only by default, so a
+   boot should print the USB / PMIC / touch / buttons / panel state — the first
+   device evidence for them.
+6. **GPU:** `docs/jackpotlte-mali.md` M0 is the read-only GPU probe (the single
+   biggest unknown is whether S-Boot leaves G3D powered/clocked).
+7. Older housekeeping (still open): read the remaining board unknowns (ramoops
    `log_pstore` offset, gpa1 bank offset, eMMC CIU timings) from the live DT /
    Samsung source and fill `board.h`, then enable `JT_HAVE_RAMOOPS`.
