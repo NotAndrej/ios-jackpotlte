@@ -49,9 +49,12 @@ output from the phone.**
   `pe_arm_map_interrupt_controller: found interrupt-controller` and
   `gPicBase: 0xfffffff03a400000`, so the GIC-400 mapping works.
 - The last line printed is our own marker
-  **`A5 vm: vm_page_bootstrap -> pmap_startup`**. The hang is therefore
-  *inside* `pmap_startup`, after the `npages=` marker is reached, not at
-  the branch or in the framebuffer text path. `initialize_screen: No video
+  **`A5 vm: vm_page_bootstrap -> pmap_startup`**, which sits immediately
+  before the call to `pmap_startup()`. No later marker appears: the next one,
+  `A5 vm: npages=...`, is printed only *after*
+  `pmap_steal_freeable_memory()` returns. The kernel therefore stops inside
+  `pmap_startup()` before that call returns — not at the branch and not in
+  the framebuffer text path. `initialize_screen: No video
   - forcing serial mode` is expected: the A8 path draws through the fbcon
   serial node, not the PE screen node.
 - `fastboot flash boot` failed (`remote: 'No such file or directory'`):
