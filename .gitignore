@@ -2,8 +2,9 @@
 backup/
 dtb/
 recovery/
-# third-party/Apple sources fetched for reading
-research/
+# third-party/Apple sources fetched for reading, at the repo root
+# (root-anchored: an unanchored `research/` also hid docs/research/)
+/research/
 *.ipsw
 shim/out/
 xnu/out/
