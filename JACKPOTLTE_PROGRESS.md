@@ -763,9 +763,13 @@ jackpotlte build did not:
 trampoline at `0x8f000000`, PMU power-down/up on the 7885 core numbering, then
 CPU_ON; a first `rc=0` counts as success so the second call is skipped. Verified
 with `git apply -R`/forward on the `0001`-`0134` tree and
-`tools/validate-repo.py`; **not yet run on the phone**. The `cpus=2` image is
-the first test: if a secondary is ever going to work, that one must, since it
-shares the boot core's cluster.
+`tools/validate-repo.py`; **not yet run on the phone**.
+
+The owner asked for the next image to use **all 8 cores**, so `jt12` boots
+`cpus=8` straight away. If a secondary still fails to come alive the wrapper logs
+name the CPU and both `rc` values, and a `cpus=2` image (same kernel, cmdline
+only) is kept on disk to tell "no secondary can start" apart from "only the other
+clusters fail".
 
 ### iOS root image (host build, not a device result)
 
