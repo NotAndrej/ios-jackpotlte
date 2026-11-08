@@ -17,8 +17,8 @@ output from the phone.**
 | 3 | Payload passes its check; jump to XNU | **reached (loader prints through `JUMP TO XNU`)** |
 | 4 | XNU prints to the framebuffer (log or panic) | **reached (screen output, 2026-11-08)** |
 | 5 | Storage (eMMC) detected | **reached (screen output, 2026-11-08)** — `0130` maps `dwmmc0@13500000` and reads the GPT (`SYSTEM` LBA 409600, 11,078,400 sectors) |
-| 6 | Root filesystem mounts | **next** — iOS root already in `USERDATA` (`IOSRoot.sparse.img`, flashed 2026-11-08 09:32); boot `rd=emmcroot0 emmcroot=USERDATA` to mount |
-| 7 | launchd, then SpringBoard | not started |
+| 6 | Root filesystem mounts | **reached (screen output, 2026-11-08)** — `rd=emmcroot0 emmcroot=USERDATA emmcwrite=1` mounts the HFS root and execs launchd |
+| 7 | launchd, then SpringBoard | **in progress / blocker** — launchd ran, then `unexpected SIGKILL ... (CS_KILLED)` `namespace 9 code 0xe` = `OS_REASON_EXEC`/`EXEC_EXIT_REASON_WRONG_PLATFORM`; fix = `unentitled_ios_sim_launch=1` (+`cs_enforcement_disable=1`) |
 
 ### Stage 2 evidence
 
@@ -419,6 +419,46 @@ flashed on 2026-11-08 09:32 UTC (47/47 chunks, RC=0; see the top section). So
 stage 6 is only the mount: boot `rd=emmcroot0 emmcroot=USERDATA` (and
 `emmcwrite=1` for a writable root) with the `0130` kernel.
 
+### Stage 6 reached, launchd killed as WRONG_PLATFORM (2026-11-08)
+
+Image `/var/tmp/a8-xnu-jt6.img` (sha256
+`18a27868887c284384ddcb9504d046f80dcaaed0feba8d7f6c0c9f848ede2805`, same
+`0130` kernel) was flashed to `BOOT` with cmdline
+`rd=emmcroot0 emmcroot=USERDATA emmcwrite=1` and rebooted.
+
+The `USERDATA` root mounted and `/sbin/launchd` executed — so **stage 6 is
+reached**. The phone then panicked
+(`IMG_20261108_134026153.jpg`, read directly):
+
+```
+panic(cpu 0 caller 0xfffffff007acde5c): unexpected SIGKILL of launchd
+(CS_KILLED) with reason -- namespace 9 code 0xe description none
+handshake structure not initialized
+```
+
+Decode (from the tree, `/var/tmp/art0128/bt/xnu`):
+
+- `namespace 9` = `OS_REASON_EXEC` (`bsd/sys/reason.h:96`),
+  `code 0xe` = 14 = `EXEC_EXIT_REASON_WRONG_PLATFORM` (`reason.h:257`).
+- The panic is the `psignal` guard for `initproc` (`bsd/kern/kern_sig.c:2064`).
+- The trigger is `bsd/kern/kern_exec.c:7390`: this kernel is built
+  `XNU_TARGET_OS_OSX`, so when the parent is `PLATFORM_IOS` the spawn must
+  either carry `com.apple.private.security.no-sandbox` or the debug tunable
+  `unentitled_ios_sim_launch` must be set, else it kills the child
+  `EXEC_EXIT_REASON_WRONG_PLATFORM`. `unentitled_ios_sim_launch` is declared
+  at `kern_exec.c:196`.
+- `handshake structure not initialized` is a consequence
+  (`osfmk/kdp/output_stages/out_shmem.c:499`, the panic coredump stage), not
+  the cause.
+
+The working S8/A5 cmdlines already carry the fix: `docs/upstream-README.md:115`
+(S8) and `A5XELTE_PROGRESS.md:72` both use `unentitled_ios_sim_launch=1`, and
+the A5 adds `cs_enforcement_disable=1` (`kern_cs.c:167`). The A8 cmdline was
+missing both. Corrected image `/var/tmp/a8-xnu-jt7.img` (sha256
+`81dee8c317af755821bb4339c02109988f00807decf2848569381b6a5aed8d51`) adds
+`unentitled_ios_sim_launch=1 cs_enforcement_disable=1`; `emmcwrite=1` keeps the
+root writable so launchd's mount phase can write.
+
 ### Display: DECON trigger ported into the jackpotlte shim (2026-11-08)
 
 Stage 2/4 were reached with the **S8 `shim/dreamlte`** loader, which is what
@@ -575,12 +615,14 @@ Snapdragon A530W/U. The mainline `exynos7885*` values above therefore apply.
 
 1. **Stage 5 is reached** (`0130`): the eMMC host maps and the GPT reads on the
    phone (`SYSTEM` LBA 409600, 11,078,400 sectors).
-2. **Stage 6 (mount):** the iOS root is already on `USERDATA` (`IOSRoot.sparse.img`
-   flashed 2026-11-08 09:32 UTC). Boot `rd=emmcroot0 emmcroot=USERDATA
-   emmcwrite=1` with the `0130` kernel and look for `hfs: mounted` / launchd.
-   A read-only probe with `emmcprobe=1 emmcroot=USERDATA` first prints the
-   `USERDATA` LBA+sectors if the mount needs debugging.
-3. Then stage 7: launchd, then SpringBoard.
+2. **Stage 6 is reached** (`jt6`): the `USERDATA` HFS root mounts and
+   `/sbin/launchd` executes.
+3. **Stage 7 (launchd):** launchd was SIGKILLed as `EXEC_EXIT_REASON_WRONG_PLATFORM`
+   because the cmdline lacked `unentitled_ios_sim_launch=1`. Corrected image
+   `/var/tmp/a8-xnu-jt7.img` adds it plus `cs_enforcement_disable=1`; flash and
+   photograph. Next likely walls after this: the 16 KiB dyld shared cache
+   (A5 needed `0107`, already in this kernel) and launchd's mount phase (needs
+   the writable root `emmcwrite=1`, already set).
 4. Older housekeeping (still open): read the remaining board unknowns (ramoops
    `log_pstore` offset, gpa1 bank offset, eMMC CIU timings) from the live DT /
    Samsung source and fill `board.h`, then enable `JT_HAVE_RAMOOPS`.
