@@ -939,7 +939,10 @@ IRQs `<0 57 4>`/`<0 21 4>`/`<0 286 4>`, PMU `0x11c80000`/`0x10000`, MIF
 `/var/tmp/opencode-keep/jackpotlte-wifi-fw/` from `VDavid003/samsung_jackpotlte_dump`
 (`A530FXXS8CSK2`), `mx140.bin` sha256
 `004e5982d658099a412f4f388f3aac7554a2e1fd63e7f988c3918ac6a6c88d07`. Details:
-`docs/drafts/jackpotlte-wifi/PORT-START.md`.
+`docs/drafts/jackpotlte-wifi/PORT-START.md`. The earlier draft
+`PORT-ATTEMPT.md` (untracked until now) assumed an `IO80211Controller`
+subclass and a `redwoodwifi=1` gate, both wrong; it is now bannered
+superseded and points at `PORT-START.md` (commit `17730ef`).
 
 ### The flashed iOS root has none of the donor tweaks (2026-11-08)
 
@@ -951,31 +954,60 @@ purplebuddy `SetupDone`, no `BKNoWatchdogs`, no mobileactivationd data ark, no
 calls `tools/sweet-root-tweaks.py`; that is the donor's pre-v12 state, which
 is the endless-DataMigration boot (bar runs, SpringBoard held in `_checkIn`).
 
-Prepared (host-side only, no kernel change, no patch):
-`tools/sweet-root-tweaks.py` now also writes `DMLastMigrationResults`
-`{success, buildVersion: 20H392}` (the key HakiOS / danstronics /
-`lechaukha12/xnu-xzs` ship; one line to drop), and
-`tools/jackpotlte/apply-root-tweaks.sh` drives fsck -> mount `loop,rw,force` ->
-tweaks -> clean umount -> fsck. Runs have been attempted but no lookup window
-held long enough to reach `mount`; it needs root on this host
-(`pkexec tools/jackpotlte/apply-root-tweaks.sh ...` prompts on the desktop).
-Next: run it on
-`/var/tmp/iosroot/iOSRoot.img`, then delete `IOSRoot.sparse.img`, re-sparse with
-`img2simg` and flash USERDATA (destructive, needs the owner's confirmation).
+**APPLIED to the host image on 2026-11-08, verified in the image (not booted).**
+`tools/sweet-root-tweaks.py` also writes `DMLastMigrationResults`
+`{success:true, buildVersion:20H392}` (the key HakiOS / danstronics /
+`lechaukha12/xnu-xzs` ship; one line to drop).
+`pkexec tools/jackpotlte/apply-root-tweaks.sh /var/tmp/IOSRoot.img` ran to
+completion: `fsck_hfs` reported the case-sensitive volume `iOSRoot` **OK**
+before and after, it mounted `loop,rw,force`, and it rewrote the image. Read
+back out of the finished image with `7z e -so`:
 
-**Host filesystem hazard (2026-11-08, still present).** `/var/tmp/iosroot/
-iOSRoot.img` lookup is intermittently `ENOENT` while `readdir` still lists it
-(it flips between ~0/20 and 20/20 failures within seconds, for user and root
-alike; `open()` fails in the same windows). `debugfs -R 'stat ...' /dev/sda2`
-prints `Inode bitmap checksum does not match bitmap` and refuses to open
-without `-c`. The raw image is inode 548316; the sparse (inode 526689) checks
-out as a normal 12,145,430,824-byte regular file. The root filesystem is ~98%
-full, so an in-place mount is the only option — copying the image out needs
-16 GiB free and there is not room. `apply-root-tweaks.sh` therefore retries
-both the existence check and `mount`; if the raw ever becomes permanently
-unopenable, `simg2img IOSRoot.sparse.img ...` is the fallback (needs the
-corrupt raw deleted first, for space). Do **not** run `fsck.ext4` on the
-mounted root.
+- `com.apple.migration.plist` — `LastSystemVersion=20H392`,
+  `DMUserDataDisposition=SyntheticDidUpgrade`,
+  `DMLastMigrationResults={buildVersion:20H392, success:true}`
+- `com.apple.purplebuddy.plist` — `SetupDone`, `SetupFinishedAllSteps`,
+  `SetupVersion`, `daemonizeNeedsToRun`
+- `com.apple.springboard.plist` — `BKNoWatchdogs`,
+  `FBLaunchWatchdogExceptions`, `MCForceShowCloudConfigurationUI`
+- `private/var/containers/{Bundle,Data/System,Shared/SystemGroup,Temp}` created
+- `launchd.plist`: 7 `_PanicOnCrash` renames, 2 CommCenter jobs removed;
+  VirtualAudio plug-in disabled, `StartRecorderServer=false` (3 plists)
+- `mobileactivationd` data ark **skipped**: the image has no such container
+  (expected — `mkiosroot.sh` never created one)
+
+The live image is now **`/var/tmp/IOSRoot.img`** (16 GiB apparent, 11.31 GiB
+allocated), rebuilt from the flashable sparse because of the hazard below.
+The flashable derivative is re-sparsed from it with `img2simg`. Flashing
+USERDATA is destructive and still needs the owner's confirmation.
+
+**Host filesystem hazard (2026-11-08) — worked around, cause not fixed.**
+The ext4 directory index for `/var/tmp/iosroot` is damaged. A fresh *lookup*
+of a name in that directory intermittently returns `ENOENT` while `readdir`
+still lists the entry (`ls -la` shows it, `stat`/`open`/`rm` fail in the same
+window). It flips within seconds, for user and root alike, and it hit a
+**newly created** entry too, so it is the directory, not one inode.
+`debugfs -R 'stat ...' /dev/sda2` prints `Inode bitmap checksum does not match
+bitmap` and refuses to open without `-c`; the kernel logs no ext4 errors and
+the fs reports `clean`. No data is lost — inode 548316 was intact (regular,
+`Links 1`, 16 GiB, full block list).
+
+Done instead of fighting it: the raw was **rebuilt from the flashable sparse**
+into a healthy directory (`/var/tmp`), so no lookup goes through the damaged
+index. Do not put the image back in `/var/tmp/iosroot`.
+
+- **`simg2img` on this host writes the output densely.** It needs the full
+  16 GiB and it *filled `/` to 100%* on 2026-11-08 before failing with
+  `No space left on device`, leaving a truncated raw. Always use
+  `tools/jackpotlte/unsparse-holey.py` instead: it seeks over don't-care and
+  zero-fill chunks, so the output is 16 GiB apparent but only ~11.3 GiB
+  allocated (4.7 GiB of holes), matching the original raw.
+- `tools/jackpotlte/unsparse-holey.py --check SPARSE` prints the exact bytes
+  needed before writing anything.
+- `apply-root-tweaks.sh` still retries the existence check, fsck and mount, and
+  runs with a relative name from the image's directory; that stays useful for
+  ordinary transient lookup failures.
+- Do **not** run `fsck.ext4` on the mounted root.
 
 ## Hardware facts (from Samsung's own 4.4 source and the mainline DT; NOT yet confirmed on the phone)
 
@@ -1072,14 +1104,18 @@ image (see "The flashed iOS root has none of the donor tweaks").
    `jt13` image on disk (`0136` kernel) is the control for the single-cluster
    change. BOOT-only flash; capture a **serial** log, not a photo, to see the
    MPIDRs attempted.
-2. **WiFi compile verdict:** CI `42512239378` builds `0138`+`0139`. If green,
-   boot that kernel **without** `a8wifi` and confirm only the
+2. **WiFi (compile green, never booted):** CI `42512239378` built
+   `0138`+`0139` **success** (Build, stub and LSE gates passed). Boot that
+   kernel **without** `a8wifi` and confirm only the
    `A5XELTE SCSC: PMU ...` identity lines appear; then try `a8wifi=1`.
-3. **iOS root (DataMigration gate):** run
-   `sudo tools/jackpotlte/apply-root-tweaks.sh /var/tmp/iosroot/iOSRoot.img`,
-   then delete `IOSRoot.sparse.img`, re-sparse with `img2simg` and flash
-   USERDATA (needs the owner's confirmation). This is the host-side fix for the
-   endless progress bar; no kernel change.
+   `/var/tmp/a8-xnu-jt15-cpus8.img` (sha256 `914edae8...c5991a`) is that
+   kernel at `cpus=8`.
+3. **iOS root (DataMigration gate):** host side **done** — applied and
+   verified in `/var/tmp/IOSRoot.img` (see "APPLIED to the host image").
+   Remaining: `img2simg /var/tmp/IOSRoot.img /var/tmp/IOSRoot.sparse.img`,
+   then `fastboot flash USERDATA` — destructive, needs the owner's
+   confirmation. This is the host-side fix for the endless progress bar; no
+   kernel change.
 4. **DRAM map (for "all 4 GB"):** `shim/fdt.c`'s `fdt_memory_all()` enumerates
    every `/memory` node and `dt_probe()` prints each bank plus the total. Source
    banks (Eureka `exynos7885-jackpotlte_common.dtsi:28-41`): low
