@@ -367,6 +367,25 @@ BSD / Skywalk / networking have all initialized, and the boot is now blocking
 on a block device that publishes an HFS volume. No storage driver provides one
 yet, so **stage 5 (storage) is now the blocker** (previously stage 4).
 
+### Storage `0130`: eMMC ADT node + 7885 dwmmc0 base
+
+Two gaps stopped `bsd/dev/a5xelte_emmc.c` from ever mapping the host:
+
+1. `tools/mkadt_jackpotlte.py` now adds `/a5xelte-emmc`
+   `reg = <0x13500000 0x2000>`. Source: Samsung `exynos7885.dtsi`, where the
+   embedded eMMC is `dwmmc0@13500000` (dwmmc1 `0x13510000` = SDIO, dwmmc2
+   `0x13550000` = SD card). Verified by dumping the built ADT: `reg[0] =
+   0x13500000`, `reg[1] = 0x2000`.
+2. `0130-jackpotlte-emmc-dwmmc0-base.patch` makes `emmc_map_host()` accept the
+   board's base: `0x13500000` under `JACKPOTLTE`, `0x13540000` (the A5/
+   Exynos7580 value from `tools/mkadt_a5xelte.py`) otherwise. Only
+   `bsd/dev/a5xelte_emmc.c` changes.
+
+sha256 `01d812786f32579bdfdf6a57eb273df3758ed93f2356e4b571d5ee40d15696fd`;
+applies cleanly on the `0128`-applied tree (the file also has `0108`/`0110`/
+`0118` on top of `0104`) and reproduces the edited file. The probe run adds
+`emmcprobe=1` to the cmdline; `rd=emmcroot0` selects the eMMC root.
+
 ### Display: DECON trigger ported into the jackpotlte shim (2026-11-08)
 
 Stage 2/4 were reached with the **S8 `shim/dreamlte`** loader, which is what

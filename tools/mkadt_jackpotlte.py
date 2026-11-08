@@ -125,6 +125,15 @@ def build():
         ('height', mkadt.u32(FB_H)),
         ('stride', mkadt.u32(FB_W * 4)),
     ]))
+    # eMMC: Samsung exynos7885.dtsi dwmmc0@13500000 (the embedded device,
+    # clock MMC_EMBD; dwmmc1 0x13510000 is SDIO, dwmmc2 0x13550000 is the SD
+    # card). bsd/dev/a5xelte_emmc.c maps this window and reads the GPT on
+    # emmcprobe=1 / rd=emmcroot0. Absolute physical address, as there.
+    root.children = [n for n in root.children if n.prop('name') !=
+                     mkadt.cstr('a5xelte-emmc')]
+    root.children.append(mkadt.node('a5xelte-emmc', [
+        ('reg', mkadt.u64(0x13500000, 0x2000)),
+    ]))
     return root
 
 
