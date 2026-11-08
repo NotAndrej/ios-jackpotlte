@@ -12,8 +12,8 @@ storage, ADT).
 > ⚠️ Early bring-up, not a usable port yet. **On the A8, XNU boots, maps the
 > GIC and prints to the framebuffer console, then stops inside
 > `pmap_startup()`.** No iOS userland has run on the A8 yet. Installing the
-> root image **erases USERDATA** (all Android data). SM-A530F only — the
-> Snapdragon A530W/U are different machines.
+> root image **erases USERDATA** (all Android data). SM-A530F only,
+> Other models of the A8 might not work properly.
 
 The living status, with every image hash and photo reference, is
 **[JACKPOTLTE_PROGRESS.md](JACKPOTLTE_PROGRESS.md)**. The readings still to be
