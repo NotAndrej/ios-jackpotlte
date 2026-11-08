@@ -18,7 +18,7 @@ output from the phone.**
 | 4 | XNU prints to the framebuffer (log or panic) | **reached (screen output, 2026-11-08)** |
 | 5 | Storage (eMMC) detected | **reached (screen output, 2026-11-08)** — `0130` maps `dwmmc0@13500000` and reads the GPT (`SYSTEM` LBA 409600, 11,078,400 sectors) |
 | 6 | Root filesystem mounts | **reached (screen output, 2026-11-08)** — `rd=emmcroot0 emmcroot=USERDATA emmcwrite=1` mounts the HFS root and execs launchd |
-| 7 | launchd, then SpringBoard | **in progress / blocker** — launchd ran, then `unexpected SIGKILL ... (CS_KILLED)` `namespace 9 code 0xe` = `OS_REASON_EXEC`/`EXEC_EXIT_REASON_WRONG_PLATFORM`; fix = `unentitled_ios_sim_launch=1` (+`cs_enforcement_disable=1`) |
+| 7 | launchd, then SpringBoard | **in progress** — jt7 cleared `WRONG_PLATFORM`; launchd runs, now `launchd_cache_loader` aborts `Unable to find AMFI` → fix `launchd_unsecure_cache=1` (jt8) |
 
 ### Stage 2 evidence
 
@@ -458,6 +458,33 @@ missing both. Corrected image `/var/tmp/a8-xnu-jt7.img` (sha256
 `81dee8c317af755821bb4339c02109988f00807decf2848569381b6a5aed8d51`) adds
 `unentitled_ios_sim_launch=1 cs_enforcement_disable=1`; `emmcwrite=1` keeps the
 root writable so launchd's mount phase can write.
+
+### `jt7` clears WRONG_PLATFORM; cache loader aborts on AMFI (2026-11-08)
+
+Image `/var/tmp/a8-xnu-jt7.img` (sha256
+`81dee8c317af755821bb4339c02109988f00807decf2848569381b6a5aed8d51`) added
+`unentitled_ios_sim_launch=1 cs_enforcement_disable=1`. Photo
+`IMG_20261108_134838366.jpg` (read directly) shows launchd running well past
+the previous kill:
+
+```
+0 Found valid port: 2563 Valid: 1
+Using default cache paths
+Code: /System/Library/xpc/launchd.plist Sig: /System/Library/xpc/launchd.plist.sig
+abort: Unable to find AMFI
+pid 23 exited -- exit reason namespace 7 subcode 0x1, description Unable to find AMFI
+panic(cpu 0 caller 0xfffffff007acb1bc): launchd_cache_loader[23] exited -- ... Unable to find AMFI
+```
+
+So `jt7` fixed the `EXEC_EXIT_REASON_WRONG_PLATFORM` kill. New blocker:
+libignition's `launchd_cache_loader` aborts because it cannot find AMFI
+(namespace 7 = `OS_REASON_LIBXPC`; the description is the userspace abort
+string, present in `IOSRoot.sparse.img`). `docs/upstream-README.md:125`
+documents the fix: `launchd_unsecure_cache=1` ("launchd accepts its job cache
+without AMFI"). `jt8` (sha256
+`81735341ac3eb7f4a4c5a63ed8a501e5f7d5f8792062aa502d8cff4f4d7aec72`) adds
+`launchd_unsecure_cache=1 ignition_level=1`; boot args reach userspace through
+the `kern.bootargs` sysctl (`bsd/kern/kern_sysctl.c:2177`).
 
 ### Display: DECON trigger ported into the jackpotlte shim (2026-11-08)
 
