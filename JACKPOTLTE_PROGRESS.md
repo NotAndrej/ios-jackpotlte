@@ -918,6 +918,57 @@ regenerated the ADT green. Kernel `kernel.development.a5xelte`
   single-cluster change on top of `0136`; a `jt13` control is on disk
   (`a8-xnu-jt13.img`).
 
+### jt14 panicked: the ADT lost its platform-match entry (`jt16`, 2026-11-08)
+
+`jt14` (8 cores) was flashed together with the patched iOS root and panicked
+(photo `IMG_20261108_204818781.jpg`):
+
+    panic(cpu 0 ...): Unable to find driver for this platform: "samsung,jackpotlte"
+    @IOPlatformExpert.cpp:2338
+
+That is `IOPanicPlatform::start()`: no `IOPlatformExpert` personality matched,
+so the fallback driver ran instead of `SweetPlatformExpert`. It is not the
+ticket lock and not the core count.
+
+Dumping the ADT out of each boot image's `SWEETXNU` payload settles it:
+
+| image | root `compatible` | ADT |
+| --- | --- | --- |
+| jt10 | `samsung,jackpotlte\|samsung,exynos7885\|AppleARM\|samsung,a5xelte` | 9796 B |
+| jt13 | same as jt10 | 9796 B |
+| jt14 | `samsung,jackpotlte\|samsung,exynos7885\|AppleARM` | 9780 B |
+
+The A5XELTE kernel's `SweetPlatformExpert` matches `('samsung,a5xelte',
+'samsung,dreamlte')` (`iokit/KernelConfigTables.cpp`, from `0086` + `0124`),
+and IODT matching considers every compatible entry. `jt10`/`jt13` bound
+because they still carried the trailing `samsung,a5xelte`; `jt14` lost it.
+
+Root cause is a build-path mismatch, not the kernel: `mkadt_jackpotlte.py`
+never emitted that entry. The old local scripts
+(`/var/tmp/xnu-build/mkimg-jt-*.sh`) appended it as a post-processing step
+("keep the real A8 names first and append the donor name for the platform
+match"), but `jt14` was built with the in-tree
+`tools/jackpotlte/make-boot.sh`, which does not. The append was an
+uncommitted assumption of those /var/tmp scripts.
+
+Fixed in `5dedd44`: `mkadt_jackpotlte.py` appends `samsung,a5xelte` itself, so
+every build path gets it; the regenerated ADT is 9796 B, the size of the
+jt10/jt13 ADTs. Kernel and iOS root are untouched.
+
+New BOOT images from the same verified `0137` kernel (`d47087a2...`), ADT
+9796 B with the 4th entry verified in-image:
+
+| image | cmdline | sha256 |
+| --- | --- | --- |
+| `/var/tmp/a8-xnu-jt16-cpus4.img` | `... cpus=4 ...` | `8ca8fac83c7ce5076c4582a26efd989fc3b0e07faa7b8573de5c4849765b4532` |
+| `/var/tmp/a8-xnu-jt16-cpus8.img` | `... cpus=8 ...` | `73963022efb00ef751648689ad98ba67ab47e1479e40888525c4f01f48399cda` |
+
+`cpus=4` first (owner's request): the platform panic is core-independent, so a
+`cpus=4` image would have hit it too. Four cores isolates the DataMigration
+test from the still-unproven `0137` cluster change; `cpus=8` is the next trial
+if `0137` needs verifying. Neither is flashed yet; the patched root is already
+on USERDATA.
+
 ### SCSC/Maxwell WiFi port start (`0138`, `0139`, 2026-11-08)
 
 `0138-jackpotlte-scsc-mx-transport.patch` adds `bsd/dev/a5xelte_scsc.{c,h}`:
