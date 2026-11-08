@@ -38,8 +38,20 @@ set -euo pipefail
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 img=${1:-/var/tmp/iosroot/IOSRoot.img}
 
-[ -f "$img" ] || { echo "error: no image at $img" >&2; exit 1; }
 [ "$(id -u)" -eq 0 ] || { echo "error: run as root (sudo $0 $img)" >&2; exit 1; }
+
+# This host intermittently returns ENOENT for an entry that readdir still
+# lists (an ext4 dentry quirk seen after the earlier OOM). Retry the check
+# rather than failing a multi-minute job on a transient lookup.
+n=0
+until [ -f "$img" ]; do
+	n=$((n + 1))
+	if [ "$n" -ge 15 ]; then
+		echo "error: no image at $img (after $n tries)" >&2
+		exit 1
+	fi
+	sleep 1
+done
 
 echo "--- fsck before (repairs the header Linux objects to) ---"
 fsck.hfsplus -fy "$img" || true
