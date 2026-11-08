@@ -16,9 +16,28 @@ output from the phone.**
 | 2 | Loader runs on the A8 and prints the banner | **reached (screen output, 2026-11-08)** |
 | 3 | Payload passes its check; jump to XNU | **reached (loader prints through `JUMP TO XNU`)** |
 | 4 | XNU prints to the framebuffer (log or panic) | **reached (screen output, 2026-11-08)** |
-| 5 | Storage (eMMC) detected | **reached (screen output, 2026-11-08)** — `0130` maps `dwmmc0@13500000` and reads the GPT (`SYSTEM` LBA 409600, 11,078,400 sectors) |
+| 5 | Storage (eMMC) detected | **reached (screen output, 2026-11-08)** — `0127` (was `0130`) maps `dwmmc0@13500000` and reads the GPT (`SYSTEM` LBA 409600, 11,078,400 sectors) |
 | 6 | Root filesystem mounts | **reached (screen output, 2026-11-08)** — `rd=emmcroot0 emmcroot=USERDATA emmcwrite=1` mounts the HFS root and execs launchd |
 | 7 | launchd, then SpringBoard | **in progress** — jt7 cleared `WRONG_PLATFORM`; launchd runs, now `launchd_cache_loader` aborts `Unable to find AMFI` → fix `launchd_unsecure_cache=1` (jt8) |
+
+### Patch renumbering (2026-11-08)
+
+The A5 VM/pmap diagnostic patches were **removed**: their per-call `kprintf`s
+(`A5 expand`, `A5 de`/`dg`/`dg2`/`dg3`, `A5 tt_alloc`, `A5 pgalloc`, `A5 pg`,
+`A5 steal`, `A5 vm`, `A5 pv`, `A5 ptd`) ran on every pmap expand / page-table
+allocation, so the framebuffer console only ever showed the spam and the real
+boot tail (launchd / SpringBoard) could not be seen. They were scaffolding for
+the stage-4 pmap hang, which the physmap fix resolved; they are not needed at
+runtime and printed nothing a normal boot wants.
+
+- **Removed** (diagnostic-only, no functional content):
+  old `0125-jackpotlte-vm-trace`, `0126-jackpotlte-pmap-diag`,
+  `0127-jackpotlte-pmap-layout`.
+- **Renumbered down:** old `0128-jackpotlte-pmap-layout-fix` → `0125`,
+  old `0129-jackpotlte-cpu-topology-mpidr` → `0126`,
+  old `0130-jackpotlte-emmc-dwmmc0-base` → `0127`.
+
+Every reference below dated **before** this note uses the **old** numbers.
 
 ### Stage 2 evidence
 
@@ -640,8 +659,8 @@ Snapdragon A530W/U. The mainline `exynos7885*` values above therefore apply.
 
 ## Next concrete action
 
-1. **Stage 5 is reached** (`0130`): the eMMC host maps and the GPT reads on the
-   phone (`SYSTEM` LBA 409600, 11,078,400 sectors).
+1. **Stage 5 is reached** (`0127`, was `0130`): the eMMC host maps and the GPT
+   reads on the phone (`SYSTEM` LBA 409600, 11,078,400 sectors).
 2. **Stage 6 is reached** (`jt6`): the `USERDATA` HFS root mounts and
    `/sbin/launchd` executes.
 3. **Stage 7 (launchd):** launchd was SIGKILLed as `EXEC_EXIT_REASON_WRONG_PLATFORM`
@@ -650,6 +669,10 @@ Snapdragon A530W/U. The mainline `exynos7885*` values above therefore apply.
    photograph. Next likely walls after this: the 16 KiB dyld shared cache
    (A5 needed `0107`, already in this kernel) and launchd's mount phase (needs
    the writable root `emmcwrite=1`, already set).
+4. **Console hygiene (2026-11-08):** the A5 VM/pmap diagnostic patches
+   (old 0125–0127) were removed and the remaining patches renumbered (see the
+   "Patch renumbering" note). Rebuild the kernel so the per-call `kprintf` spam
+   is gone and the real boot tail (launchd / SpringBoard) is visible.
 4. Older housekeeping (still open): read the remaining board unknowns (ramoops
    `log_pstore` offset, gpa1 bank offset, eMMC CIU timings) from the live DT /
    Samsung source and fill `board.h`, then enable `JT_HAVE_RAMOOPS`.

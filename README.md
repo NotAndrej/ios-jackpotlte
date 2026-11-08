@@ -42,8 +42,11 @@ from the phone. Build success is never a boot claim.
 `gPicBase: 0xfffffff03a400000`, and then silence after our own marker
 `A5 vm: vm_page_bootstrap -> pmap_startup`. The framebuffer console wraps its
 rows, so the kernel really stops printing rather than running out of screen.
-Patch `0125-jackpotlte-vm-trace.patch` adds A5XELTE-gated markers around
-`pmap_startup()` / `pmap_steal_memory_internal()` to bisect that window.
+That window was bisected with A5XELTE-gated `pmap_startup()` /
+`pmap_steal_memory_internal()` markers (former patches 0125–0127, since removed
+because their per-call prints flooded the console — see the "Patch renumbering"
+note in `JACKPOTLTE_PROGRESS.md`); the fix is
+`0125-jackpotlte-pmap-layout-fix.patch`.
 
 ### Built, verified on the host, not yet booted
 
@@ -123,7 +126,7 @@ with the A8 constants); XNU needs macOS/Xcode and is built only by CI.
 | `shim/jackpotlte/` | A8 shim: `board.h` (every fact with a source), `loader.c`, `start.S` |
 | `shim/dreamlte/` | S8 shim; the image that reached stage 4 is this one with the A8 constants (FB `0xec000000`, 1080×2220, DECON `0x14860070`) |
 | `xnu/patches/0124-dreamlte-s8.patch` | S8 board facts and layout workarounds |
-| `xnu/patches/0125-jackpotlte-vm-trace.patch` | `pmap_startup` trace markers for the A8 |
+| `xnu/patches/0125-jackpotlte-pmap-layout-fix.patch` | deterministic physmap + VA reserve for the A8 (fixed the stage-4 pmap hang) |
 | `tools/mkadt_jackpotlte.py` | Apple Device Tree for the A8 |
 | `tools/mkpayload.py`, `tools/dreamlte_mkboot.py` | payload builder and Samsung boot-image packer |
 | `tools/mkiosroot.sh` | iOS root image (case-sensitive HFS+, cryptexes, keybag) |
