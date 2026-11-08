@@ -585,6 +585,50 @@ applies as `0133` after `0001-0132`. The
 `a5panel=1` path is untested and should be tried only after the log-only boot
 confirms S-Boot's DSIM/rail state.
 
+### Port merge + the `-DJACKPOTLTE=1` root cause (2026-11-08)
+
+The five component ports were merged onto `main` (each branch was based on the
+pre-renumber tree, so their patches were renumbered):
+
+| New patch | Port | From branch (old number) |
+| --- | --- | --- |
+| `0128` | USB dwc3 `@0x13600000` read-only probe | `a8-usb` (0131) |
+| `0129` | PMIC fuel gauge / charger read-only probe | `a8-pmic` (0131) |
+| `0130` | sec_ts I2C4 id probe + `tsp_ldo_en` power log | `a8-touch` (0131) |
+| `0131` | sec_ts read-only contact path (`a8touchlog`) | `a8-touch` (0132) |
+| `0132` | gpa1 buttons poll | `a8-keys` (0131) |
+| `0133` | DSIM/panel bring-up, log-only by default | `a8-panel` (0131) |
+
+**The panic in photo `IMG_20261108_152844733`** (`Kernel data abort`, pc
+`0xfffffff00747a070`, ESR `0x96000010`) decodes to
+`dreamlte_battery_read+0x60`: the S8 donor function maps the Galaxy S8 MAX77865
+fuel gauge at physical `0x10970000` (`0124-dreamlte-s8.patch:337`) and reads it.
+That address is not backed on the A8, so the access external-aborts.
+
+Why the S8 code ran at all: `pexpert/pexpert/arm64/A5XELTE.h` (patch `0124`)
+picks the board variant from the **`JACKPOTLTE`** macro:
+
+```c
+#if defined(JACKPOTLTE)
+    ... A8 board facts ...
+#else
+    #define DREAMLTE 1
+    ... S8 board facts ...
+#endif
+```
+
+`0124` also defines a `JACKPOTLTE` stub for `dreamlte_battery_read` that returns
+`-1` without touching MMIO (`0124-dreamlte-s8.patch:409-421`). But the CI A5XELTE
+job never passed `-DJACKPOTLTE=1`, so the build defined `DREAMLTE` and compiled
+the S8 paths — and every `#if defined(JACKPOTLTE)` block (the battery stub and
+all five new ports) was **dead code**. `xnu.yml` now sets
+`EXTRA_MACHINE_FLAGS: -DJACKPOTLTE=1` for push builds (a manual dispatch can
+still override it). This is the fix for the panic, not a kernel patch.
+
+Verified on a pristine `xnu-8796.141.3` tree: run the three stage scripts
+(`0019` libpthread, `0020` BearSSL, `0026` HFS), then `git apply` `0001-0133` in
+order → **0 failures**. `tools/validate-repo.py` passes (133 patches, no gaps).
+
 ### iOS root image (host build, not a device result)
 
 - Built with `tools/mkiosroot.sh OS.dmg SYSTEMOS.dmg APPOS.dmg
