@@ -814,6 +814,11 @@ If the sequence enable was the missing piece, `cpus=8` comes up. If it does not,
 the logged `status`, `reset`, `noncpu` and `l2` values say whether the core is
 unpowered, held in reset, or powered with the cluster still off.
 
+The owner reports the `cpus=4` boot reaches **50% of the progress bar** promptly
+(after the single-core run needed a long crawl to get there), i.e. the slowdown
+really was lack of SMP and not a boot fault. Outcome beyond 50% not yet
+recorded.
+
 ### iOS root image (host build, not a device result)
 
 - Built with `tools/mkiosroot.sh OS.dmg SYSTEMOS.dmg APPOS.dmg
@@ -837,6 +842,43 @@ unpowered, held in reset, or powered with the cluster still off.
 - **Flashed 2026-11-08 09:32 UTC** (see the top "Flashed" section):
   `IOSRoot.sparse.img`, 47/47 chunks, RC=0. The *mount* result is still stage 6.
 
+
+### 3D acceleration: scoping (2026-11-08)
+
+Scoping only — nothing applied and no boot-path change. Full write-up:
+`docs/jackpotlte-mali.md`; draft-only skeletons in
+`docs/drafts/jackpotlte-mali/` (not part of the numbered series).
+
+- Reference is HakiOS's Mali stack (Mali-G52 MC2 on MT6768). Public, commit-
+  pinned sources: `oosexgang/hakios-xnu-kernel` @ `620c775` branch `mtk`,
+  `oosexgang/hakios-mt6768` @ `84b0252`, `oosexgang/hakios-metal` @ `d36f329`,
+  Mesa 25.0.7. The Metal plug-in, the AIR→NIR frontend and the Mesa panfrost
+  layer are all public source; only prebuilt binaries and Apple's
+  `default.metallib` are not.
+- **The A8 GPU is Mali-G71 = Bifrost v6**, not the G52 = v7 the reference is
+  tuned for (`pan_props.c:61`; arch = `gpu_id >> 12`, `pan_props.h:113-128`).
+  The reference's Darwin panfrost build compiles **v7 only**
+  (`tools/mesa/panfrost-darwin.patch:199`) and `pan_screen.c` returns NULL
+  unless `arch == 7` (`:222`) — so v6 must be re-enabled in the Mesa build and
+  screen-init dispatch before any port can render.
+- Exynos 7885 GPU facts (Samsung Eureka 4.4.302 tree; not yet read on the
+  phone): `mali@0x11500000` size `0x5000`; IRQ names JOB/MMU/GPU = GIC INTID
+  **191/192/190**; power `pd_g3d@11c840a0`, status `0x11c840a4` mask `0xf`;
+  clocks in CMU_G3D `@0x11400000` (`PLL_G3D` con0 `@0x120`, div `@0x1800`,
+  gate `@0x2004`) plus `CORE_G3D` in `@0x12000000`; **no** `samsung,sysmmu`
+  node for the GPU. Citations in `docs/jackpotlte-mali.md` §3.
+- The jackpotlte tree has no GPU or accelerator code: no `IOAcceleratorES`,
+  no Redwood/Mali driver. The display path is the SWEET one —
+  `SweetSurface`/`SweetFramebuffer` (`0046`), pixels at `s->memory + s->offset`,
+  and `AppleCLCD::swap()` is a CPU memcpy to panel memory (`0046:1217`).
+- Plan shape: M0 read-only GPU probe → M1 pd_g3d/PLL_G3D/CMU_G3D power+clock →
+  M2 MMU + one job → M3 `RedwoodMali`-shaped user client over `SweetSurface` →
+  M4 Metal plug-in with v6 enabled. The draft M0 probe reads only always-on
+  registers and reads GPU registers only if the PMU status says G3D is already
+  up (an access to an unpowered block can stall the bus).
+- **Single biggest unknown:** whether S-Boot leaves G3D powered and clocked. If
+  not, no GPU register read works until the power/clock sequence runs. Source
+  cannot answer this; one readback can. That is what M0 is for.
 
 ## Hardware facts (from Samsung's own 4.4 source and the mainline DT; NOT yet confirmed on the phone)
 

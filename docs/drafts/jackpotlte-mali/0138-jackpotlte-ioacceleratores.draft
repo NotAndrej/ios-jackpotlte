@@ -1,0 +1,105 @@
+# DRAFT — NOT APPLIED, NOT IN xnu/patches/
+#
+# jackpotlte IOAcceleratorES service skeleton (Metal discovery step 1-2).
+#
+# A sketch, not a working patch: it shows the SHAPE the jackpotlte display
+# stack would need so that Metal finds a device, adapted from the reference's
+# implementation in hakios-xnu-kernel @620c775
+# iokit/Kernel/MiniIOMobileFramebuffer.cpp:1893-2030.  It is deliberately
+# incomplete (no attach/start plumbing, no parent wiring) and must not be
+# applied.  See docs/jackpotlte-mali.md §2 and §5.
+#
+# Why a boot-arg gate: publishing MetalPluginName/MetalPluginClassName makes
+# Metal treat the service as a real GPU.  A half-made device makes an app
+# ASSERT and launchd restarts an aborting daemon in a loop
+# (MiniIOMobileFramebuffer.cpp:1925-1935).  So the properties are only ever
+# published on a boot made on purpose.
+#
+# This draft changes NO boot path and adds NO renderer.  It only publishes the
+# two properties; until a RedwoodMali-shaped user client exists (M3), Metal
+# would find a device that then fails — which is exactly why the gate is
+# mandatory and why this is a draft.
+
+diff --git a/iokit/Kernel/arm/SweetFramebuffer.cpp b/iokit/Kernel/arm/SweetFramebuffer.cpp
+--- a/iokit/Kernel/arm/SweetFramebuffer.cpp
++++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
+@@ <anchor: end of the existing AppleCLCD service definition>
++
++/*
++ * The graphics accelerator.  There is none yet; this is the empty service that
++ * Metal's first discovery step (IOServiceMatching("IOAcceleratorES"),
++ * docs/metal.md §1) will match.  It carries no Metal properties by default, so
++ * both Metal and OpenGL ES pass it over and CoreAnimation keeps its software
++ * renderer (MiniIOMobileFramebuffer.cpp:1889-1892).
++ *
++ * The two property keys are read in this order, and the first is a hard gate:
++ * Metal reads MetalPluginName (getMetalPluginClassForService, 0x181a39ba4) and
++ * returns nil before reading the second if it is absent (docs/metal.md §1,
++ * steps 2-3).  Values, for our eventual bundle:
++ *     MetalPluginName      = "RedwoodMetal"          (bundle base name)
++ *     MetalPluginClassName = "RedwoodMetalDevice"     (NSPrincipalClass)
++ */
++#define kAcceleratorPluginNameKey	"MetalPluginName"
++#define kAcceleratorPluginClassNameKey	"MetalPluginClassName"
++
++class IOAcceleratorES : public IOService
++{
++	OSDeclareDefaultStructors(IOAcceleratorES);
++public:
++	virtual IOReturn setProperties(OSObject *properties) APPLE_KEXT_OVERRIDE;
++};
++
++OSDefineMetaClassAndStructors(IOAcceleratorES, IOService);
++
++/* boot-arg jtmetal=1 (name TBD; reference uses metal=1) */
++static bool jtAcceleratorTakesProperties;
++
++IOReturn
++IOAcceleratorES::setProperties(OSObject *properties)
++{
++	OSDictionary *dict;
++	OSString *key, *value;
++	OSDictionary *out;
++
++	if (!jtAcceleratorTakesProperties)
++		return kIOReturnUnsupported;	/* as MiniIOMobileFramebuffer.cpp:1956-1960 */
++
++	dict = OSDynamicCast(OSDictionary, properties);
++	if (dict == NULL)
++		return kIOReturnUnsupported;
++
++	/*
++	 * Accept only the two keys, and only CFString values
++	 * (MiniIOMobileFramebuffer.cpp:1970-1985).  Everything else is refused.
++	 */
++	out = OSDictionary::withCapacity(2);
++	if (out == NULL)
++		return kIOReturnNoMemory;
++	OSDictionaryIterator *it = OSDictionaryIterator::withDictionary(dict);
++	while ((key = (OSString *)it->getNextObject()) != NULL) {
++		value = OSDynamicCast(OSString, dict->getObject(key));
++		if (value == NULL)
++			continue;
++		if (key->isEqualTo(kAcceleratorPluginNameKey) ||
++		    key->isEqualTo(kAcceleratorPluginClassNameKey))
++			out->setObject(key, value);
++	}
++	it->release();
++
++	setProperty(kAcceleratorPluginNameKey, out->getObject(kAcceleratorPluginNameKey));
++	setProperty(kAcceleratorPluginClassNameKey, out->getObject(kAcceleratorPluginClassNameKey));
++	out->release();
++	return kIOReturnSuccess;
++}
++
++/* Published at registerService() time, as MiniIOMobileFramebuffer.cpp:2011-2022. */
++static void
++jtAcceleratorPublish(void)
++{
++	IOAcceleratorES *acc = OSTypeAlloc(IOAcceleratorES);
++	if (acc == NULL)
++		return;
++	if (acc->init() && acc->attachToParent(gIOServiceRoot /* TBD */, gIOServicePlane))
++		acc->registerService();
++	acc->release();
++}

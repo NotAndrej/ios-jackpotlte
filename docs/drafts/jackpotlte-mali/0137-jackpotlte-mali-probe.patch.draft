@@ -1,0 +1,160 @@
+# DRAFT — NOT APPLIED, NOT IN xnu/patches/
+#
+# jackpotlte Mali GPU probe (M0 in docs/jackpotlte-mali.md §6).
+#
+# This is a review skeleton, kept outside the numbered series on purpose.  It is
+# named 0137 to show where it would go IF approved (0136 is already taken by
+# jackpotlte-cluster-power), but it is NOT part of the contiguous series and
+# tools/validate-repo.py must not see it (it
+# globs xnu/patches/*.patch; this file lives in docs/drafts/ and ends .draft).
+# Do not move it into xnu/patches/ or run it as a patch until [owner] approves.
+#
+# What it does: maps three windows and READS registers.  It writes nothing —
+# no PMU, no CMU, no PLL, no GPU register, no MMU, no job, no interrupt
+# unmask, no clock or rail enable.  GPU registers are read ONLY if the
+# always-on PMU status register says the G3D domain is already up, so a phone
+# whose S-Boot left G3D off does not stall a bus (docs/jackpotlte-mali.md §8).
+#
+# Every address is cited to Samsung's Eureka 4.4.302 tree or to the reference
+# register map (hakios-xnu-kernel @620c775 bsd/dev/redwood_mali.c:304-339).
+
+diff --git a/bsd/conf/files b/bsd/conf/files
+index 0d5f2a1..c3b9e77 100644
+--- a/bsd/conf/files
++++ b/bsd/conf/files
+@@ bsd/conf/files
+ bsd/dev/a5xelte_usb.c			standard
++bsd/dev/jackpotlte_mali.c		standard
+ bsd/dev/jackpotlte_pmic.c		standard
+ bsd/dev/sweet_sample.c			standard
+
+diff --git a/bsd/dev/jackpotlte_mali.c b/bsd/dev/jackpotlte_mali.c
+new file mode 100644
+index 0000000..0000000
+--- /dev/null
++++ b/bsd/dev/jackpotlte_mali.c
+@@ -0,0 +1,141 @@
++/*
++ * Galaxy A8 2018 (SM-A530F, jackpotlte, Exynos 7885) Mali GPU probe.
++ *
++ * STAGE: READ-ONLY.  Prints whether the G3D power domain is up and, only if
++ * it is, the Mali's identity registers.  It programs nothing: no write to any
++ * PMU/CMU/PLL/GPU register, no MMU, no job, no IRQ, no clock, no rail.
++ *
++ * Sources (all file:line in Samsung's Eureka 4.4.302 tree unless noted):
++ *   mali@0x11500000 size 0x5000, compatible "arm,mali"
++ *       arch/arm64/boot/dts/exynos/dtb/exynos7885-mali_common.dtsi:15-17
++ *   G3D power status 0x11C80000+0x40A4, live mask 0xF
++ *       .../exynos7885-mali_common.dtsi:30-31
++ *       drivers/soc/samsung/cal-if/exynos7885/pmucal_local_exynos7885.h:275
++ *   G3D CMU block base 0x11400000, size 0x8000
++ *       drivers/soc/samsung/cal-if/exynos7885/cmucal-sfr.c:17
++ *   PLL_G3D con0 = 0x11400000+0x120 (enable bit31, lock bit29)
++ *       .../cmucal-sfr.c:712 ; .../pmucal_local_exynos7885.h:288-290
++ *   Mali register offsets GPU_ID 0x000, SHADER_PRESENT 0x100, TILER_PRESENT
++ *   0x110, L2_PRESENT 0x120 (Linux panfrost_regs.h)
++ *       hakios-xnu-kernel bsd/dev/redwood_mali.c:304-311
++ *
++ * Inference to test: whether S-Boot leaves G3D powered.  docs/jackpotlte-mali.md §8.
++ */
++#if defined(ARM64_BOARD_CONFIG_A5XELTE) && defined(JACKPOTLTE)
++#include <sys/param.h>
++#include <sys/systm.h>
++#include <machine/machine_routines.h>
++#include <pexpert/pexpert.h>
++
++extern vm_offset_t ml_io_map(vm_offset_t, vm_size_t);
++void jackpotlte_mali_probe(void);
++
++/* ---- windows ---- */
++#define JT_MALI_PA		0x11500000u
++#define JT_MALI_WINDOW		0x5000u
++#define JT_CMU_G3D_PA		0x11400000u
++#define JT_CMU_G3D_WINDOW	0x8000u
++#define JT_PMU_PA		0x11c80000u
++#define JT_PMU_WINDOW		0x1000u
++
++/* ---- always-on registers (safe to read unconditionally) ---- */
++#define JT_PMU_G3D_STATUS	0x40a4u		/* PMU + 0x40A4, mask 0xF */
++#define JT_PMU_G3D_MASK		0xfu
++#define JT_CMU_PLL_G3D_CON0	0x0120u		/* CMU_G3D + 0x120 */
++
++/* ---- Mali registers (read only if the domain is up) ---- */
++#define JT_MALI_GPU_ID		0x000u
++#define JT_MALI_SHADER_PRESENT	0x100u
++#define JT_MALI_TILER_PRESENT	0x110u
++#define JT_MALI_L2_PRESENT	0x120u
++
++static volatile uint32_t *pmu, *cmu, *mali;
++
++static uint32_t jt_rd(volatile uint32_t *base, uint32_t off)
++{
++	return base[off >> 2];
++}
++
++void
++jackpotlte_mali_probe(void)
++{
++	uint32_t status, pll0, gpu_id;
++
++	/* The PMU and CMU blocks are always-on: read them first and alone. */
++	pmu  = (volatile uint32_t *)ml_io_map(JT_PMU_PA, JT_PMU_WINDOW);
++	cmu  = (volatile uint32_t *)ml_io_map(JT_CMU_G3D_PA, JT_CMU_G3D_WINDOW);
++	if (pmu == NULL || cmu == NULL) {
++		printf("JACKPOTLTE MALI: PMU/CMU map failed\n");
++		return;
++	}
++
++	status = jt_rd(pmu, JT_PMU_G3D_STATUS) & JT_PMU_G3D_MASK;
++	pll0   = jt_rd(cmu, JT_CMU_PLL_G3D_CON0);
++	printf("JACKPOTLTE MALI: g3d_pmu_status=%#x (up=%u) pll_g3d_con0=%#x "
++	    "(enable=%u lock=%u)\n",
++	    status, status == JT_PMU_G3D_MASK,
++	    pll0, (pll0 >> 31) & 1u, (pll0 >> 29) & 1u);
++
++	if (status != JT_PMU_G3D_MASK) {
++		/*
++		 * S-Boot left the domain off.  Do NOT touch the GPU block: an
++		 * access to an unpowered Exynos block can stall the bus.  The
++		 * power-on sequence (pd_g3d gate + PLL_G3D + CMU_G3D gates) is
++		 * M1 (docs/jackpotlte-mali.md §6), and it is a write stage.
++		 */
++		printf("JACKPOTLTE MALI: G3D domain is OFF; GPU registers not read "
++		    "(power-on is M1, not this probe)\n");
++		return;
++	}
++
++	mali = (volatile uint32_t *)ml_io_map(JT_MALI_PA, JT_MALI_WINDOW);
++	if (mali == NULL) {
++		printf("JACKPOTLTE MALI: GPU map failed\n");
++		return;
++	}
++
++	gpu_id = jt_rd(mali, JT_MALI_GPU_ID);
++	printf("JACKPOTLTE MALI: GPU_ID=%#x (arch=%u r%up%u) shaders=%#x tiler=%#x l2=%#x\n",
++	    gpu_id, (gpu_id >> 12) & 0xf, (gpu_id >> 12) & 0xf, (gpu_id >> 4) & 0xff,
++	    jt_rd(mali, JT_MALI_SHADER_PRESENT), jt_rd(mali, JT_MALI_TILER_PRESENT),
++	    jt_rd(mali, JT_MALI_L2_PRESENT));
++
++	/*
++	 * Expect GPU_ID 0x6000 (Mali-G71, arch 6): pan_props.c:61, pan_props.h:113-128.
++	 * Anything else is a finding, not an error.  This probe proves the block is
++	 * addressable and clocked; it proves NOTHING about the MMU, jobs or rendering
++	 * (docs/jackpotlte-mali.md §6, M0).
++	 */
++}
++#endif /* ARM64_BOARD_CONFIG_A5XELTE && JACKPOTLTE */
++
++/*
++ * CALL SITE (NOT INCLUDED HERE — needs its own review).
++ * The probe must be driven from somewhere the jackpotlte port already reaches
++ * during bring-up (the shim boot path is deliberately untouched).  Proposed,
++ * behind a boot-arg so a normal boot never runs it:
++ *
++ *     if (PE_parse_boot_argn("jtmaliprobe", NULL, 0))
++ *             jackpotlte_mali_probe();
++ *
++ * That call site, the bsd/conf/files line, and the "#if JACKPOTLTE" board
++ * guard must all be confirmed against the real tree before this draft is ever
++ * turned into a numbered patch.
++ */
