@@ -989,15 +989,21 @@ with `compatible = 'arm,cortex-a73'`. Extending the match to the tuple
 `('arm,cortex-a53','arm,cortex-a73')` (the same trick `0124` used for the
 platform expert) fixes it. Kernel-only.
 
-That hunk is parked as `docs/drafts/jackpotlte-cpus8/0146-...patch.draft`:
-`tools/validate-repo.py` needs `xnu/patches/` contiguous (0001-0139) and
-0140-0145 are held by the six subsystem tracks still on their own branches,
-so a main-repo 0146 left a 0139 -> 0146 gap. A branch `jackpotlte-cpus8`
-carries it as 0146 purely for a compile verdict; renumber on merge. The
-owner has parked 8 cores for now.
+**MERGED TO `main` AS `0140`** (owner instruction, 2026-11-08 21:26). The
+draft lived at `docs/drafts/jackpotlte-cpus8/0146-...patch.draft` because
+`tools/validate-repo.py` demands `xnu/patches/` be contiguous from 0001 and
+main had nothing at 0140, so a 0146-only patch would have left a gap. The
+owner asked for the 8-core fix on main directly, so it was promoted as
+`xnu/patches/0140-jackpotlte-a73-cpu-personality.patch` (identical hunk,
+`patch -p1 --dry-run` clean against main's 0139 tree, validator reports
+140 patches 0001-0140 contiguous). The draft file was deleted.
 
-**`0146` compile-verified and the kernel is built** (2026-11-08): branch run
-`42519017042` (`a6a47f6`) **succeeded** in 9m39s. Artifact
+Consequence for the six subsystem tracks, which previously sat at
+0140-0145: they now have to renumber to **0141-0146** when they merge
+(mechanical `git mv` plus doc references), because 0140 is taken.
+
+Branch history: for its CI verdict it lived on branch `jackpotlte-cpus8` as
+0146 (`a6a47f6`), run `42519017042` **succeeded** in 9m39s. Artifact
 `/tmp/opencode/art0146/kernel.development.a5xelte`, 16,553,800 B, sha256
 `8782aa4e06cf50e43a5332dfd4aba6de93a0301ce3fb8a70667b9760c5f4e664`. The
 personality table inside that binary reads
@@ -1005,24 +1011,23 @@ personality table inside that binary reads
 the fix is linked in, not just applied to source. Image
 `/var/tmp/a8-xnu-jt20-cpus8.img` (jt17 cmdline with `cpus=8`), 17,485,840 B,
 sha256 `129bd8eabae57464a8bf870c1491669c789cba31187592a92258625edcba0e8e`.
-Not flashed.
+Built from the branch kernel; not flashed. A main-built kernel with 0140
+should be rebuilt from the main CI run before flashing.
 
-**No renumbering is needed after all.** The six subsystem tracks each add
-exactly one patch and together occupy 0140-0145 with nothing left over:
+Subsystem track numbering, for whoever merges them next:
 
-| track | branch | patch |
-| --- | --- | --- |
-| BT | `jackpotlte-bt` `abd8999` | `0140-jackpotlte-scsc-bt-transport` |
-| audio | `jackpotlte-audio` `52e8c61` | `0141-jackpotlte-audio-probe` |
-| camera | `jackpotlte-camera` `77704d1` | `0142-jackpotlte-camera-probe` |
-| sensors | `jackpotlte-sensors` `0fed091` | `0143-jackpotlte-sensors-probe` |
-| flashlight | `jackpotlte-flashlight` `702718d` | `0144-jackpotlte-flashlight-probe` |
-| mic | `jackpotlte-mic` `6b4e5bb` | `0145-jackpotlte-mic-probe` |
+| track | branch | patch (was) | becomes |
+| --- | --- | --- | --- |
+| BT | `jackpotlte-bt` `abd8999` | 0140 | 0141 |
+| audio | `jackpotlte-audio` `52e8c61` | 0141 | 0142 |
+| camera | `jackpotlte-camera` `77704d1` | 0142 | 0143 |
+| sensors | `jackpotlte-sensors` `0fed091` | 0143 | 0144 |
+| flashlight | `jackpotlte-flashlight` `702718d` | 0144 | 0145 |
+| mic | `jackpotlte-mic` `6b4e5bb` | 0145 | 0146 |
 
-So merging the six in that order makes `xnu/patches/` run 0001-0145
-contiguous and 0146 can then be moved out of `docs/drafts/` unchanged. Every
-track's own `loader` CI red is only the gap error
-(`expected 0140, found 014N`), which that merge clears everywhere.
+Each track's own `loader` CI red is only the gap error
+(`expected 0140, found 014N`); it clears once they land in order on the new
+numbering.
 
 Interim 6-core image (A53s only, skips the A73 pair): **flashed 2026-11-08
 ~21:15** after the owner asked for 6 cores for now, and the owner
