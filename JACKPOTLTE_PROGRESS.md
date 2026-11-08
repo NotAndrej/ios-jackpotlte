@@ -1034,6 +1034,34 @@ evidence of a completed boot. The DataMigration tweaks only make
 20H392, `DMUserDataDisposition=SyntheticDidUpgrade`,
 `DMLastMigrationResults.success=true`); they do not make SpringBoard launch.
 
+**`0141` AKS log quieting is green** (`42521342616`, `6a953e7`): main-built
+kernel sha256
+`127fb6ed1decf60879834b092ef64ce4d7f03455d56ae7efa07baf037c2049c9`, and the
+gate string `per-selector logging enabled` is present in it. From it:
+`/var/tmp/a8-xnu-jt22-cpus6.img`, 17,485,840 B, sha256
+`5d232b76dbd6ca3f281687bc9b25a4c7d67fca9c63d007d0a11e43563c62b5bd` --
+6 cores, jt19's cmdline (quiet display), AKS per-selector logging now off by
+default. Not flashed; jt19 is on the phone.
+
+Rationale: `SweetKeyStore.cpp` logged one line **per keystore selector call**
+unconditionally, which floods the 4 MiB persistent console ring that patch
+0047 keeps in the last 4 MiB of userdata. Failures still log always;
+successful calls need `sweetakslog=1`.
+
+**Observed boot state at 21:4x (owner, screen only):** Apple logo, no bar,
+no lock screen, no SpringBoard. After everything else quiesces the only
+repeating `exec` lines (patch 0042 prints `p->p_name`) are **`xpcproxy`,
+`bluetoothd` and `fairplayd.H2`**; `driverkitd` crashes but is non-fatal
+(`_PanicOnCrasX`). Note `exec xpcproxy` names the *trampoline*, not the XPC
+service it is starting, so that loop is unattributed in the log -- patch 0042
+would need to print the exec'd argv / the reaped child's exit status to name
+it. `bluetoothd` has no working controller because the BT transport is only
+the opt-in probe on branch `jackpotlte-bt`, not on main. Investigation
+delegated to a subagent (branch `jackpotlte-xpcproxy`, doc
+`docs/research/jackpotlte-xpcproxy-loop.md`), including how sibling ports
+(SWEET/Sandcastle, georgev-6974/s9plus-ios, lechaukha12/xnu-xzs, HakiOS)
+handled the same loops and what their root tweak lists contain.
+
 Subsystem track numbering, for whoever merges them next:
 
 | track | branch | patch (was) | becomes |
