@@ -14,8 +14,8 @@ output from the phone.**
 | --- | --- | --- |
 | 1 | Repo skeleton, S8 port imported, builds reproducibly | **in progress (built)** |
 | 2 | Loader runs on the A8 and prints the banner | **reached (screen output, 2026-11-08)** |
-| 3 | Payload passes its check; jump to XNU | **in progress (payload packed + flashed)** |
-| 4 | XNU prints to the framebuffer (log or panic) | not started |
+| 3 | Payload passes its check; jump to XNU | **reached (loader prints through `JUMP TO XNU`)** |
+| 4 | XNU prints to the framebuffer (log or panic) | **reached (screen output, 2026-11-08)** |
 | 5 | Storage (eMMC) detected | not started |
 | 6 | Root filesystem mounts | not started |
 | 7 | launchd, then SpringBoard | not started |
@@ -29,6 +29,34 @@ output from the phone.**
   after `fastboot flash BOOT` + reboot. This is the S8 `shim/dreamlte` loader
   with only: FB base `0xec000000`, 1080x2220, `DECON_TRIG 0x14860070 = 0x1281`,
   log zone at `0xc0000000`, and the probe calls removed.
+
+### Stage 3/4 evidence
+
+- Image `/tmp/opencode/a8-xnu2.img`, 17,481,744 B, sha256
+  `3470dd7762d89b7e861a58003427d170d2f084d0e5cfded09612685232ebdab6`,
+  shim 48,480 B, payload 16,546,816 B, DT 882,688 B. Packed on
+  `boot_a530f_q.img`, written to `BOOT` from fastbootd and rebooted.
+- The kernel is the A5XELTE donor build with `-DJACKPOTLTE=1`
+  (CI run `42457569470`, `kernel.development.a5xelte` 16,552,752 B,
+  sha256 `7a1739a09ecc469fb586c2fa8646298a276026a7a8c9d1d7153f5f0c1c4dd909`).
+  The `lse.txt` "1 instruction" is a false positive: `K256` is a data
+  table, not code.
+- The owner photographed the screen (2026-11-08 08:37). The loader banner
+  prints the whole payload, then `JUMP TO XNU`, and XNU draws its own
+  `Darwin Kernel Version 22.6.0: Mon Aug 14 05:06:07 UTC 2023; xnu-8796.141.3`.
+  The text is upside down in the camera frame but is XNU's kprintf.
+- XNU also reports `pe_arm_init_interrupts: args: 0xfffffff007b6e730`,
+  `pe_arm_map_interrupt_controller: found interrupt-controller` and
+  `gPicBase: 0xfffffff03a400000`, so the GIC-400 mapping works.
+- The last line printed is our own marker
+  **`A5 vm: vm_page_bootstrap -> pmap_startup`**. The hang is therefore
+  *inside* `pmap_startup`, after the `npages=` marker is reached, not at
+  the branch or in the framebuffer text path. `initialize_screen: No video
+  - forcing serial mode` is expected: the A8 path draws through the fbcon
+  serial node, not the PE screen node.
+- `fastboot flash boot` failed (`remote: 'No such file or directory'`):
+  the partition is named `BOOT` uppercase in this fastbootd. The earlier
+  "stuck at JUMP TO XNU" photo was the previous image, not this one.
 
 ## Hardware facts (from Samsung's own 4.4 source and the mainline DT; NOT yet confirmed on the phone)
 
