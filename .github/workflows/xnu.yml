@@ -34,6 +34,12 @@ env:
   MACOS_VERSION: ${{ inputs.macos_version || '13.5' }}
   KERNEL_CONFIG: ${{ inputs.kernel_config || 'DEVELOPMENT' }}
   MACHINE_CONFIG: ${{ inputs.machine_config || 'A5XELTE' }}
+  # The A8 port is MACHINE_CONFIG=A5XELTE plus -DJACKPOTLTE=1 (see
+  # pexpert/pexpert/arm64/A5XELTE.h in patch 0124: without JACKPOTLTE the
+  # header defines DREAMLTE and every jackpotlte-gated path becomes dead code
+  # while the S8 paths run). Push builds must set it explicitly; only a
+  # manual dispatch for the S8 board may clear it.
+  EXTRA_MACHINE_FLAGS: ${{ inputs.extra_cflags || '-DJACKPOTLTE=1' }}
 
 jobs:
   build:
@@ -163,8 +169,9 @@ jobs:
         env:
           # keep going after errors so one run reports every compile failure
           MAKEFLAGS: ${{ inputs.keep_going == 'false' && '' || '-k' }}
-          # appended to MACHINE_FLAGS_ARM64_<config> by patch 0085
-          EXTRA_MACHINE_FLAGS: ${{ inputs.extra_cflags }}
+          # appended to MACHINE_FLAGS_ARM64_<config> by patch 0085; the job-level
+          # env supplies -DJACKPOTLTE=1 when no dispatch input was given
+          EXTRA_MACHINE_FLAGS: ${{ env.EXTRA_MACHINE_FLAGS }}
         run: bash build.sh
 
       - name: Package build tree for local compiles
