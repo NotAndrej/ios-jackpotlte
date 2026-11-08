@@ -9,11 +9,12 @@ reaches the iOS lock screen. The A8 reuses that kernel patch set, shim and
 tooling, and replaces the SoC-specific parts (display hand-off, GIC, timer,
 storage, ADT).
 
-> ⚠️ Early bring-up, not a usable port yet. **On the A8, XNU boots, maps the
-> GIC and prints to the framebuffer console, then stops inside
-> `pmap_startup()`.** No iOS userland has run on the A8 yet. Installing the
-> root image **erases USERDATA** (all Android data). SM-A530F only,
-> Other models of the A8 might not work properly.
+> ⚠️ Early bring-up, not a usable port yet. **On the A8, XNU boots, detects
+> the eMMC, mounts the HFS+ iOS root from `USERDATA` and executes `/sbin/launchd`.**
+> launchd then stops at the next userspace wall (`launchd_cache_loader`). No
+> SpringBoard yet, so the device does not reach a usable UI. Installing the root
+> image **erases USERDATA** (all Android data). SM-A530F only, other models of
+> the A8 might not work properly.
 
 The living status, with every image hash and photo reference, is
 **[JACKPOTLTE_PROGRESS.md](JACKPOTLTE_PROGRESS.md)**. The readings still to be
@@ -31,29 +32,52 @@ from the phone. Build success is never a boot claim.
 | 2 | Shim runs on the A8 and prints its banner | **reached** (screen, 2026-11-08) |
 | 3 | Payload passes its check, jump to XNU | **reached** (shim prints through `JUMP TO XNU`) |
 | 4 | XNU prints to the framebuffer | **reached** (screen, 2026-11-08) |
-| 5 | Storage (eMMC) detected | not started |
-| 6 | Root filesystem mounts | not started |
-| 7 | launchd, then SpringBoard | not started |
+| 5 | Storage (eMMC) detected | **reached** (screen, 2026-11-08) — `dwmmc0@13500000` maps and the GPT reads |
+| 6 | Root filesystem mounts | **reached** (screen, 2026-11-08) — the HFS+ root mounts from `USERDATA` and `/sbin/launchd` executes |
+| 7 | launchd, then SpringBoard | in progress — `jt7` cleared `EXEC_EXIT_REASON_WRONG_PLATFORM`; `launchd_cache_loader` now aborts on AMFI, addressed by `launchd_unsecure_cache=1` (`jt8`/`jt9`) |
 
-### What the phone actually showed (stage 4)
+### What the phone actually showed (stages 4–7)
 
-`Darwin Kernel Version 22.6.0: Mon Aug 14 05:06:07 UTC 2023; xnu-8796.141.3`,
+**Stage 4.** `Darwin Kernel Version 22.6.0: Mon Aug 14 05:06:07 UTC 2023; xnu-8796.141.3`,
 `pe_arm_map_interrupt_controller: found interrupt-controller`,
-`gPicBase: 0xfffffff03a400000`, and then silence after our own marker
-`A5 vm: vm_page_bootstrap -> pmap_startup`. The framebuffer console wraps its
-rows, so the kernel really stops printing rather than running out of screen.
-That window was bisected with A5XELTE-gated `pmap_startup()` /
-`pmap_steal_memory_internal()` markers (former patches 0125–0127, since removed
-because their per-call prints flooded the console — see the "Patch renumbering"
-note in `JACKPOTLTE_PROGRESS.md`); the fix is
-`0125-jackpotlte-pmap-layout-fix.patch`.
+`gPicBase: 0xfffffff03a400000`. That boot then stopped inside `pmap_startup()`;
+the fix is `0125-jackpotlte-pmap-layout-fix.patch` (a deterministic physmap and
+VA reserve for the A8).
+
+**Stage 5.** With `0125` the kernel boots past pmap and page-table setup. Mapping
+`dwmmc0@13500000` (`0127-jackpotlte-emmc-dwmmc0-base.patch`) then reads the GPT:
+`SYSTEM` at LBA 409600, 11,078,400 sectors.
+
+**Stage 6.** Booting with `rd=emmcroot0 emmcroot=USERDATA emmcwrite=1` mounts the
+HFS+ root and executes `/sbin/launchd`. The S8-derived kernel killed launchd as
+`EXEC_EXIT_REASON_WRONG_PLATFORM` (`namespace 9 code 0xe`) because an
+`XNU_TARGET_OS_OSX` kernel requires `unentitled_ios_sim_launch=1` before it will
+exec an iOS userland process; adding it (plus `cs_enforcement_disable=1`) fixed
+that kill.
+
+**Stage 7 (in progress).** launchd now runs past the platform check and gets to
+`launchd_cache_loader`, which aborts with `Unable to find AMFI` (`namespace 7`,
+`OS_REASON_LIBXPC`). The documented S8/A5 fix is `launchd_unsecure_cache=1`
+(launchd accepts its job cache without AMFI), which the current image carries.
+The next boot must show whether launchd gets past it.
+
+### The `-DJACKPOTLTE=1` build flag is mandatory
+
+`pexpert/pexpert/arm64/A5XELTE.h` (patch `0124`) selects the board from the
+`JACKPOTLTE` macro and, **when it is absent, defines `DREAMLTE`**. Without
+`-DJACKPOTLTE=1` an `A5XELTE` build silently compiles the Galaxy S8 board paths
+and every `#if defined(JACKPOTLTE)` block — the A8 battery stub and all five
+component ports — becomes dead code. That is exactly what panicked one boot:
+`dreamlte_battery_read()` maps the S8 MAX77865 fuel gauge at physical
+`0x10970000` and reads it, which external-aborts on the A8. The `xnu` workflow
+now sets `EXTRA_MACHINE_FLAGS: -DJACKPOTLTE=1` for push builds.
 
 ### Built, verified on the host, not yet booted
 
 The iOS root image (16 GiB, case-sensitive journaled HFS+, label `iOSRoot`,
 built from the iPhone X 16.7.16 DMGs with `tools/mkiosroot.sh`) is complete and
-fsck-verified. It is a host result, not stage 6: nothing on the A8 has mounted
-it yet.
+fsck-verified, and the merged port set (`0001`–`0133`) applies cleanly on a
+pristine `xnu-8796.141.3` tree. Those are host results, not boot claims.
 
 ## What works on the A8
 
@@ -63,25 +87,30 @@ it yet.
 | Display hand-off | The shim writes `0x1281` to DECON_F `HW_SW_TRIG_CONTROL` (`0x14860070`); without it no frame is ever scanned and the panel keeps the Samsung logo from its own GRAM |
 | Framebuffer | `0xec000000`, 1080×2220, 4320 B stride, drawn from XNU's early console |
 | Interrupts | GIC-400 at GICD `0x12301000` / GICC `0x12302000`, mapped by XNU |
-| Kernel | xnu-8796 DEVELOPMENT, `MACHINE_CONFIG=A5XELTE` with `-DJACKPOTLTE=1`, 4 KiB pages, built on GitHub Actions |
+| Kernel | xnu-8796 DEVELOPMENT, `MACHINE_CONFIG=A5XELTE` with `-DJACKPOTLTE=1` (mandatory), 4 KiB pages, built on GitHub Actions |
+| Storage | eMMC `dwmmc0@13500000` maps and the GPT reads (`0127`) |
+| Root filesystem | The HFS+ iOS root mounts from `USERDATA` (`rd=emmcroot0 emmcroot=USERDATA`) |
+| Userland | `/sbin/launchd` executes (`unentitled_ios_sim_launch=1`); stops at `launchd_cache_loader` / AMFI |
+| Ported drivers | Read-only probes for dwc3 USB (`0128`), the PMIC fuel gauge + charger (`0129`), sec_ts touch (`0130`/`0131`), the gpa1 buttons (`0132`) and the DSIM panel (`0133`, log-only by default) |
 | RAM | Physmap at `0x880000000`, 512 MiB window (`DRAM_SIZE 0x20000000`) |
 | Timer | 26 MHz arch timer, non-secure physical timer PPI 14 (INTID 30) |
 
-Everything below stage 4 — eMMC, UFS/HFS+ root, dyld, launchd, SpringBoard — is
+Everything below stage 6 — dyld, the shared cache, backboardd, SpringBoard — is
 untouched on this device and is what the S8 tree already solved.
 
 ## How it boots
 
 ```
 S-Boot (stock Samsung bootloader)
-  -> BOOT partition: shim (shim/dreamlte built with the A8 constants)
+  -> BOOT partition: shim (shim/jackpotlte, A8 constants)
      -> unmasks the DECON trigger so scanout starts
      -> verifies the SWEETXNU payload in the initrd
      -> copies XNU + ADT to 0x880000000, builds boot_args
-        -> XNU (xnu-8796, A5XELTE + 0124 + 0125)
-           -> ... currently stops in pmap_startup() ...
-           -> [S8 only, not yet on the A8] eMMC -> HFS+ root in USERDATA
-              -> dyld + shared cache -> launchd -> SpringBoard
+        -> XNU (xnu-8796, A5XELTE + -DJACKPOTLTE=1)
+           -> GIC + framebuffer console
+           -> eMMC (dwmmc0) -> HFS+ root in USERDATA
+              -> /sbin/launchd  <- reached; stops at launchd_cache_loader / AMFI
+                 -> [not yet on the A8] dyld + shared cache -> backboardd -> SpringBoard
 ```
 
 ## Flashing
@@ -108,7 +137,8 @@ to learn:
 Build and flash BOOT:
 
 ```sh
-# kernel: GitHub Actions, workflow "xnu"
+# kernel: GitHub Actions, workflow "xnu". A push build now defaults
+# EXTRA_MACHINE_FLAGS to -DJACKPOTLTE=1; a manual dispatch passes it too:
 gh workflow run xnu.yml -f machine_config=A5XELTE \
   -f kernel_config=DEVELOPMENT -f extra_cflags=-DJACKPOTLTE=1
 # then: kernel + ADT + shim -> Samsung boot image
@@ -116,19 +146,21 @@ tools/jackpotlte/make-boot.sh <kernel> boot-a530f.img
 fastboot flash BOOT boot-a530f.img && fastboot reboot
 ```
 
-The shim itself is built locally (`shim/jackpotlte/build.sh`, or the S8 shim
-with the A8 constants); XNU needs macOS/Xcode and is built only by CI.
+The shim itself is built locally (`shim/jackpotlte/build.sh`); XNU needs
+macOS/Xcode and is built only by CI.
 
 ## Layout
 
 | Path | What it is |
 | --- | --- |
 | `shim/jackpotlte/` | A8 shim: `board.h` (every fact with a source), `loader.c`, `start.S` |
-| `shim/dreamlte/` | S8 shim; the image that reached stage 4 is this one with the A8 constants (FB `0xec000000`, 1080×2220, DECON `0x14860070`) |
-| `xnu/patches/0124-dreamlte-s8.patch` | S8 board facts and layout workarounds |
+| `shim/dreamlte/` | S8 shim, kept as the reference loader |
+| `xnu/patches/0124-dreamlte-s8.patch` | S8 board facts and layout workarounds (also the A8 `A5XELTE.h` board selection) |
 | `xnu/patches/0125-jackpotlte-pmap-layout-fix.patch` | deterministic physmap + VA reserve for the A8 (fixed the stage-4 pmap hang) |
-| `tools/mkadt_jackpotlte.py` | Apple Device Tree for the A8 |
-| `tools/mkpayload.py`, `tools/dreamlte_mkboot.py` | payload builder and Samsung boot-image packer |
+| `xnu/patches/0127-jackpotlte-emmc-dwmmc0-base.patch` | eMMC `dwmmc0@13500000` for the A8 (stage 5) |
+| `xnu/patches/0128`–`0133` | the A8 component ports: USB, PMIC, sec_ts touch, gpa1 buttons, DSIM panel |
+| `tools/mkadt_jackpotlte.py` | Apple Device Tree for the A8 (incl. the `disp0` display service) |
+| `tools/mkpayload.py`, `tools/jackpotlte_mkboot.py` | payload builder and Samsung boot-image packer |
 | `tools/mkiosroot.sh` | iOS root image (case-sensitive HFS+, cryptexes, keybag) |
 | `tools/jackpotlte_bootimg_info.py` | read a stock SM-A530F boot image |
 | `docs/jackpotlte-bringup.md` | the readings to collect, and how |
