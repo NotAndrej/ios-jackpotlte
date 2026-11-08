@@ -1,0 +1,363 @@
+diff --git a/bsd/conf/files b/bsd/conf/files
+index 051083d..17120de 100644
+--- a/bsd/conf/files
++++ b/bsd/conf/files
+@@ -112,6 +112,7 @@ bsd/dev/a5xelte_touch.c			standard
+ bsd/dev/a5xelte_usb.c			standard
+ bsd/dev/a5xelte_scsc.c			standard
+ bsd/dev/a5xelte_wifi.c			standard
++bsd/dev/a5xelte_camera.c		standard
+ bsd/dev/jackpotlte_pmic.c		standard
+ bsd/dev/sweet_sample.c			standard
+ bsd/dev/sweet_keys.c			standard
+diff --git a/bsd/dev/a5xelte_camera.c b/bsd/dev/a5xelte_camera.c
+new file mode 100644
+index 0000000..3b0b00c
+--- /dev/null
++++ b/bsd/dev/a5xelte_camera.c
+@@ -0,0 +1,321 @@
++/*
++ * Galaxy A8 2018 (SM-A530F, jackpotlte, Exynos7885) camera, step 0:
++ * read-only state report.
++ *
++ * This file answers one question and nothing more: in what state does S-Boot
++ * hand the camera hardware over?  It maps only blocks that are always on or
++ * already powered, and it only ever reads them.  There is no I2C transfer, no
++ * rail, no clock and no reset change here.  Those are stage 1 of
++ * docs/research/jackpotlte-camera.md and are deliberately not implemented.
++ *
++ * Levels, from the "a8cam" boot argument (default 0 does nothing at all):
++ *   1  PMU power-domain words, camera pin state, HSI2C controller state.
++ *   2  additionally the camera power domain: CSIS identity, sysMMU identity
++ *      and CMU_CAM clock-gate readback.  This level runs only when the PMU
++ *      CAM_STATUS word reads 0xf, because an MMIO read from an unpowered
++ *      Exynos block can stall the bus or raise SError, and XNU has no
++ *      handler for either.
++ *
++ * Every offset below cites the vendor tree (Eureka-Kernel) line it came from.
++ */
++#if defined(ARM64_BOARD_CONFIG_A5XELTE) && defined(JACKPOTLTE)
++
++#include <sys/param.h>
++#include <sys/systm.h>
++#include <kern/clock.h>
++#include <machine/machine_routines.h>
++#include <pexpert/pexpert.h>
++
++extern vm_offset_t ml_io_map(vm_offset_t, vm_size_t);
++
++void a5xelte_camera_probe(void);
++
++/* PMU syscon: exynos7885.dtsi:1289-1292.  The ISP and CAM power-domain
++ * configuration/status pairs are the ones the local power sequences write
++ * and wait on: pmucal_local_exynos7885.h:160-163 (isp_on), :213-215
++ * (isp_status), :217-220 (cam_on), :269-271 (cam_status).  Mask 0xf and
++ * value 0xf mean "domain powered and reset-released"; the same idiom is used
++ * for pd_g3d at :273-276. */
++#define A8CAM_PMU			0x11c80000UL
++#define A8CAM_PMU_ISP_CONFIG		0x4060U
++#define A8CAM_PMU_ISP_STATUS		0x4064U
++#define A8CAM_PMU_CAM_CONFIG		0x4080U
++#define A8CAM_PMU_CAM_STATUS		0x4084U
++#define A8CAM_PD_ON_MASK		0x0fU
++#define A8CAM_PD_ON_VALUE		0x0fU
++
++/* Pinctrl controllers: exynos7885.dtsi:617 (FSYS @ 0x13430000) and :631
++ * (TOP @ 0x139b0000).  Bank offsets are the exynos7885 tables in
++ * pinctrl-exynos.c:1723-1750 (gpf3 :1726, gpp0 :1732, gpg2 :1742, gpc0
++ * :1745, gpc1 :1746); CON/DAT/PUD at +0x00/+0x04/+0x08 with a 4-bit
++ * function field per pin is bank_type_6, pinctrl-exynos.c:72-75. */
++#define A8CAM_PINCTRL_TOP		0x139b0000UL
++#define A8CAM_PINCTRL_FSYS		0x13430000UL
++#define A8CAM_GPP0			0x000U
++#define A8CAM_GPG2			0x160U
++#define A8CAM_GPC0			0x1c0U
++#define A8CAM_GPC1			0x1e0U
++#define A8CAM_GPF3			0x040U
++#define A8CAM_PIN_CON			0x00U
++#define A8CAM_PIN_DAT			0x04U
++#define A8CAM_PIN_PUD			0x08U
++
++/* HSI2C sensor buses: exynos7885.dtsi:821/839/857/875 at 0x138a0000 ..
++ * 0x138d0000, one 0x10000 window each.  Register map and bits:
++ * drivers/i2c/busses/i2c-exynos5.c:59-82 and :96-190. */
++#define A8CAM_HSI2C(i)			(0x138a0000UL + ((i) * 0x10000UL))
++#define A8CAM_HSI2C_COUNT		4
++#define A8CAM_HSI2C_CTL			0x00U
++#define A8CAM_HSI2C_INT_ENABLE		0x20U
++#define A8CAM_HSI2C_INT_STATUS		0x24U
++#define A8CAM_HSI2C_FIFO_STATUS		0x30U
++#define A8CAM_HSI2C_CONF		0x40U
++#define A8CAM_HSI2C_AUTO_CONF		0x44U
++#define A8CAM_HSI2C_TRANS_STATUS	0x50U
++#define A8CAM_HSI2C_ADDR		0x70U
++
++/* CSI receivers: exynos7885-camera.dtsi:118-206 (CSIS0 0x14400000 IRQ 297,
++ * CSIS1 0x14410000 IRQ 298, CSIS2 0x14420000 IRQ 299).  Identity registers
++ * from the CSIS v5.0 map, fimc-is-hw-csi-v5_0.h:204 (VERSION 0x0000) and
++ * :243 (PHY_STATUS 0x0700). */
++#define A8CAM_CSIS(i)			(0x14400000UL + ((i) * 0x10000UL))
++#define A8CAM_CSIS_COUNT		3
++#define A8CAM_CSIS_VERSION		0x0000U
++#define A8CAM_CSIS_PHY_STATUS		0x0700U
++
++/* System MMUs in front of the camera blocks: exynos7885.dtsi:1609-1615
++ * (cam 0x14540000), :1661-1667 (isp0 0x14730000), :1683-1689 (isp1
++ * 0x14760000).  Registers: drivers/iommu/exynos-iommu.h:98-106. */
++#define A8CAM_SYSMMU_COUNT		3
++#define A8CAM_SYSMMU_CTRL		0x000U
++#define A8CAM_SYSMMU_STATUS		0x008U
++#define A8CAM_SYSMMU_VERSION		0x034U
++
++/* CMU_CAM clock controller at 0x14500000, the base the CAM power sequences
++ * operate on (pmucal_local_exynos7885.h:225-256).  The Q-channel readback
++ * mirrors are at +0x7004..+0x7028 and report each block's gate state. */
++#define A8CAM_CMU_CAM			0x14500000UL
++#define A8CAM_CMU_QCH_CMU		0x7004U
++#define A8CAM_CMU_QCH_3AA0		0x7008U
++#define A8CAM_CMU_QCH_3AA1		0x700cU
++#define A8CAM_CMU_QCH_CSIS0		0x7010U
++#define A8CAM_CMU_QCH_CSIS1		0x7014U
++#define A8CAM_CMU_QCH_CSIS2		0x7018U
++#define A8CAM_CMU_QCH_CSIS3		0x701cU
++#define A8CAM_CMU_QCH_CSIS_DMA		0x7020U
++#define A8CAM_CMU_QCH_SMMU		0x7028U
++
++static const vm_offset_t a8cam_sysmmu[A8CAM_SYSMMU_COUNT] = {
++	0x14540000UL,	/* sysmmu_cam */
++	0x14730000UL,	/* sysmmu_isp0 */
++	0x14760000UL,	/* sysmmu_isp1 */
++};
++
++static const char *const a8cam_sysmmu_name[A8CAM_SYSMMU_COUNT] = {
++	"cam", "isp0", "isp1",
++};
++
++static uint32_t
++a8cam_read(vm_offset_t base, uint32_t off)
++{
++	uint32_t v = *(volatile uint32_t *)(base + off);
++	__asm__ volatile("dmb oshld" ::: "memory");
++	return v;
++}
++
++/* One camera pin, described by the vendor device tree. */
++struct a8cam_pin {
++	const char *signal;	/* what the vendor calls it */
++	const char *role;
++	uint32_t    fsys;	/* 1 = FSYS pinctrl, 0 = TOP pinctrl */
++	uint32_t    bank;	/* bank register block offset */
++	uint32_t    pin;	/* pin number inside the bank */
++};
++
++/* Signal names and lines come from exynos7885-jackpotlte_common.dtsi:
++ * rear S5K2P6 :1452-1456, front S5K3P8SP :1504-1508, front-2 SR846
++ * :1525-1527.  The MCLK function numbers are exynos7885-pinctrl.dtsi:899-939
++ * (1 = "mclk out" idle, 2 = MCLK).  The I2C function is 2 as well,
++ * exynos7885-pinctrl.dtsi:635-672. */
++static const struct a8cam_pin a8cam_pins[] = {
++	{ "gpf3-2", "rear reset (2P6)",            1, A8CAM_GPF3, 2 },
++	{ "gpf3-0", "front reset (3P8SP)",         1, A8CAM_GPF3, 0 },
++	{ "gpf3-1", "front-2 reset (SR846)",       1, A8CAM_GPF3, 1 },
++	{ "gpp0-2", "rear RCAM_LDO_EN",            0, A8CAM_GPP0, 2 },
++	{ "gpp0-3", "rear RCAM_AF_2P8_EN",         0, A8CAM_GPP0, 3 },
++	{ "gpp0-0", "front FCAM1 LDOs",            0, A8CAM_GPP0, 0 },
++	{ "gpp0-1", "front FCAM2 / front-2 LDOs",  0, A8CAM_GPP0, 1 },
++	{ "gpg2-0", "rear/front IO LDO 1.8 V",     0, A8CAM_GPG2, 0 },
++	{ "gpc0-0", "rear MCLK (CIS_CLK0)",        0, A8CAM_GPC0, 0 },
++	{ "gpc0-1", "front MCLK (CIS_CLK1)",       0, A8CAM_GPC0, 1 },
++	{ "gpc0-2", "front-2 MCLK (CIS_CLK2)",     0, A8CAM_GPC0, 2 },
++};
++
++static void
++a8cam_report_pmu(vm_offset_t pmu)
++{
++	uint32_t isp_cfg = a8cam_read(pmu, A8CAM_PMU_ISP_CONFIG);
++	uint32_t isp_status = a8cam_read(pmu, A8CAM_PMU_ISP_STATUS);
++	uint32_t cam_cfg = a8cam_read(pmu, A8CAM_PMU_CAM_CONFIG);
++	uint32_t cam_status = a8cam_read(pmu, A8CAM_PMU_CAM_STATUS);
++
++	printf("A8 CAM: pd_isp cfg=%#x status=%#x (%s)\n", isp_cfg, isp_status,
++	    (isp_status & A8CAM_PD_ON_MASK) == A8CAM_PD_ON_VALUE ?
++	    "on" : "off or partly clocked");
++	printf("A8 CAM: pd_cam cfg=%#x status=%#x (%s), parent pd_isp\n",
++	    cam_cfg, cam_status,
++	    (cam_status & A8CAM_PD_ON_MASK) == A8CAM_PD_ON_VALUE ?
++	    "on" : "off or partly clocked");
++}
++
++static void
++a8cam_report_pins(vm_offset_t top, vm_offset_t fsys)
++{
++	for (unsigned i = 0; i < sizeof(a8cam_pins) / sizeof(a8cam_pins[0]);
++	    i++) {
++		const struct a8cam_pin *p = &a8cam_pins[i];
++		vm_offset_t base = p->fsys ? fsys : top;
++		uint32_t shift = (p->pin % 8U) * 4U;
++		uint32_t pud_shift = (p->pin % 8U) * 2U;
++		uint32_t con = a8cam_read(base, p->bank + A8CAM_PIN_CON);
++		uint32_t dat = a8cam_read(base, p->bank + A8CAM_PIN_DAT);
++		uint32_t pud = a8cam_read(base, p->bank + A8CAM_PIN_PUD);
++
++		printf("A8 CAM: %-8s fn=%u dat=%u pud=%u  %s\n",
++		    p->signal, (con >> shift) & 0x0fU, (dat >> p->pin) & 1U,
++		    (pud >> pud_shift) & 0x03U, p->role);
++	}
++
++	/* The sensor I2C pins are one bank, so report the raw words instead of
++	 * eleven per-pin lines.  gpc1-0..7 at function 2 = HSI2C. */
++	printf("A8 CAM: gpc1 (sensor I2C) con=%#x dat=%#x pud=%#x\n",
++	    a8cam_read(top, A8CAM_GPC1 + A8CAM_PIN_CON),
++	    a8cam_read(top, A8CAM_GPC1 + A8CAM_PIN_DAT),
++	    a8cam_read(top, A8CAM_GPC1 + A8CAM_PIN_PUD));
++}
++
++static void
++a8cam_report_hsi2c(void)
++{
++	for (unsigned i = 0; i < A8CAM_HSI2C_COUNT; i++) {
++		vm_offset_t bus = ml_io_map(A8CAM_HSI2C(i), 0x1000);
++
++		if (!bus) {
++			printf("A8 CAM: hsi2c%u@%#x mapping failed\n", i,
++			    (unsigned)A8CAM_HSI2C(i));
++			continue;
++		}
++		printf("A8 CAM: hsi2c%u@%#x ctl=%#x conf=%#x auto=%#x "
++		    "int_en=%#x int_st=%#x fifo=%#x trans=%#x addr=%#x\n",
++		    i, (unsigned)A8CAM_HSI2C(i),
++		    a8cam_read(bus, A8CAM_HSI2C_CTL),
++		    a8cam_read(bus, A8CAM_HSI2C_CONF),
++		    a8cam_read(bus, A8CAM_HSI2C_AUTO_CONF),
++		    a8cam_read(bus, A8CAM_HSI2C_INT_ENABLE),
++		    a8cam_read(bus, A8CAM_HSI2C_INT_STATUS),
++		    a8cam_read(bus, A8CAM_HSI2C_FIFO_STATUS),
++		    a8cam_read(bus, A8CAM_HSI2C_TRANS_STATUS),
++		    a8cam_read(bus, A8CAM_HSI2C_ADDR));
++	}
++}
++
++/* Level 2: the camera power domain.  Only called when CAM_STATUS reads 0xf. */
++static void
++a8cam_report_camera_domain(void)
++{
++	vm_offset_t cmu = ml_io_map(A8CAM_CMU_CAM, 0x8000);
++	unsigned i;
++
++	for (i = 0; i < A8CAM_CSIS_COUNT; i++) {
++		vm_offset_t csis = ml_io_map(A8CAM_CSIS(i), 0x1000);
++
++		if (!csis) {
++			printf("A8 CAM: csis%u@%#x mapping failed\n", i,
++			    (unsigned)A8CAM_CSIS(i));
++			continue;
++		}
++		printf("A8 CAM: csis%u@%#x version=%#x phy_status=%#x\n", i,
++		    (unsigned)A8CAM_CSIS(i),
++		    a8cam_read(csis, A8CAM_CSIS_VERSION),
++		    a8cam_read(csis, A8CAM_CSIS_PHY_STATUS));
++	}
++
++	for (i = 0; i < A8CAM_SYSMMU_COUNT; i++) {
++		vm_offset_t mmu = ml_io_map(a8cam_sysmmu[i], 0x1000);
++
++		if (!mmu) {
++			printf("A8 CAM: sysmmu %s@%#x mapping failed\n",
++			    a8cam_sysmmu_name[i], (unsigned)a8cam_sysmmu[i]);
++			continue;
++		}
++		printf("A8 CAM: sysmmu %s@%#x version=%#x ctrl=%#x status=%#x\n",
++		    a8cam_sysmmu_name[i], (unsigned)a8cam_sysmmu[i],
++		    a8cam_read(mmu, A8CAM_SYSMMU_VERSION),
++		    a8cam_read(mmu, A8CAM_SYSMMU_CTRL),
++		    a8cam_read(mmu, A8CAM_SYSMMU_STATUS));
++	}
++
++	if (!cmu) {
++		printf("A8 CAM: cmu_cam@%#x mapping failed\n",
++		    (unsigned)A8CAM_CMU_CAM);
++		return;
++	}
++	printf("A8 CAM: cmu_cam qch cmu=%#x 3aa0=%#x 3aa1=%#x csis0=%#x "
++	    "csis1=%#x csis2=%#x csis3=%#x dma=%#x smmu=%#x\n",
++	    a8cam_read(cmu, A8CAM_CMU_QCH_CMU),
++	    a8cam_read(cmu, A8CAM_CMU_QCH_3AA0),
++	    a8cam_read(cmu, A8CAM_CMU_QCH_3AA1),
++	    a8cam_read(cmu, A8CAM_CMU_QCH_CSIS0),
++	    a8cam_read(cmu, A8CAM_CMU_QCH_CSIS1),
++	    a8cam_read(cmu, A8CAM_CMU_QCH_CSIS2),
++	    a8cam_read(cmu, A8CAM_CMU_QCH_CSIS3),
++	    a8cam_read(cmu, A8CAM_CMU_QCH_CSIS_DMA),
++	    a8cam_read(cmu, A8CAM_CMU_QCH_SMMU));
++}
++
++static void
++a8cam_report(int level)
++{
++	vm_offset_t pmu = ml_io_map(A8CAM_PMU, 0x10000);
++	vm_offset_t top = ml_io_map(A8CAM_PINCTRL_TOP, 0x1000);
++	vm_offset_t fsys = ml_io_map(A8CAM_PINCTRL_FSYS, 0x1000);
++	uint32_t cam_status;
++
++	if (!pmu || !top || !fsys) {
++		printf("A8 CAM: PMU/pinctrl mapping failed (pmu=%d top=%d fsys=%d)\n",
++		    pmu != 0, top != 0, fsys != 0);
++		return;
++	}
++
++	printf("A8 CAM: read-only state report, level %d\n", level);
++	a8cam_report_pmu(pmu);
++	a8cam_report_pins(top, fsys);
++	a8cam_report_hsi2c();
++
++	if (level < 2) {
++		return;
++	}
++
++	cam_status = a8cam_read(pmu, A8CAM_PMU_CAM_STATUS);
++	if ((cam_status & A8CAM_PD_ON_MASK) != A8CAM_PD_ON_VALUE) {
++		printf("A8 CAM: pd_cam status=%#x, camera-domain reads skipped "
++		    "(an MMIO read of a gated block can abort the bus)\n",
++		    cam_status);
++		return;
++	}
++	printf("A8 CAM: pd_cam reports on, reading the camera domain\n");
++	a8cam_report_camera_domain();
++}
++
++void
++a5xelte_camera_probe(void)
++{
++	int level = 0;
++
++	if (!PE_parse_boot_argn("a8cam", &level, sizeof(level)) || level <= 0) {
++		return;		/* default boot is untouched */
++	}
++	a8cam_report(level > 2 ? 2 : level);
++}
++
++#endif /* ARM64_BOARD_CONFIG_A5XELTE && JACKPOTLTE */
+\ No newline at end of file
+diff --git a/iokit/bsddev/IOKitBSDInit.cpp b/iokit/bsddev/IOKitBSDInit.cpp
+index d4f573f..43d44c5 100644
+--- a/iokit/bsddev/IOKitBSDInit.cpp
++++ b/iokit/bsddev/IOKitBSDInit.cpp
+@@ -75,6 +75,7 @@ extern void a5xelte_touch_probe(void);
+ extern void a5xelte_usb_probe(void);
+ extern void a5xelte_scsc_probe(void);
+ extern void a5xelte_wifi_probe(void);
++extern void a5xelte_camera_probe(void);
+ #if defined(JACKPOTLTE)
+ extern void jackpotlte_pmic_probe(void);
+ #endif
+@@ -795,6 +796,10 @@ IOFindBSDRoot( char * rootName, unsigned int rootNameSize,
+ 	/* Galaxy A8 2018: Apple80211 glue (en0 + SIOCS/GA80211), off unless
+ 	 * "a8wifi" is 1 (bsd/dev/a5xelte_wifi.c). */
+ 	a5xelte_wifi_probe();
++	/* Galaxy A8 2018: read-only camera state report
++	 * (bsd/dev/a5xelte_camera.c), off unless "a8cam" is 1 (safe blocks)
++	 * or 2 (camera domain). */
++	a5xelte_camera_probe();
+ #endif
+ 	{
+ 	uint32_t emmcprobe = 0;
