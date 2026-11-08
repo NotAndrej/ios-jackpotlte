@@ -786,6 +786,22 @@ status=0x%x`), so the jackpotlte branch really compiled in. Images:
 
 Not yet flashed. `jt10` (working single-core boot) is untouched on disk.
 
+### `cpus=4` boots: the secondary-start fix works (2026-11-08)
+
+`jt12` was flashed with `cpus=8` and **failed**, then the same `0135` kernel with
+`cpus=4` (`/var/tmp/a8-xnu-jt12-cpus4.img`, sha256
+`34afd97b7f62439ca49e06bf9b776cf1fce676c2a5d75e3a9ed66e6aed998e8b`, cmdline
+`cpus=4`) **boots** — reported by the owner as working. So the trampoline +
+PMU power-up sequence is correct for the first A53 cluster (MPIDR `0x100-0x103`,
+PMU core slots 4-7), which is the one place where the 7885 `pmu_cpu_offset()`
+and the generic `(Aff1<<2)|Aff0` formula agree.
+
+That isolates the remaining failure to the other two clusters: 2x A53 at MPIDR
+`0x200-0x201` (PMU slots 2-3) and 2x A73 at `0x0-0x1` (PMU slots 0-1). The
+`cpus=8` panic text was not captured yet; it decides whether this needs
+cluster-level power (`PMU_CPUSEQ_OPTION_BASE 0x2488 + cluster*0x20`, non-CPU and
+L2 power at `0x2404`/`0x2604` in SAM-K `exynos-pmu.c`) or something else.
+
 ### iOS root image (host build, not a device result)
 
 - Built with `tools/mkiosroot.sh OS.dmg SYSTEMOS.dmg APPOS.dmg
