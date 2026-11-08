@@ -721,6 +721,52 @@ cores on this SoC. Next: step the count down (`cpus=2`, then 4) to see whether
 *any* secondary comes up — no CI needed, the `0134` kernel is reused and only the
 cmdline changes.
 
+### `cpus=2` also panics: the core is never started (`0135`, 2026-11-08)
+
+`jt11-cpus2` (same `0134` kernel, `cpus=2`) was flashed and panicked the same way
+(photo `IMG_20261108_171958252.jpg`):
+
+```
+A5XELTE CPU: cpu=1 CPU_ON target=0x101 entry_pa=0x881417000 context=1
+A5XELTE CPU: cpu=1 PSCI CPU_ON rs=0
+A5XELTE CPU: cpu=1 mpidr=0x101 NOT alive after 10s
+cpu_signal failed in DebuggerXCallEnter
+panic ... A5XELTE CPU: cpu=1 startup timeout (reset/MMU/GIC/SGI) @SweetCPU.cpp:216
+```
+
+The secondary is in the **same** A53 cluster as the boot core (MPIDR `0x101`),
+so this is not a cluster-count or A73 problem: the core-start path itself never
+gets the core running. `rs=0` means firmware accepted the call, i.e. it thinks
+the core started.
+
+Two defects, both of which the `DREAMLTE` (S8) port already handles and the
+jackpotlte build did not:
+
+1. **Truncated entry.** `sweet_secondary_entry` is in the high bank —
+   `entry_pa=0x881417000` — and firmware keeps the CPU_ON entry in a 32-bit
+   register. The core therefore starts at `0x81417000`, i.e. low-bank garbage.
+   The S8 code already avoids this with an `ldr x1, #8; br x1; .quad entry`
+   trampoline in the low bank. `0x8f000000` is inside the jackpotlte low bank
+   (`0x80000000+0x3da00000`) and clear of everything we know about: S-Boot puts
+   the boot image at `0x800xxxxx` and the initrd at `0x84000000`, and the
+   loader's own probe scratch is `0x8ff00000`.
+2. **Core power is not sequenced.** SAM-K `drivers/soc/samsung/exynos-pmu.c`
+   `pmu_cpu_ctrl()` powers a core by writing `CPU_LOCAL_PWR_CFG` (`0xf`) at
+   `PMU_CPU_CONFIG_BASE` (`0x2000`) + offset and polling
+   `PMU_CPU_STATUS_BASE` (`0x2004`) + offset, step `0x80`. Exynos 7885 overrides
+   `pmu_cpu_offset()` with its own numbering — Aff1=1 (`0x100-0x103`) → 4+Aff0,
+   Aff1=2 (`0x200-0x201`) → 2+Aff0, Aff1=0 (A73 `0x0-0x1`) → Aff0 — *not* the
+   generic `(Aff1<<2)|Aff0` the S8 block uses (that would place the `0x200` pair
+   at 8-9). PMU base `0x11c80000` (`exynos7885.dtsi system-controller`).
+
+`0135-jackpotlte-secondary-core-start.patch` adds the jackpotlte branch:
+trampoline at `0x8f000000`, PMU power-down/up on the 7885 core numbering, then
+CPU_ON; a first `rc=0` counts as success so the second call is skipped. Verified
+with `git apply -R`/forward on the `0001`-`0134` tree and
+`tools/validate-repo.py`; **not yet run on the phone**. The `cpus=2` image is
+the first test: if a secondary is ever going to work, that one must, since it
+shares the boot core's cluster.
+
 ### iOS root image (host build, not a device result)
 
 - Built with `tools/mkiosroot.sh OS.dmg SYSTEMOS.dmg APPOS.dmg
@@ -761,8 +807,9 @@ Source now includes the **Eureka-Kernel** Samsung 4.4 tree for this device
   GICV `0x12306000`.
 - Timer: arch timer + 26 MHz; non-secure phys timer PPI 14 (INTID 30).
 - PMU: `0x11c80000`. Secondary-core power: `PMU_CPU_CONFIG_BASE 0x2000`,
-  status `0x2004`, step `0x80`, `CPU_LOCAL_PWR_CFG 0xF`; clusters 0/1/2 map to
-  core slots 0/4/6 (Exynos7885-specific numbering in `exynos-pmu.c`).
+  status `0x2004`, step `0x80`, `CPU_LOCAL_PWR_CFG 0xF`. Exynos 7885's
+  `pmu_cpu_offset()` override maps MPIDR Aff1=1 (`0x100-0x103`) to core slots
+  4-7, Aff1=2 (`0x200-0x201`) to 2-3 and Aff1=0 (A73 `0x0-0x1`) to 0-1.
 - Storage: **eMMC** `samsung,exynos-dw-mshc` `dwmmc0@13500000` (+ cmdq
   `0x13508000`); the S8 uses UFS, so storage adapts from the A5XELTE eMMC
   driver, not the S8's UFS.
