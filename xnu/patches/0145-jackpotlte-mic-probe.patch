@@ -1,0 +1,263 @@
+diff --git a/bsd/conf/files b/bsd/conf/files
+index 051083d..0c03851 100644
+--- a/bsd/conf/files
++++ b/bsd/conf/files
+@@ -112,6 +112,7 @@ bsd/dev/a5xelte_touch.c			standard
+ bsd/dev/a5xelte_usb.c			standard
+ bsd/dev/a5xelte_scsc.c			standard
+ bsd/dev/a5xelte_wifi.c			standard
++bsd/dev/a5xelte_mic.c			standard
+ bsd/dev/jackpotlte_pmic.c		standard
+ bsd/dev/sweet_sample.c			standard
+ bsd/dev/sweet_keys.c			standard
+diff --git a/bsd/dev/a5xelte_mic.c b/bsd/dev/a5xelte_mic.c
+new file mode 100644
+index 0000000..9dcb601
+--- /dev/null
++++ b/bsd/dev/a5xelte_mic.c
+@@ -0,0 +1,222 @@
++/*
++ * Galaxy A8 2018 (SM-A530F, jackpotlte, Exynos7885) microphone capture
++ * probe, step 1 (patch 0145).
++ *
++ * STAGE: LOG-ONLY, default-inert.  This file reports the board state a
++ * capture path would need: the DMIC-enable pin, the DISPAUD power-domain
++ * state and, only when that domain is already powered, the ABOX capture
++ * registers (UAIF0 I2S, WDMA capture DMA, routing).  It writes NOTHING: no
++ * ABOX SFR store, no PMU/CAL write, no PLL/gate/QCH change, no ABOX
++ * power-up, no firmware load, no mailbox/IPC and no codec register.
++ *
++ * The capture path is:
++ *   physical mic -> cod3035x codec (DMIC1/DMIC2 or MIC1..3/LINEIN)
++ *     -> I2S "cod3035x-aif" <-> ABOX UAIF0 -> ABOX routing -> WDMA -> DRAM.
++ * The codec (SPEEDY, 0x11CE0000, exynos7885.dtsi:664-673) and the ABOX core
++ * (power, clocks, DSP firmware, IPC routing) belong to the separate
++ * audio/ABOX track; this file only observes capture-side registers.  Reading
++ * a gated block can stall the bus, so the ABOX SFR is read only after
++ * DISPAUD_STATUS says the domain is up; otherwise only the always-on TOP
++ * pinctrl and PMU blocks are read.
++ *
++ * Register maps and every constant below are cited to Samsung's Eureka
++ * 4.4.302 kernel tree (file:line) or to the exynos7885 DTS.  The "a8mic"
++ * boot argument must be 1 for anything to happen; a default boot behaves
++ * exactly as before.
++ */
++#if defined(ARM64_BOARD_CONFIG_A5XELTE) && defined(JACKPOTLTE)
++#include <sys/param.h>
++#include <sys/systm.h>
++#include <kern/clock.h>
++#include <machine/machine_routines.h>
++#include <pexpert/pexpert.h>
++
++extern vm_offset_t ml_io_map(vm_offset_t phys_addr, vm_size_t size);
++void a5xelte_mic_probe(void);
++
++/* ---- addresses ----------------------------------------------------------- */
++
++/* TOP pinctrl, exynos7885.dtsi:631-633 (reg 0x139B0000 size 0x1000).
++ * gpg2 bank offset 0x160: pinctrl-exynos.c:1743; bank_type_6 con/dat at
++ * +0x00/+0x04: pinctrl-exynos.c:71-75. */
++#define A5M_TOP_BASE		0x139b0000UL
++#define A5M_TOP_SIZE		0x1000UL
++#define A5M_GPG2_CON		0x160U
++#define A5M_GPG2_DAT		0x164U
++/* gpg2-1 is "aud_dmic_on": exynos7885-pinctrl.dtsi:941-947 (function 1 =
++ * output, pin-val 1).  The jackpotlte board override sets BOTH aud_dmic_on
++ * and aud_dmic_off to pin-val 1: exynos7885-jackpotlte_common.dtsi:1712-1724. */
++#define A5M_DMIC_BIT		1U
++
++/* PMU, exynos7885.dtsi:99 (pmu_base = 0x11C80000).  pd_dispaud reg
++ * 0x11C84020 size 0x20: exynos7885-pm-domains.dtsi:18-20.  The CAL power
++ * sequence uses PMU + 0x4020/0x4024:
++ * pmucal_local_exynos7885.h:2-3,100-101,105 (mask 0xf; STATUS 0xf = on). */
++#define A5M_PMU_BASE		0x11c80000UL
++#define A5M_PMU_SIZE		0x1000UL
++#define A5M_DISPAUD_CON		0x4020U
++#define A5M_DISPAUD_STATUS	0x4024U
++#define A5M_DISPAUD_MASK	0xfU
++
++/* ABOX SFR, exynos7885.dtsi:1427-1430 ("sfr" 0x14A50000 size 0x10000). */
++#define A5M_ABOX_BASE		0x14a50000UL
++#define A5M_ABOX_SIZE		0x10000UL
++
++/* ABOX register offsets, abox.h. */
++#define A5M_SYSPOWER_CTRL	0x0010U	/* abox.h:29  */
++#define A5M_SYSPOWER_STATUS	0x0014U	/* abox.h:30  */
++#define A5M_ROUTE_CTRL0		0x0040U	/* abox.h:36  */
++#define A5M_ROUTE_CTRL1		0x0044U	/* abox.h:37  */
++#define A5M_ROUTE_CTRL2		0x0048U	/* abox.h:38  */
++#define A5M_UAIF_BASE		0x0500U	/* abox.h:187 */
++#define A5M_UAIF_INTERVAL	0x0010U	/* abox.h:188 */
++#define A5M_UAIF_CTRL0(x)	(A5M_UAIF_BASE + (x) * A5M_UAIF_INTERVAL)
++#define A5M_UAIF_CTRL1(x)	(A5M_UAIF_CTRL0(x) + 0x04U)	/* abox.h:190 */
++#define A5M_UAIF_STATUS(x)	(A5M_UAIF_CTRL0(x) + 0x0cU)	/* abox.h:191 */
++#define A5M_SPDYIF_CTRL		0x0560U	/* abox.h:260 */
++#define A5M_WDMA_BASE		0x2000U	/* abox.h:293 */
++#define A5M_WDMA_INTERVAL	0x0100U	/* abox.h:294 */
++#define A5M_WDMA_CTRL(x)	(A5M_WDMA_BASE + (x) * A5M_WDMA_INTERVAL)	/* +0x00, abox.h:295 */
++#define A5M_WDMA_STATUS(x)	(A5M_WDMA_CTRL(x) + 0x30U)	/* abox.h:303 */
++
++/* ---- register helpers ---------------------------------------------------- */
++
++static uint32_t
++a5m_read(vm_offset_t base, uint32_t off)
++{
++	uint32_t value = *(volatile uint32_t *)(base + off);
++	__asm__ volatile("dmb oshld" ::: "memory");
++	return value;
++}
++
++static uint32_t
++a5m_field(uint32_t value, unsigned lo, unsigned hi)
++{
++	return (value >> lo) & ((1u << (hi - lo + 1)) - 1u);
++}
++
++/* ---- probe steps --------------------------------------------------------- */
++
++/* gpg2 con/dat; the DMIC-enable line is gpg2-1 (function field bits 4..7 of
++ * CON, value bit 1 of DAT). */
++static void
++a5m_report_pin(vm_offset_t top)
++{
++	uint32_t con = a5m_read(top, A5M_GPG2_CON);
++	uint32_t dat = a5m_read(top, A5M_GPG2_DAT);
++
++	printf("A5XELTE MIC: gpg2 con=%#x dat=%#x dmic_en(gpg2-1) func=%u val=%u\n",
++	    con, dat,
++	    a5m_field(con, A5M_DMIC_BIT * 4U, A5M_DMIC_BIT * 4U + 3U),
++	    a5m_field(dat, A5M_DMIC_BIT, A5M_DMIC_BIT));
++}
++
++static void
++a5m_report_pmu(vm_offset_t pmu)
++{
++	uint32_t con = a5m_read(pmu, A5M_DISPAUD_CON);
++	uint32_t status = a5m_read(pmu, A5M_DISPAUD_STATUS);
++
++	printf("A5XELTE MIC: dispaud con=%#x status=%#x (%s)\n",
++	    con, status,
++	    (status & A5M_DISPAUD_MASK) == A5M_DISPAUD_MASK ? "on" : "off");
++}
++
++static void
++a5m_report_abox(vm_offset_t abox)
++{
++	uint32_t sp_c = a5m_read(abox, A5M_SYSPOWER_CTRL);
++	uint32_t sp_s = a5m_read(abox, A5M_SYSPOWER_STATUS);
++	uint32_t rc0 = a5m_read(abox, A5M_ROUTE_CTRL0);
++	uint32_t rc1 = a5m_read(abox, A5M_ROUTE_CTRL1);
++	uint32_t rc2 = a5m_read(abox, A5M_ROUTE_CTRL2);
++	uint32_t u0c0 = a5m_read(abox, A5M_UAIF_CTRL0(0));
++	uint32_t u0c1 = a5m_read(abox, A5M_UAIF_CTRL1(0));
++	uint32_t u0s = a5m_read(abox, A5M_UAIF_STATUS(0));
++	uint32_t spdy = a5m_read(abox, A5M_SPDYIF_CTRL);
++	uint32_t w0c = a5m_read(abox, A5M_WDMA_CTRL(0));
++	uint32_t w0s = a5m_read(abox, A5M_WDMA_STATUS(0));
++	uint32_t w1c = a5m_read(abox, A5M_WDMA_CTRL(1));
++	uint32_t w1s = a5m_read(abox, A5M_WDMA_STATUS(1));
++
++	printf("A5XELTE MIC: abox syspower ctrl=%#x status=%#x "
++	    "route0=%#x route1=%#x route2=%#x\n", sp_c, sp_s, rc0, rc1, rc2);
++	/* UAIF0 CTRL0: MIC_ENABLE bit1, MODE bit2 (abox.h:193-204). */
++	printf("A5XELTE MIC: abox uaif0 ctrl0=%#x mic_en=%u mode=%u "
++	    "ctrl1=%#x status=%#x err_mic=%u\n",
++	    u0c0, a5m_field(u0c0, 1, 1), a5m_field(u0c0, 2, 2),
++	    u0c1, u0s, a5m_field(u0s, 1, 1));
++	/* UAIF0 CTRL1: FORMAT 24..28, SLOT_MAX 18..20, SBIT_MAX 12..17
++	 * (abox.h:208-232). */
++	printf("A5XELTE MIC: abox uaif0 slot_max=%u sbit_max=%u format=%u\n",
++	    a5m_field(u0c1, 18, 20), a5m_field(u0c1, 12, 17),
++	    a5m_field(u0c1, 24, 28));
++	printf("A5XELTE MIC: abox spdyif=%#x\n", spdy);
++	/* WDMA CTRL ENABLE bit0 (abox.h:305-307); STATUS PROGRESS bit31,
++	 * RBUF_OFFSET 16..28, RBUF_CNT 0..12 (abox.h:308-317). */
++	printf("A5XELTE MIC: abox wdma0 ctrl=%#x enable=%u status=%#x "
++	    "progress=%u cnt=%u\n",
++	    w0c, a5m_field(w0c, 0, 0), w0s, a5m_field(w0s, 31, 31),
++	    a5m_field(w0s, 0, 12));
++	printf("A5XELTE MIC: abox wdma1 ctrl=%#x enable=%u status=%#x "
++	    "progress=%u cnt=%u\n",
++	    w1c, a5m_field(w1c, 0, 0), w1s, a5m_field(w1s, 31, 31),
++	    a5m_field(w1s, 0, 12));
++}
++
++/* ---- public entry point -------------------------------------------------- */
++
++void
++a5xelte_mic_probe(void)
++{
++	int enabled = 0;
++	vm_offset_t top;
++	vm_offset_t pmu;
++
++	/* The whole probe is opt-in; a default boot must be unchanged.  Parse
++	 * first, before any map, so a8mic=0 (or absent) does nothing at all. */
++	(void)PE_parse_boot_argn("a8mic", &enabled, sizeof(enabled));
++	if (!enabled) {
++		return;
++	}
++
++	/* Always-on blocks: TOP pinctrl and PMU (read by the panel/keys probes
++	 * without incident). */
++	top = ml_io_map(A5M_TOP_BASE, A5M_TOP_SIZE);
++	pmu = ml_io_map(A5M_PMU_BASE, A5M_PMU_SIZE);
++	if (top == 0 || pmu == 0) {
++		printf("A5XELTE MIC: pinctrl/PMU map failed; skipping\n");
++		return;
++	}
++
++	printf("A5XELTE MIC: read-only capture probe (a8mic=1; no writes)\n");
++	a5m_report_pin(top);
++	a5m_report_pmu(pmu);
++
++	/*
++	 * The ABOX SFR is a gated block: reading it while pd_dispaud is off can
++	 * stall the bus.  Only read it when the PMU status says the domain is
++	 * already up.  This file never powers it (the audio track does).
++	 */
++	if ((a5m_read(pmu, A5M_DISPAUD_STATUS) & A5M_DISPAUD_MASK) ==
++	    A5M_DISPAUD_MASK) {
++		vm_offset_t abox = ml_io_map(A5M_ABOX_BASE, A5M_ABOX_SIZE);
++		if (abox == 0) {
++			printf("A5XELTE MIC: abox SFR map failed\n");
++		} else {
++			a5m_report_abox(abox);
++		}
++	} else {
++		printf("A5XELTE MIC: dispaud off; ABOX SFR not read "
++		    "(the audio track powers it)\n");
++	}
++}
++
++#else   /* ARM64_BOARD_CONFIG_A5XELTE && JACKPOTLTE */
++
++void
++a5xelte_mic_probe(void)
++{
++}
++
++#endif  /* ARM64_BOARD_CONFIG_A5XELTE && JACKPOTLTE */
+diff --git a/iokit/bsddev/IOKitBSDInit.cpp b/iokit/bsddev/IOKitBSDInit.cpp
+index d4f573f..ea1e68e 100644
+--- a/iokit/bsddev/IOKitBSDInit.cpp
++++ b/iokit/bsddev/IOKitBSDInit.cpp
+@@ -75,6 +75,7 @@ extern void a5xelte_touch_probe(void);
+ extern void a5xelte_usb_probe(void);
+ extern void a5xelte_scsc_probe(void);
+ extern void a5xelte_wifi_probe(void);
++extern void a5xelte_mic_probe(void);
+ #if defined(JACKPOTLTE)
+ extern void jackpotlte_pmic_probe(void);
+ #endif
+@@ -795,6 +796,10 @@ IOFindBSDRoot( char * rootName, unsigned int rootNameSize,
+ 	/* Galaxy A8 2018: Apple80211 glue (en0 + SIOCS/GA80211), off unless
+ 	 * "a8wifi" is 1 (bsd/dev/a5xelte_wifi.c). */
+ 	a5xelte_wifi_probe();
++	/* Galaxy A8 2018: read-only microphone-capture probe (DMIC enable pin,
++	 * DISPAUD state, ABOX UAIF0/WDMA); off unless "a8mic" is 1
++	 * (bsd/dev/a5xelte_mic.c). */
++	a5xelte_mic_probe();
+ #endif
+ 	{
+ 	uint32_t emmcprobe = 0;
