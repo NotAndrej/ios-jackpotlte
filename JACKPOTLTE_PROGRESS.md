@@ -654,6 +654,32 @@ cs_enforcement_disable=1 launchd_unsecure_cache=1 ignition_level=1`. This is the
 image to flash next: the clean-console stage-7 trial with the S8 battery panic
 fixed and the five ports compiled in. Flashing still needs the phone in fastboot.
 
+### Enabling all 8 cores (`0134`, 2026-11-08)
+
+The A8 has eight CPUs in **three** hardware clusters (Exynos 7885): 4x A53 at
+MPIDR `0x100-0x103` (Aff1=1), 2x A53 at `0x200-0x201` (Aff1=2) and 2x A73 at
+`0x0-0x1` (Aff1=0). `tools/mkadt_jackpotlte.py` already emits all eight ADT cpu
+nodes in this order and tags them cluster 0/1/2.
+
+But `ml_parse_cpu_topology()` maps clusters by `MPIDR_CLUSTER_ID` (the
+`HAS_CLUSTER || defined(A5XELTE)` path from `0115`), and the A5 donor's board
+config sets `MAX_CPU_CLUSTERS 2`. Across three physical clusters that trips
+`assert(cpu->cluster_id < MAX_CPU_CLUSTERS)` on the third cluster — so `cpus=8`
+would panic in topology parsing.
+
+`0134-jackpotlte-cpu-clusters.patch` gates `MAX_CPU_CLUSTERS` to 3 for
+`JACKPOTLTE` in `pexpert/pexpert/arm64/board_config.h` (the A5 keeps 2);
+`MAX_CPU_CLUSTER_PHY_ID` then defaults to `MAX_CPU_CLUSTERS - 1 = 2`, the
+highest Aff1, and both `cluster_phys_to_logical[]` / `cluster_max_cpu_phys_id[]`
+grow to size 3. `SWEET_SMP_MAX_CPUS` and `MAX_CPUS` are already 8 (`0115`), and
+`SweetCPU::start()`'s jackpotlte MPIDR map (`0126`) already covers `0x0-0x201`,
+so the only change is the cluster count. Boot with `cpus=8`.
+
+Risks (not yet seen on the phone): `SweetCPU::startAll()` is all-or-nothing — if
+any secondary (especially an A73) fails to start via PSCI within 10 s it panics.
+Verified only that `0001`-`0134` applies on a pristine tree and builds in CI; the
+core bring-up itself is untested.
+
 ### iOS root image (host build, not a device result)
 
 - Built with `tools/mkiosroot.sh OS.dmg SYSTEMOS.dmg APPOS.dmg
