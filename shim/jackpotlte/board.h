@@ -96,8 +96,18 @@
  *   Volume Down gpa1-6
  *   Volume Up   gpa1-5
  *   Power       gpa1-7
- * The gpa1 bank offset inside pinctrl_0 must be read from the driver's bank
- * table (SAM-K drivers/pinctrl/samsung/) or the live DT before use. */
+ * gpa1 lives in pin-controller 0 (ALIVE), which is pinctrl@11CB0000
+ * (SAM-K arch/arm64/boot/dts/exynos/dtb/exynos7885.dtsi:601,
+ * reg <0x0 0x11CB0000 0x1000>). Its bank offset is 0x060 from the
+ * exynos7885_pin_banks0 table (SAM-K
+ * drivers/pinctrl/samsung/pinctrl-exynos.c:1710, "gpa1" reg 0x060) and
+ * bank_type_7 places CON/PUD/DRV at +0x00/+0x08/+0x0c with DAT at +0x04
+ * (pinctrl-exynos.c:78), so GPA1CON=0x060, GPA1DAT=0x064, GPA1PUD=0x068
+ * inside the 4 KiB window. */
+#define JT_PINCTRL_GPA1		0x060U	/* gpa1 bank base in pinctrl_0 */
+#define JT_GPA1_CON		0x060U
+#define JT_GPA1_DAT		0x064U
+#define JT_GPA1_PUD		0x068U
 #define JT_KEY_UP_BIT		5
 #define JT_KEY_DOWN_BIT		6
 #define JT_KEY_POWER_BIT	7

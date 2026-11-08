@@ -51,6 +51,17 @@ Recorded:
   (built, not yet flashed).
 - ramoops base / size / console+pmsg offsets: _pending_
 - eMMC node reg + phandle/timings: _pending_
+- gpio-keys / gpa1 bank: `gpio_keys` node in Samsung
+  `arch/arm64/boot/dts/exynos/dtbo/exynos7885-jackpotlte_common.dtsi:860`
+  (`button@1` Volume Down gpa1-6, `button@2` Volume Up gpa1-5, `button@3`
+  Power gpa1-7, all `gpios = <&gpa1 N 0xf>`, active low). gpa1 is in
+  pin-controller 0 (ALIVE) `pinctrl@11CB0000`
+  (`arch/arm64/boot/dts/exynos/dtb/exynos7885.dtsi:601`, reg
+  `<0x0 0x11CB0000 0x1000>`). Bank offset `0x060` and register layout
+  (CON +0x00, DAT +0x04, PUD +0x08) from the `exynos7885_pin_banks0` table
+  in `drivers/pinctrl/samsung/pinctrl-exynos.c:1710` with `bank_type_7`
+  (`pinctrl-exynos.c:78`): GPA1CON `0x060`, GPA1DAT `0x064`, GPA1PUD
+  `0x068`. Consumed by XNU patch `0131` (`bsd/dev/a5xelte_keys.c`).
 
 ### Registers at handoff
 The loader banner prints EL, SCTLR and x0 (DTB). To learn whether S-Boot enters
