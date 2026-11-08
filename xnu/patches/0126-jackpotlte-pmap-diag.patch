@@ -100,7 +100,7 @@ diff --git a/osfmk/arm/pmap/pmap_data.c b/osfmk/arm/pmap/pmap_data.c
  
  #include <arm/pmap/pmap_internal.h>
 +#if defined(ARM64_BOARD_CONFIG_A5XELTE)
-+#include <pexpert/pexpert/pexpert.h>
++#include <pexpert/pexpert.h>
 +#endif
  
  /**
