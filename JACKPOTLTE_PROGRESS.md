@@ -634,7 +634,25 @@ the first time, and `jackpotlte_pmic.c` called `delay()` without a declaring
 header (CI `42493189603`: `bsd/dev/jackpotlte_pmic.c:118: error: call to
 undeclared function 'delay'`). Fixed by adding `#include <kern/clock.h>` to
 `0129` (the same header `0133` uses); the patch still applies cleanly after
-`0128`.
+`0128`. CI `42494206360` (push of that fix) then built **successfully**.
+
+### `jt10` image ready: flag-fixed kernel (2026-11-08, not yet on the phone)
+
+CI `42494206360` produced `kernel.development.a5xelte` = 16,553,032 B, sha256
+`ff38f990fd94b73665f3a210c25263b890807572b4eb0ee665a96a54ab6d35ad`, built with
+`-DJACKPOTLTE=1`. It contains the live port symbols/strings
+(`jackpotlte_pmic`, `a5xelte_usb_probe`, `a5xelte_panel_init`, `a8touchlog`,
+`a5panelprobe`, the `JACKPOTLTE PMIC:` log lines) and **zero**
+`A5 expand|pgalloc|tt_alloc|steal|pg|dg|de` console-spam strings.
+
+Image **`/var/tmp/a8-xnu-jt10.img`** = 17,485,840 B, sha256
+`2e3f2a568f098806079affc3e47ca71799643f68f217870114362f6942d7e55c` (jackpotlte
+shim 52,048 B with the multi-bank DT probe, payload 16,547,472 B, DT 882,688 B),
+cmdline
+`rd=emmcroot0 emmcroot=USERDATA emmcwrite=1 unentitled_ios_sim_launch=1
+cs_enforcement_disable=1 launchd_unsecure_cache=1 ignition_level=1`. This is the
+image to flash next: the clean-console stage-7 trial with the S8 battery panic
+fixed and the five ports compiled in. Flashing still needs the phone in fastboot.
 
 ### iOS root image (host build, not a device result)
 
@@ -758,10 +776,11 @@ Snapdragon A530W/U. The mainline `exynos7885*` values above therefore apply.
    `-DJACKPOTLTE=1`, so it is the image that panicked** in
    `dreamlte_battery_read` on physical `0x10970000` (photo
    `IMG_20261108_152844733`; see "Port merge + the `-DJACKPOTLTE=1` root cause").
-   The fix is the workflow flag, not a kernel patch. Next: when CI on the merged
-   `main` (with the flag) is green, download the `xnu-kernel` artifact and rebuild
-   the image (`/var/tmp/xnu-build/mkimg-jt-root3.sh`) as the real stage-7 trial —
-   launchd / `launchd_unsecure_cache=1` / AMFI, now with the five ports live.
+   The fix is the workflow flag, not a kernel patch. That is done: CI
+   `42494206360` built the flag-fixed kernel and the image is
+   **`/var/tmp/a8-xnu-jt10.img`** (see the `jt10` section) — flash it next as the
+   real stage-7 trial (launchd / `launchd_unsecure_cache=1` / AMFI), now with the
+   five ports live.
 4. **DRAM map (for "all 4 GB"):** `shim/fdt.c` gained `fdt_memory_all()`, which
    enumerates every `/memory` node; `dt_probe()` now prints each bank
    (`mem bank N base=.. size=.. (MiB)`) plus the total. Host-verified against a
