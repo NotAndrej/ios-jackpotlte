@@ -217,6 +217,62 @@ files to the `0127` edits; `patch -p1 --dry-run` applies cleanly on a fresh
 `bt3 + 0126` tree and the applied result is byte-identical to the edited files.
 Patch sha256 `2116627c92e840c8c626434080b338b67c1afd2082bc79ac39eceede7ae89ad6`.
 
+### `0127` flashed and decoded (2026-11-08) — the range is the bug
+
+The full image (`shim/jackpotlte` + `0127`) was flashed to `BOOT` and the screen
+photographed. The newest lines were:
+
+```
+A5 pg: va=0xfffffff02d7ff000 pa=0x882e4b
+A5 pg: ok va=0xfffffff02d7ff000 kr=0
+A5 pg: va=0xfffffff02d800000 pa=0x882e4c
+A5 expand: v=0xfffffff02d800000 lv=3
+A5 de: v=0xfffffff02d800000 l1i=448 l1=0x200000008828be003 l2i=364 l2=0 tab=0x8828be000
+A5 dg: pb=0xfffffff00af84000 pe=0xfffffff02bf84000 sme=0xfffffff02bf84000 dmb=0xfffffff02c00000
+A5 dg2: vle=0xfffffff02d800000 ms=0x20000000 rp=0x20000000 sl=0x26c8000
+A5 dg3: tk=0x8828bc000 vid=0 n=12 vstart=0xfffffff02da18d10 vend=0xffffffff...
+A5 tt_alloc: lv=3 opt=0
+A5 pgalloc: size=4096 opt=0
+```
+
+Every value lines up with the code in `osfmk/arm64/arm_vm_init.c`:
+
+- `mem_segments = (mem_size + 0x0FFFFFFF) >> 28 = 2`, so
+  `va_l1_end = dmb + ((2 + 2*10) << 20) = dmb + 22 MiB`, `+ round_page(Video)`
+  (`vid=0` on this handoff), then 8 MiB rounded → **`dmb + 24 MiB` =
+  `0xfffffff02d800000` = exactly the hanging VA (`vle`)**.
+- `n = 12` L3 tables = the 24 MiB / 2 MiB the prebuild loop built.
+- `l2 = 0` at `l2i=364`: the L2 entry for the hanging 2 MiB region is empty, so
+  the prebuild never got there and `pmap_expand` must allocate an L3 table.
+- `sl = 0x26c8000` non-zero and `pb` (physmap_base) not TWIG aligned
+  (low bits `0x84000`): the `#if defined(DREAMLTE)` layout workarounds in
+  `0124` are **off** for `-DJACKPOTLTE=1`.
+
+The `pmap_steal_memory()` that blocks is the `vm_pages` array:
+`npages = mem_sz / (PAGE_SIZE + sizeof(vm_page))`; for 512 MiB that is ~16 MiB,
+and with the earlier bucket steals the boot-time VA reaches `vstart` ≈
+`dmb + 26 MiB`, ~2 MiB past the prebuild's 24 MiB. So this is a **range
+deficiency**, not an L2 landing / overlap problem. The `pa=` values increment by
+one per page (they are PFNs; the trailing `000` is not printed) — trust the
+structure, and note the photo OCR moved digits (e.g. `l1` prints `8828be003`).
+
+### Fix `0128`: enable the S8 physmap layout fixes for jackpotlte
+
+`0128-jackpotlte-pmap-layout-fix.patch` changes the three `0124` guards from
+`#if defined(DREAMLTE)` to `#if defined(DREAMLTE) || defined(JACKPOTLTE)`, so
+the A8 gets the same deterministic layout the S8 (hardware-verified) runs:
+
+- `physmap_slide = 0` (was random, `sl=0x26c8000`);
+- `physmap_base = ROUND_TWIG(physmap_base)` (was not 2 MiB aligned);
+- `va_l1_end += round_page(A5_FB_STRIDE * A5_FB_HEIGHT) + (64ULL << 20)`
+  (was `dmb + 24 MiB`, one 2 MiB region short of the boot-time steal VA).
+
+Only `osfmk/arm64/arm_vm_init.c` changes; no new values are invented — the
+`64 MiB` and the framebuffer term are the S8's, with the A8's framebuffer size
+(`1080*4*2220`). Applies cleanly on a `bt3 + 0001..0127` tree and reproduces the
+edited file byte-for-byte. Built only on CI (`MACHINE_CONFIG=A5XELTE
+EXTRA_MACHINE_FLAGS=-DJACKPOTLTE=1`); a local XNU build is not possible.
+
 ### Display: DECON trigger ported into the jackpotlte shim (2026-11-08)
 
 Stage 2/4 were reached with the **S8 `shim/dreamlte`** loader, which is what
@@ -258,8 +314,12 @@ Local build (not a device claim):
   it still appends `samsung,a5xelte` to the ADT root compatible because the
   kernel's `IONameMatch` is the donor board name).
 
-Not yet flashed: no phone attached (`fastboot devices` empty, 2026-11-08). The
-probe image is the display proof; the full image carries the `0127` layout probe.
+Flashed and seen (2026-11-08): both `/var/tmp/a8-probe-jt.img` and the full
+`/var/tmp/a8-xnu-jt.img` were written to `BOOT` (`fastboot flash BOOT`,
+product `jackpotlte`, `is-userspace: yes`, RC=0). The owner confirmed the A8
+panel showed the `JACKPOTLTE LOADER BEGIN` banner and the device-tree dump —
+stage 2 re-confirmed with the device's own shim. The full image then reached
+XNU and the `0127` layout probe (see the `0127` decode above).
 
 ### iOS root image (host build, not a device result)
 
