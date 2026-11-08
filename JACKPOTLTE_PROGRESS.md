@@ -120,6 +120,40 @@ appears names the failing call. One candidate is patch `0124`'s
 because `DREAMLTE` was defined there. That is a hypothesis, not a finding:
 the trace is what decides.
 
+### Diagnostic build `0126` (built, then fixed; not yet on the phone)
+
+The flashed trace was still ambiguous: `A5 steal: map=` fires only once per
+4 MiB **before** `pmap_enter`, so the hang is bounded to the single window
+`[0x69800000, 0x69a18d10)` (~2 MiB, ~522 pages) but not to a page, and
+nothing says whether `pmap_enter()` reached `pmap_expand()` (the L3-table
+shortage the S8 worked around) or stalled inside its own body. Per the
+"diagnostics before speculative fixes" rule, `0126-jackpotlte-pmap-diag.patch`
+adds, all gated on `ARM64_BOARD_CONFIG_A5XELTE`, no behaviour change:
+
+- `A5 pg: va=… pa=…` *before* and `A5 pg: ok …` *after* each `pmap_enter()`
+  in the steal loop — the last `va` with no matching `ok` is the hanging page;
+- `A5 steal: done addr=… end=…` after the steal loop returns;
+- `A5 avm: …` budget values (`physmap_base`, `slide`, `static_memory_end`,
+  `dynamic_memory_begin`, `mem_size`) and the L3 prebuild range/count;
+- `A5 expand`, `A5 tt_alloc`, `A5 ptd: feed`, `A5 pv: feed`, `A5 pgalloc` at
+  the L3/PV/PTD allocation sites.
+
+The `A5 avm:` markers run in `arm_vm_init` *before* `serial_init()`, so they
+are expected to be dropped; the pmap/steal markers run inside `pmap_startup`
+and will print.
+
+Provenance: bt2 was stale (predates `0125`), so `0126` was generated against
+the exact tree of the last good run (`42466539728`, downloaded as
+`xnu-buildtree` and verified to contain the `0125` markers);
+`patch -p1 --dry-run` applies cleanly.
+
+The first CI run of `0126` (`42469107466`) failed to compile on one line:
+`pmap_data.c:43: fatal error: 'pexpert/pexpert/pexpert.h' file not found`.
+The TU is compiled with `-I<obj>/EXPORT_HDRS/pexpert`, so the header is
+reached as `<pexpert/pexpert.h>` (the spelling `vm_resident.c` already uses);
+fixed in commit `29c6175`. Every other TU in `0126` compiled with zero
+errors in that run. Re-dispatch is `42470560244`.
+
 ### iOS root image (host build, not a device result)
 
 - Built with `tools/mkiosroot.sh OS.dmg SYSTEMOS.dmg APPOS.dmg
