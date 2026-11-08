@@ -739,21 +739,22 @@ Snapdragon A530W/U. The mainline `exynos7885*` values above therefore apply.
    reads on the phone (`SYSTEM` LBA 409600, 11,078,400 sectors).
 2. **Stage 6 is reached** (`jt6`): the `USERDATA` HFS root mounts and
    `/sbin/launchd` executes.
-3. **Stage 7 (launchd), clean build ready:** the A5 VM/pmap diagnostic patches
-   were removed and the rest renumbered (see the "Patch renumbering" note), so
-   the console no longer drowns in `A5 expand`/`pgalloc`/`steal` lines and the
-   boot tail (launchd / SpringBoard) can be read. CI `42486906977` (push of the
-   renumbered tree) built **successfully**; the artifact
-   `kernel.development.a5xelte` = 16,553,272 bytes, sha256
-   `a0b451285c3aa34298ddfbbf5eaeceb92104ab661674070444fc7614b9764756`, and
-   contains **zero** `A5 expand|pgalloc|tt_alloc|steal|pg|dg|de` strings.
-   Image **`/var/tmp/a8-xnu-jt9.img`** (sha256
-   `267262398cc113b22504aab0fa23b604ccb3b0bb9153bf7ede82e8bdc5f0d59b`) = clean
-   kernel + the multi-bank shim + the `jt8` cmdline
-   `rd=emmcroot0 emmcroot=USERDATA emmcwrite=1 unentitled_ios_sim_launch=1
-   cs_enforcement_disable=1 launchd_unsecure_cache=1 ignition_level=1`. This is
-   the image to flash next; the `launchd_cache_loader` "Unable to find AMFI"
-   wall (jt7) is addressed by `launchd_unsecure_cache=1`.
+3. **Stage 7 (launchd):** the A5 VM/pmap diagnostic patches were removed and the
+   rest renumbered, so the console no longer drowns in
+   `A5 expand`/`pgalloc`/`steal` lines. CI `42486906977` built that clean kernel
+   (`kernel.development.a5xelte`, 16,553,272 B, sha256
+   `a0b451285c3aa34298ddfbbf5eaeceb92104ab661674070444fc7614b9764756`, **zero**
+   `A5 expand|pgalloc|tt_alloc|steal|pg|dg|de` strings) and
+   `/var/tmp/a8-xnu-jt9.img` (sha256
+   `267262398cc113b22504aab0fa23b604ccb3b0bb9153bf7ede82e8bdc5f0d59b`) packed it
+   with the multi-bank shim and the `jt8` cmdline. **But jt9 was built without
+   `-DJACKPOTLTE=1`, so it is the image that panicked** in
+   `dreamlte_battery_read` on physical `0x10970000` (photo
+   `IMG_20261108_152844733`; see "Port merge + the `-DJACKPOTLTE=1` root cause").
+   The fix is the workflow flag, not a kernel patch. Next: when CI on the merged
+   `main` (with the flag) is green, download the `xnu-kernel` artifact and rebuild
+   the image (`/var/tmp/xnu-build/mkimg-jt-root3.sh`) as the real stage-7 trial —
+   launchd / `launchd_unsecure_cache=1` / AMFI, now with the five ports live.
 4. **DRAM map (for "all 4 GB"):** `shim/fdt.c` gained `fdt_memory_all()`, which
    enumerates every `/memory` node; `dt_probe()` now prints each bank
    (`mem bank N base=.. size=.. (MiB)`) plus the total. Host-verified against a
@@ -764,6 +765,11 @@ Snapdragon A530W/U. The mainline `exynos7885*` values above therefore apply.
    contiguous window (`arm_init.c` → `gPhysBase`/`gPhysSize`; ADT
    `DRAM_BASE=0x880000000`/`DRAM_SIZE=0x20000000` today), so widening it to
    fill the largest contiguous bank is the follow-up.
-5. Older housekeeping (still open): read the remaining board unknowns (ramoops
+5. **Ports on the phone:** the five component ports are merged onto `main`
+   (`0128`–`0133`, see the merge section). Their drivers are log-only or
+   read-only by default, so the next boot with the flag-fixed kernel should also
+   print the USB / PMIC / touch / buttons / panel state — the first device
+   evidence for them.
+6. Older housekeeping (still open): read the remaining board unknowns (ramoops
    `log_pstore` offset, gpa1 bank offset, eMMC CIU timings) from the live DT /
    Samsung source and fill `board.h`, then enable `JT_HAVE_RAMOOPS`.
