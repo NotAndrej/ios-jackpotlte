@@ -172,9 +172,8 @@ macOS/Xcode and is built only by CI.
 This tree grows out of the S8 port, which is complete: XNU, the iOS 16.7.16
 userland and its shared cache, launchd, backboardd and the lock screen, with
 S6SY761 touch, the S2MPS17 RTC and log capture in ramoops. Its README,
-installation guide and boot log stay useful as the reference for what the A8
-has to reproduce: **[Floppikrob/ios-galaxy-s8](https://github.com/Floppikrob/ios-galaxy-s8)**,
-and locally `DREAMLTE_PROGRESS.md`, `docs/s8-install.md`.
+installation guide and boot log are the reference for what the A8 has to
+reproduce: **[Floppikrob/ios-galaxy-s8](https://github.com/Floppikrob/ios-galaxy-s8)**.
 
 ## Credits
 

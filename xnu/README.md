@@ -1,6 +1,6 @@
 # XNU build targets
 
-The A5XELTE fork builds XNU 8796 locally with `MACHINE_CONFIG=A5XELTE` and 4 KiB pages. Its Samsung-specific changes begin at `patches/0082-a5xelte-4k-entry.patch`; the earlier SWEET patches still supply shared XNU and userland scaffolding. The physical phone has displayed dynamic C/`kprintf` output, passed CPU0 SGI1, registered pthread and HFS, selected an in-memory `md0` root and mounted its HFS+ volume. Patch `0103` passed its device test; the next stop is the expected missing `/sbin/launchd` on the empty image. iOS userland execution remains unverified. See [the A5XELTE progress log](../A5XELTE_PROGRESS.md) and [migration map](../docs/a5xelte-migration-map.md).
+The jackpotlte (Galaxy A8 2018) fork builds XNU 8796 with `MACHINE_CONFIG=A5XELTE` plus `-DJACKPOTLTE=1` and 4 KiB pages. The Samsung-specific changes are the A5XELTE patches from `patches/0082` onward and the jackpotlte patches (`0124`+); the earlier SWEET patches supply shared XNU and userland scaffolding. See [the jackpotlte progress log](../JACKPOTLTE_PROGRESS.md) for what the phone has actually shown.
 
 ## Original SWEET build notes
 

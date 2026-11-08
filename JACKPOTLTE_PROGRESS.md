@@ -471,8 +471,8 @@ Decode (from the tree, `/var/tmp/art0128/bt/xnu`):
   the cause.
 
 The working S8/A5 cmdlines already carry the fix: `docs/upstream-README.md:115`
-(S8) and `A5XELTE_PROGRESS.md:72` both use `unentitled_ios_sim_launch=1`, and
-the A5 adds `cs_enforcement_disable=1` (`kern_cs.c:167`). The A8 cmdline was
+(S8) and the A5 boot args both use `unentitled_ios_sim_launch=1`, and the A5
+adds `cs_enforcement_disable=1` (`kern_cs.c:167`). The A8 cmdline was
 missing both. Corrected image `/var/tmp/a8-xnu-jt7.img` (sha256
 `81dee8c317af755821bb4339c02109988f00807decf2848569381b6a5aed8d51`) adds
 `unentitled_ios_sim_launch=1 cs_enforcement_disable=1`; `emmcwrite=1` keeps the
