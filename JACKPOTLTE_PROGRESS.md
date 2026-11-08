@@ -819,6 +819,20 @@ The owner reports the `cpus=4` boot reaches **50% of the progress bar** promptly
 really was lack of SMP and not a boot fault. Outcome beyond 50% not yet
 recorded.
 
+CI `42502641208` built `0136` green. Kernel `kernel.development.a5xelte` sha256
+`9c727c27b0d47fdbd5ddccff482db4dc67848563856cd2422fca96de92cc2e8f`; the binary
+carries the new strings (`pmu before`, `sequence enabled`,
+`noncpu=0x%x l2=0x%x`). Two images built from it (cmdline verified in each):
+
+- **`/var/tmp/a8-xnu-jt13.img`** — sha256
+  `0977e441939c76b3e7e045fad5eb0a90467879486fe0b70556d367914f0d5387`,
+  cmdline `... cpus=8 ...` (all three clusters).
+- `/var/tmp/a8-xnu-jt13-cpus6.img` — sha256
+  `7f5036e489688fb9d90873dada97a77e25ee67a6ab9fe4c98dd95c7e50e377e4`,
+  `cpus=6` (both A53 clusters, no A73), one-flash bisect.
+
+Not yet flashed.
+
 ### iOS root image (host build, not a device result)
 
 - Built with `tools/mkiosroot.sh OS.dmg SYSTEMOS.dmg APPOS.dmg
