@@ -18,7 +18,7 @@ output from the phone.**
 | 4 | XNU prints to the framebuffer (log or panic) | **reached (screen output, 2026-11-08)** |
 | 5 | Storage (eMMC) detected | **reached (screen output, 2026-11-08)** — `0127` (was `0130`) maps `dwmmc0@13500000` and reads the GPT (`SYSTEM` LBA 409600, 11,078,400 sectors) |
 | 6 | Root filesystem mounts | **reached (screen output, 2026-11-08)** — `rd=emmcroot0 emmcroot=USERDATA emmcwrite=1` mounts the HFS root and execs launchd |
-| 7 | launchd, then SpringBoard | **reached (screen output, 2026-11-08)** — `jt10`: launchd clears AMFI with `launchd_unsecure_cache=1`, SpringBoard execs, and the A8 panel shows the iOS Apple logo + boot progress bar (user-reported; photo pending) |
+| 7 | launchd, then SpringBoard | **reached (screen output, 2026-11-08)** — `jt10`: launchd clears AMFI with `launchd_unsecure_cache=1`, SpringBoard execs, and the A8 panel shows the iOS Apple logo + boot progress bar (photo `IMG_20261108_170011203.jpg`) |
 
 ### Patch renumbering (2026-11-08)
 
@@ -659,10 +659,11 @@ fixed and the five ports compiled in. Flashing still needs the phone in fastboot
 The owner reports that after flashing `jt10` the A8 panel switched to **the iOS
 Apple logo with the boot progress bar** — iOS userland is running on the A8, on
 one core (`cpus=1`). Because that UI is drawn through IOMobileFramebuffer, the
-display handover/`disp0` path is live too, not just launchd. Still booting at the
-time of the report (progress bar), so it was left to run; a photo is pending.
-This is the same end state the Galaxy S8 donor reaches. **User-reported screen
-output; record the photo when available.**
+display handover/`disp0` path is live too, not just launchd. Photo
+`IMG_20261108_170011203.jpg` (SM-A530F panel): white Apple logo, portrait, with
+the boot progress bar below it (roughly 40% at capture). This is the same end
+state the Galaxy S8 donor reaches. Whether it finishes to the lock screen is not
+yet confirmed.
 
 ### Enabling all 8 cores (`0134`, 2026-11-08)
 
