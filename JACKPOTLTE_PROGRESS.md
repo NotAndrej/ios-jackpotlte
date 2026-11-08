@@ -1064,14 +1064,19 @@ handled the same loops and what their root tweak lists contain.
 
 Subsystem track numbering, for whoever merges them next:
 
-| track | branch | patch (was) | becomes |
+| track | branch | patch on branch | merged as |
 | --- | --- | --- | --- |
-| BT | `jackpotlte-bt` `abd8999` | 0140 | 0141 |
-| audio | `jackpotlte-audio` `52e8c61` | 0141 | 0142 |
-| camera | `jackpotlte-camera` `77704d1` | 0142 | 0143 |
-| sensors | `jackpotlte-sensors` `0fed091` | 0143 | 0144 |
-| flashlight | `jackpotlte-flashlight` `702718d` | 0144 | 0145 |
-| mic | `jackpotlte-mic` `6b4e5bb` | 0145 | 0146 |
+| flashlight | `jackpotlte-flashlight` `702718d` | 0144 | **0142 (merged `052a4b9`)** |
+| BT | `jackpotlte-bt` `abd8999` | 0140 | 0143 |
+| audio | `jackpotlte-audio` `52e8c61` | 0141 | 0144 |
+| camera | `jackpotlte-camera` `77704d1` | 0142 | 0145 |
+| sensors | `jackpotlte-sensors` `0fed091` | 0143 | 0146 |
+| mic | `jackpotlte-mic` `6b4e5bb` | 0145 | 0147 |
+
+Flashlight was merged first (owner instruction) because it is the smallest and
+most isolated of the six: one new file plus the two shared wiring files. Its
+patch needed no regeneration, only renumbering, because nothing on main since
+0139 touches `bsd/conf/files` or `iokit/bsddev/IOKitBSDInit.cpp`.
 
 Each track's own `loader` CI red is only the gap error
 (`expected 0140, found 014N`); it clears once they land in order on the new
