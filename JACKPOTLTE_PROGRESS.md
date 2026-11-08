@@ -273,6 +273,63 @@ Only `osfmk/arm64/arm_vm_init.c` changes; no new values are invented — the
 edited file byte-for-byte. Built only on CI (`MACHINE_CONFIG=A5XELTE
 EXTRA_MACHINE_FLAGS=-DJACKPOTLTE=1`); a local XNU build is not possible.
 
+### `0128` flashed and decoded (2026-11-08) — pmap hang is gone; new CPU-topology panic
+
+CI run `42475507160` (`-DJACKPOTLTE=1`) built commit `8ff471f`. Artifact
+`kernel.development.a5xelte` 16,553,152 B, sha256
+`d95abb2e331f1dbf3d915215f9c61ba5536fef4c80b8bf0d54dd33187a4b7fe3`; the run's
+compile line for `arm_vm_init.c` carries `-DARM64_BOARD_CONFIG_A5XELTE
+-DJACKPOTLTE=1` and no `-DDREAMLTE`, so the three `0128` guards are active.
+Image `/var/tmp/a8-xnu-jt2.img` 17,485,840 B, sha256
+`6ee89ba1ad1810f79e6a64cadbc4ef4ea95987af528f2603b5ba27429824e6cb`, flashed to
+`BOOT` (`fastboot flash BOOT`, RC=0).
+
+Photo `IMG_20261108_123601918.jpg` shows the fix worked. Decoded:
+
+- `sl=0` (physmap_slide now 0) and `n=51` L3 tables (was 12): both `0128`
+  effects visible.
+- The boot ran far past the old hang: `calling mpo_policy_init for vnguard`
+  → `Security policy loaded; Guarded vnode policy (vnguard)` → `SWEET: trust
+  caches unavailable` → `keepsyms boot arg specified` → `No POST boot-arg set.`
+  → `A5XELTE: starting device-tree platform expert` → `A5XELTE: platform expert
+  registered` → `SWEET RKS/WDT/SURF/HID ... registered` → `SWEET BATTERY:
+  static fallback, 100% 4200mV`.
+
+The new stop is a panic:
+
+```
+panic(cpu 0 caller 0xfffffff007a16b74): A5XELTE CPU: unsupported topology
+  cpu=0 mpidr=0x100 count=1 @SweetCPU.cpp:102
+```
+
+`count=1` is the `cpus=1` boot arg. `SweetCPU::start()` computes
+`expected_mpidr` for the non-`DREAMLTE` (Exynos7580) path as `cpu->cpu_id`
+(cpu 0 → MPIDR 0), but the ADT `cpu0` node reports `reg = 0x100`, a mismatch
+against the ADT/hardware truth (below). `ml_parse_cpu_topology()` numbers
+`cpu_id` by enumeration and takes `phys_id` from the node `reg`; the `0128`
+tree's `startAll()` already compares `topology->boot_cpu->phys_id` to
+`A5_BOOT_MPIDR` (0x100 for jackpotlte), so only the `start()` check was stale.
+
+### Fix `0129`: jackpotlte CPU topology MPIDR map
+
+Hardware truth (Samsung's own `arch/arm64/boot/dts/exynos/dtb/exynos7885.dtsi`
+in Eureka-Kernel): `cpu0-3` = A53 `0x100-0x103`, `cpu4-5` = A53 `0x200-0x201`,
+`cpu6-7` = A73 `0x0-0x1`. `tools/mkadt_jackpotlte.py` emits the ADT nodes in
+exactly this order, so the logical `cpu_id` indexes the same table.
+
+`0129-jackpotlte-cpu-topology-mpidr.patch` changes only
+`iokit/Kernel/arm/SweetCPU.cpp`: it turns the `#if defined(DREAMLTE) / #else`
+pair in `SweetCPU::start()` into `DREAMLTE / JACKPOTLTE / else`, adding a
+jackpotlte branch that maps `cpu_id` to the MPIDRs above. The Exynos7580
+default is left unchanged for the A5. No new hardware value is invented — the
+MPIDRs are the ones already in `tools/mkadt_jackpotlte.py`, sourced from the
+Samsung DT. sha256 `ce6c21869133a3707e0101f07d5f034300c43118910692e82f7fcd1d2397a218`;
+applies cleanly on the `0128`-applied tree and reproduces the edited file.
+
+Note (not yet changed): `MAX_CPU_CLUSTERS` is 2, and the three 7885 clusters
+(A53 ×2, A73 ×1) would need 3 if `cpus` is raised above 1. With `cpus=1` only
+cluster 0 is enumerated, so this is not on the current path.
+
 ### Display: DECON trigger ported into the jackpotlte shim (2026-11-08)
 
 Stage 2/4 were reached with the **S8 `shim/dreamlte`** loader, which is what
@@ -427,13 +484,14 @@ Snapdragon A530W/U. The mainline `exynos7885*` values above therefore apply.
 
 ## Next concrete action
 
-1. Get `backup/BOOT.img` (the SM-A530F's own BOOT dump) from the phone:
-   `adb shell "dd if=/dev/block/by-name/BOOT of=/sdcard/BOOT.img"` then
-   `adb pull /sdcard/BOOT.img backup/BOOT.img`.
-2. Build and flash the shim-only probe image and photograph the screen:
-   `bash shim/jackpotlte/build.sh --probe backup/BOOT.img a8-probe.img`.
-   That reaches stage 2 and returns the live bootargs, initrd range, /memory
-   and the 7885 node presence — record them in `docs/jackpotlte-bringup.md`.
-3. Read the remaining unknowns (ramoops `log_pstore` offset, gpa1 bank offset,
-   eMMC timings) from the live DT / Samsung source and fill `board.h`; then
-   enable `JT_HAVE_RAMOOPS`.
+1. Build `0129` on CI (`MACHINE_CONFIG=A5XELTE -DJACKPOTLTE=1`), download
+   `xnu-kernel`, and pack `/var/tmp/a8-xnu-jt3.img` with
+   `bash /var/tmp/xnu-build/mkimg-jt.sh <kernel> /var/tmp/a8-xnu-jt3.img`.
+2. `fastboot flash BOOT` it and photograph: the expected next stop is either
+   the `0129` CPU-topology check passing into `A5XELTE CPU: requested=... `,
+   or a later device/root message. Record the exact last lines.
+3. Then continue down the boot: root-device (`ufsroot0` / `sweet_ufs.c`) and
+   the iOS root once approved.
+4. Older housekeeping (still open): read the remaining board unknowns (ramoops
+   `log_pstore` offset, gpa1 bank offset, eMMC timings) from the live DT /
+   Samsung source and fill `board.h`, then enable `JT_HAVE_RAMOOPS`.
