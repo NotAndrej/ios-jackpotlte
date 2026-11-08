@@ -165,9 +165,57 @@ Re-dispatch `42470560244` is **green**:
   sha256 `fc0779607d4a70a09f228b3eae07cdd33d4727940b6b87a04956aa837a4da5e6`
   (shim 48,480 B, payload 16,546,816 B, DT 882,688 B).
 
-**Not flashed yet:** no device was attached when the image was built
-(`fastboot devices` and `adb devices` empty). This is a built artifact, not
-a phone result; stage 4 stays as-is until the new screen tail is captured.
+**Flashed and the decisive trace is captured (2026-11-08).** `/var/tmp/a8-xnu4.img`
+was flashed to `BOOT` (product `jackpotlte`, `is-userspace: yes`,
+`fastboot flash BOOT` RC=0) and the phone rebooted. The screen tail was:
+
+```
+A5 pg: va=0xfffffff034fff000  ... A5 pg: ok ... kr=0   <- last page of a 2 MiB region
+A5 pg: va=0xfffffff035000000                            <- first page of the next
+A5 expand: v=0xfffffff035000000 lv=3
+A5 tt_alloc: lv=3 opt=0
+A5 pgalloc: size=4096 opt=0
+<then nothing>
+```
+
+Every `kr=` on screen is 0, and there is no `A5 pg: ok` after `A5 pgalloc`.
+So the hang is **not inside `pmap_enter`'s body**: at a 2 MiB boundary a new L3
+table is needed, `pmap_expand` → `pmap_tt_allocate` → `pmap_pages_alloc_zeroed`
+runs, and `pmap_pages_alloc_zeroed` never returns — it blocks in
+`vm_page_grab()`/`VM_PAGE_WAIT()` because the VM free list does not exist yet
+during `pmap_startup`. The `A5 avm:` budget markers are absent, as predicted
+(`arm_vm_init` runs before `serial_init()`).
+
+Digit caveat: the `pa=` values are blurry on the photo; they read as a clean
++1-per-page sequence. Trust the structure (2 MiB boundary, +0x1000 VA, +1 PA),
+not the individual digits.
+
+### Diagnostic build `0127` (built; not yet on the phone)
+
+The trace localises the hang to `pmap_pages_alloc_zeroed`, but does not yet say
+*why* the L3 table for the next 2 MiB region was not prebuilt. Two candidate
+causes need opposite fixes: either the L3 prebuild range
+`[dynamic_memory_begin, va_l1_end)` is too short and genuinely does not cover
+the stealing VA (fix the range), or it ran over that VA but the L2 TTE never
+landed where `pmap_enter` looks (physmap overlap / layout), or the prebuilt L1
+table is not the one the kernel pmap uses.
+
+`0127-jackpotlte-pmap-layout.patch` (on top of `0126`), all gated on
+`ARM64_BOARD_CONFIG_A5XELTE`, no behaviour change, adds:
+
+- file-scope `a5_diag_*` globals filled in `arm_vm_init` (`physmap_base/end`,
+  `static_memory_end`, `dynamic_memory_begin`, `va_l1_end`, `mem_size`,
+  `real_phys_size`, `physmap_slide`, `topOfKernelData`, video size) plus an
+  L3-table counter in the dynamic prebuild loop;
+- in `pmap_expand` at level 3 it prints the failing VA, the L1 index and raw L1
+  TTE, the resolved L2 table PA, the L2 index and raw L2 TTE, all the
+  `a5_diag_*` values, and `virtual_space_start/end`.
+
+These print late from `pmap_expand` (after `serial_init`) because `arm_vm_init`'s
+own `kprintf`s are dropped. Provenance: generated as a diff of the `0126`-applied
+files to the `0127` edits; `patch -p1 --dry-run` applies cleanly on a fresh
+`bt3 + 0126` tree and the applied result is byte-identical to the edited files.
+Patch sha256 `2116627c92e840c8c626434080b338b67c1afd2082bc79ac39eceede7ae89ad6`.
 
 ### iOS root image (host build, not a device result)
 

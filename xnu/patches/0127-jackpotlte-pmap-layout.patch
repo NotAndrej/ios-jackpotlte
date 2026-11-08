@@ -1,0 +1,102 @@
+diff --git a/osfmk/arm/pmap/pmap.c b/osfmk/arm/pmap/pmap.c
+index 759177c..0cde7af 100644
+--- a/osfmk/arm/pmap/pmap.c
++++ b/osfmk/arm/pmap/pmap.c
+@@ -6749,6 +6749,33 @@ pmap_expand(
+ 	__unused const pt_attr_t * const pt_attr = pmap_get_pt_attr(pmap);
+ #if defined(ARM64_BOARD_CONFIG_A5XELTE)
+ 	kprintf("A5 expand: v=%#llx lv=%u\n", (unsigned long long)v, level);
++	if (level == 3) {
++		extern uint64_t a5_diag_physmap_base, a5_diag_physmap_end, a5_diag_sme, a5_diag_dmb;
++		extern uint64_t a5_diag_va_l1_end, a5_diag_mem_size, a5_diag_real_phys;
++		extern uint64_t a5_diag_slide, a5_diag_top, a5_diag_video, a5_diag_l3_count;
++		uint64_t l1i = (v & ARM_TT_L1_INDEX_MASK) >> ARM_TT_L1_SHIFT;
++		uint64_t l2i = (v & ARM_TT_L2_INDEX_MASK) >> ARM_TT_L2_SHIFT;
++		tt_entry_t l1raw = pmap->tte[l1i];
++		tt_entry_t l2raw = 0;
++		uint64_t l2tab = 0;
++		if ((l1raw & (ARM_TTE_TYPE_MASK | ARM_TTE_VALID)) == (ARM_TTE_TYPE_TABLE | ARM_TTE_VALID)) {
++			l2tab = l1raw & ARM_TTE_TABLE_MASK;
++			l2raw = ((tt_entry_t *)phystokv(l2tab))[l2i];
++		}
++		kprintf("A5 de: v=%#llx l1i=%llu l1=%#llx l2i=%llu l2=%#llx tab=%#llx\n",
++		    (unsigned long long)v, (unsigned long long)l1i, (unsigned long long)l1raw,
++		    (unsigned long long)l2i, (unsigned long long)l2raw, (unsigned long long)l2tab);
++		kprintf("A5 dg: pb=%#llx pe=%#llx sme=%#llx dmb=%#llx\n",
++		    (unsigned long long)a5_diag_physmap_base, (unsigned long long)a5_diag_physmap_end,
++		    (unsigned long long)a5_diag_sme, (unsigned long long)a5_diag_dmb);
++		kprintf("A5 dg2: vle=%#llx ms=%#llx rp=%#llx sl=%#llx\n",
++		    (unsigned long long)a5_diag_va_l1_end, (unsigned long long)a5_diag_mem_size,
++		    (unsigned long long)a5_diag_real_phys, (unsigned long long)a5_diag_slide);
++		kprintf("A5 dg3: tk=%#llx vid=%#llx n=%llu vstart=%#llx vend=%#llx\n",
++		    (unsigned long long)a5_diag_top, (unsigned long long)a5_diag_video,
++		    (unsigned long long)a5_diag_l3_count,
++		    (unsigned long long)virtual_space_start, (unsigned long long)virtual_space_end);
++	}
+ #endif
+ 
+ 	if (__improbable((v < pmap->min) || (v >= pmap->max))) {
+diff --git a/osfmk/arm64/arm_vm_init.c b/osfmk/arm64/arm_vm_init.c
+index 64606ec..16c6466 100644
+--- a/osfmk/arm64/arm_vm_init.c
++++ b/osfmk/arm64/arm_vm_init.c
+@@ -345,6 +345,25 @@ SECURITY_READ_ONLY_LATE(unsigned long)   real_phys_size;
+ SECURITY_READ_ONLY_LATE(vm_map_address_t) physmap_base = (vm_map_address_t)0;
+ SECURITY_READ_ONLY_LATE(vm_map_address_t) physmap_end = (vm_map_address_t)0;
+ 
++#if defined(ARM64_BOARD_CONFIG_A5XELTE)
++/*
++ * 0127 diagnostics: arm_vm_init runs before serial_init(), so the values are
++ * captured here and printed later from pmap_expand()/pmap_startup(), which run
++ * after the console works.
++ */
++uint64_t a5_diag_physmap_base;
++uint64_t a5_diag_physmap_end;
++uint64_t a5_diag_sme;
++uint64_t a5_diag_dmb;
++uint64_t a5_diag_va_l1_end;
++uint64_t a5_diag_mem_size;
++uint64_t a5_diag_real_phys;
++uint64_t a5_diag_slide;
++uint64_t a5_diag_top;
++uint64_t a5_diag_video;
++uint64_t a5_diag_l3_count;
++#endif
++
+ /*
+  * Bounds of the kernelcache; used for accounting.
+  */
+@@ -2306,6 +2325,15 @@ arm_vm_init(uint64_t memory_size, boot_args * args)
+ 	    (unsigned long long)physmap_base, (unsigned long long)physmap_slide,
+ 	    (unsigned long long)static_memory_end, (unsigned long long)dynamic_memory_begin,
+ 	    (unsigned long long)mem_size);
++	a5_diag_physmap_base = physmap_base;
++	a5_diag_physmap_end = physmap_end;
++	a5_diag_sme = static_memory_end;
++	a5_diag_dmb = dynamic_memory_begin;
++	a5_diag_mem_size = mem_size;
++	a5_diag_real_phys = real_phys_size;
++	a5_diag_slide = physmap_slide;
++	a5_diag_top = args->topOfKernelData;
++	a5_diag_video = round_page(args->Video.v_height * args->Video.v_rowBytes);
+ #endif
+ 	pmap_bootstrap(dynamic_memory_begin);
+ 	sweet_early_mark(13, "pmap_bootstrap done");
+@@ -2333,6 +2361,7 @@ arm_vm_init(uint64_t memory_size, boot_args * args)
+ 	    (unsigned long)round_page(args->Video.v_height * args->Video.v_rowBytes),
+ 	    (unsigned long long)mem_segments,
+ 	    (unsigned long long)((va_l1_end - dynamic_memory_begin) / ARM_TT_L2_SIZE));
++	a5_diag_va_l1_end = va_l1_end;
+ #endif
+ 
+ 	cpu_l1_tte = cpu_tte + ((va_l1 & ARM_TT_L1_INDEX_MASK) >> ARM_TT_L1_SHIFT);
+@@ -2361,6 +2390,9 @@ arm_vm_init(uint64_t memory_size, boot_args * args)
+ 			pmap_init_pte_page(kernel_pmap, ptp, va_l2, 3, TRUE);
+ 
+ 			*cpu_l2_tte = (pa_to_tte(ptp_phys)) | ARM_TTE_TYPE_TABLE | ARM_TTE_VALID | ARM_DYNAMIC_TABLE_XN;
++#if defined(ARM64_BOARD_CONFIG_A5XELTE)
++			a5_diag_l3_count++;
++#endif
+ 
+ 			va_l2 += ARM_TT_L2_SIZE;
+ 			cpu_l2_tte++;
