@@ -132,4 +132,15 @@ sudo umount "$work/root"
 # Linux hfsplus decomposes some non-ASCII names (localized Shortcuts examples)
 # differently from Apple's tables; let fsck_hfs rewrite them, then verify.
 fsck.hfsplus -f -y "$out" | grep -v 'Illegal name' || true
-fsck.hfsplus -f -n "$out"
+# Verify with a second repair pass, which is authoritative. Read-only mode is
+# not used: on any Linux-made journaled volume it reports "Volume header needs
+# minor repair" and exits 8 even when the repair pass just called the volume OK
+# (a fresh, never-mounted `mkfs.hfsplus -s -J` image does the same), so its exit
+# status cannot distinguish a real fault. The repair pass must find nothing to
+# fix and must report the volume OK.
+verify=$(fsck.hfsplus -f -y "$out" 2>&1)
+printf '%s\n' "$verify"
+if [[ $verify != *"appears to be OK"* && $verify != *"was repaired successfully"* ]]; then
+	echo "iOS root image failed fsck verification" >&2
+	exit 1
+fi

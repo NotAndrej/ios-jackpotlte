@@ -58,6 +58,56 @@ output from the phone.**
   the partition is named `BOOT` uppercase in this fastbootd. The earlier
   "stuck at JUMP TO XNU" photo was the previous image, not this one.
 
+### Next step for the stage-4 hang (patch `0125`, built, not yet flashed)
+
+The last line is printed by `vm_resident.c` immediately *before* it calls
+`pmap_startup()`. Nothing after it appears, and the framebuffer console
+scrolls (row wraps) rather than stopping at the bottom, so the kernel really
+stops printing. `pmap_startup()` has three later markers of ours
+(`span`, `npages`, `page 0 ppn`) and none appear. Patch
+`0125-jackpotlte-vm-trace.patch` adds, all gated on
+`ARM64_BOARD_CONFIG_A5XELTE`:
+
+- `A5 vm: enter vs=… ve=…` at `pmap_startup()` entry (after the LP64 align);
+- `A5 vm: span=… mem_sz=… npages=…` after the page-count arithmetic;
+- `A5 steal: size=… align=… vs=…` at `pmap_steal_memory_internal()` entry
+  (the only caller on this path is `pmap_steal_freeable_memory()`);
+- `A5 steal: addr=… new_vs=…` once the VA is carved out of
+  `virtual_space_start`;
+- `A5 steal: map=… phys=…` once per 1024 mapped pages.
+
+These bisect the window: the existing marker prints, the next one that
+appears names the failing call. One candidate is patch `0124`'s
+`#if defined(DREAMLTE)` layout workarounds (deterministic `physmap_slide = 0`,
+`ROUND_TWIG`, and the `va_l1_end` framebuffer reservation), which
+`-DJACKPOTLTE=1` turns **off** — the working A5XELTE-on-A8 image had them on
+because `DREAMLTE` was defined there. That is a hypothesis, not a finding:
+the trace is what decides.
+
+### iOS root image (host build, not a device result)
+
+- Built with `tools/mkiosroot.sh OS.dmg SYSTEMOS.dmg APPOS.dmg
+  /var/tmp/iosroot/iOSRoot.img 16G` from the iPhone10,3 16.7.16 (20H392)
+  DMGs `087-86698-044` / `087-86593-047` / `087-86715-047`.
+- The image is 17,179,869,184 B, 12 GB used, case-sensitive journaled HFS+,
+  label `iOSRoot`. Mounted read-only on the host and spot-checked:
+  `/sbin/launchd` (541,600 B, root:wheel 0755), `/usr/lib/dyld` (922,912 B),
+  `/private/preboot/Cryptexes/{OS,App}`, the `System/Library/Caches/com.apple.dyld`
+  shared-cache hard links (link count 2), `System/Cryptexes/{OS,App}` symlinks,
+  and the root-only `/private/var/keybags/systembag.kb`.
+- The IPSW DMGs are LZBITMAP-compressed, so the distro `apfs-fuse` 0.33
+  returns `EIO` on every compressed file; the image was built with upstream
+  master `apfs-fuse` built from source at `/tmp/opencode/apfs-fuse/build`
+  (`-DCMAKE_CXX_FLAGS="-include cstdint"`, needs `fuse3-devel`).
+- `mkiosroot.sh`'s final check is fixed: Linux `fsck.hfsplus -n` reports
+  "Volume header needs minor repair" and exits 8 on **any** Linux-made
+  journaled volume (a fresh, never-mounted `mkfs.hfsplus -s -J` image does
+  the same), so it cannot be used as a pass/fail check. The script now
+  verifies with a second repair pass and requires "appears to be OK".
+- Not flashed: the iOS root goes to USERDATA only after approval. This is a
+  host build result, not stage 6.
+
+
 ## Hardware facts (from Samsung's own 4.4 source and the mainline DT; NOT yet confirmed on the phone)
 
 Source now includes the **Eureka-Kernel** Samsung 4.4 tree for this device
