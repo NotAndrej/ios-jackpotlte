@@ -92,7 +92,7 @@ index 7ba309b..ba647a8 100644
  
  extern vm_offset_t ml_io_map(vm_offset_t, vm_size_t);
  extern void thread_terminate_self(void);
-@@ -615,10 +616,317 @@ a5touch_start_early(vm_offset_t nfc, vm_offset_t alive)
+@@ -615,10 +616,337 @@ a5touch_start_early(vm_offset_t nfc, vm_offset_t alive)
  	}
  }
  
@@ -399,6 +399,26 @@ index 7ba309b..ba647a8 100644
 +	}
 +}
 +#endif /* DREAMLTE */
++
++#if defined(JACKPOTLTE)
++/*
++ * The A8's fuel gauge is not driven yet. SweetBattery references this for
++ * every A5XELTE build, so return "no sample"; it then publishes the static
++ * installed-battery fallback.
++ */
++int
++dreamlte_battery_read(unsigned *percent, unsigned *mv, int *ma,
++    int *external, int *charging, int *full)
++{
++	(void)percent;
++	(void)mv;
++	(void)ma;
++	(void)external;
++	(void)charging;
++	(void)full;
++	return -1;
++}
++#endif /* JACKPOTLTE */
 +
  void
  a5xelte_touch_probe(void)
