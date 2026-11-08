@@ -50,7 +50,10 @@
  * Secondary-core power-up (Exynos7885 uses a quirky core numbering):
  *   PMU_CPU_CONFIG_BASE 0x2000, PMU_CPU_STATUS_BASE 0x2004,
  *   step 0x80 per core, CPU_LOCAL_PWR_CFG 0xF.
- *   cluster 0 -> cpuid 0..1; cluster 1 -> cpuid 4..5; cluster 2 -> cpuid 6..7. */
+ *   pmu_cpu_offset() has a CONFIG_SOC_EXYNOS7885 override that numbers the
+ *   cores by MPIDR Aff1 (not the generic (Aff1<<2)|Aff0): Aff1=0 (A73
+ *   0x0-0x1) -> 0..1, Aff1=2 (A53 0x200-0x201) -> 2..3, Aff1=1 (A53
+ *   0x100-0x103) -> 4..7. Patch 0135 uses this table. */
 #define JT_PMU_BASE		0x11c80000UL
 #define JT_PMU_CPU_CFG		0x2000
 #define JT_PMU_CPU_STATUS	0x2004

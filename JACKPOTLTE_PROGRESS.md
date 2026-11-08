@@ -698,6 +698,29 @@ CI `42497660560` built it green (`kernel.development.a5xelte`, sha256
 as `jt10` but `cpus=8`. Not yet flashed: `jt10` is still creeping through the iOS
 boot on one core, and swapping images drops that run.
 
+**Flashed and panicked (photo `IMG_20261108_171522433.jpg`).** `0134` did its job —
+the console shows `A5XELTE CPU: requested=8 selected=8 (limit=8)` with no
+`unsupported topology` assert, so all eight CPUs were enumerated and the three
+clusters were accepted. The secondaries then fail to start:
+
+```
+cpu_signal failed in DebuggerXCallEnter        (repeated)
+panic(cpu 0 caller 0xfffffff007a66300): Ticket Lock 0xfffffff0083c0680 is
+  unexpectedly owned by thread 0xfffffff6f053b430 @lock_ticket.c:143
+```
+
+`lock_ticket.c:143` is the "unexpectedly owned" detector: the boot CPU xcalls the
+other cores, they never answer (`cpu_signal failed`), and a ticket lock they half
+took is never released. So the panic is a **symptom of secondaries that are not
+running**, not a lock bug. `SWEET FB: AppleCLCD 1080x2220 stride 4320 at
+0xec000000, default surface 1, presented as 1080x2220` confirms display is up.
+
+Conclusion: the cluster-count change is correct, but the A8 secondary bring-up
+(`SweetCPU::startAll()` / the donor PSCI path) does not actually power the other
+cores on this SoC. Next: step the count down (`cpus=2`, then 4) to see whether
+*any* secondary comes up — no CI needed, the `0134` kernel is reused and only the
+cmdline changes.
+
 ### iOS root image (host build, not a device result)
 
 - Built with `tools/mkiosroot.sh OS.dmg SYSTEMOS.dmg APPOS.dmg
