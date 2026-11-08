@@ -1029,6 +1029,27 @@ Each track's own `loader` CI red is only the gap error
 (`expected 0140, found 014N`); it clears once they land in order on the new
 numbering.
 
+**But they do not stack as-is (tested 2026-11-08 21:30).** Applying all six in
+order to a true `0139` tree (`/tmp/opencode/sns-base` is the reliable
+baseline; `/tmp/opencode/verify0138` is at 0138 and gives false failures):
+
+| order | patch | result |
+| --- | --- | --- |
+| 1 | BT 0140 | applies with fuzz 2; `IOKitBSDInit.cpp` hunk #2 FAILS |
+| 2 | audio 0141 | clean |
+| 3 | camera 0142 | all 5 hunks FAIL |
+| 4 | sensors 0143 | clean |
+| 5 | flashlight 0144 | all 5 hunks FAIL |
+| 6 | mic 0145 | all 5 hunks FAIL |
+
+Only 3 of 6 entries reach `bsd/conf/files`. Cause: all six append at the same
+two spots in `bsd/conf/files` and `iokit/bsddev/IOKitBSDInit.cpp`, and each
+patch was generated against the bare 0139 tree rather than against its
+predecessors. `dxb` applies them with `patch -p1`, so these are genuine
+failures. **The merge is not a `git merge`; each patch must be regenerated on
+top of the accumulated tree (and ideally rebuilt in CI) in the order above.**
+That work is not started.
+
 Interim 6-core image (A53s only, skips the A73 pair): **flashed 2026-11-08
 ~21:15** after the owner asked for 6 cores for now, and the owner
 reports it **boots properly**. `/var/tmp/a8-xnu-jt17-cpus6.img`, 17,485,840 B,
