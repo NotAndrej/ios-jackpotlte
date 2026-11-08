@@ -217,6 +217,50 @@ files to the `0127` edits; `patch -p1 --dry-run` applies cleanly on a fresh
 `bt3 + 0126` tree and the applied result is byte-identical to the edited files.
 Patch sha256 `2116627c92e840c8c626434080b338b67c1afd2082bc79ac39eceede7ae89ad6`.
 
+### Display: DECON trigger ported into the jackpotlte shim (2026-11-08)
+
+Stage 2/4 were reached with the **S8 `shim/dreamlte`** loader, which is what
+actually poked DECON. The jackpotlte shim carried `JT_DECON_TRIG 0` ("do not
+poke DECON before XNU"), so an image built from it would clear the handover
+framebuffer but never make DECON scan it out — serial only. The trigger is now
+in `shim/jackpotlte` itself.
+
+- `shim/jackpotlte/board.h`: `JT_DECON_TRIG` = `0x14860070`
+  (`JT_DECON_BASE + 0x0070`), plus `JT_DECON_TRIG_UNMASK 0x1281`.
+- `0x1281` is the 7885 definition, not a copy of an 8895 magic number:
+  `drivers/video/fbdev/exynos/dpu_7885/regs-decon.h` defines
+  `HW_TRIG_EN (1 << 0)`, `HW_TRIG_EDGE_POLARITY (1 << 7)`,
+  `TRIG_AUTO_MASK_EN (1 << 12)` and warns `SW_TRIG_EN (1 << 8)`. `0x1281` sets
+  the three HW-trigger bits and **not** `SW_TRIG_EN`, so it re-arms the TE
+  (hardware) trigger; the display keeps scanning the handover buffer on every
+  TE instead of holding the S-Boot frame. This matches the board note and the
+  verified S8 value.
+- `shim/jackpotlte/loader.c` `jt_main`: with `JT_HAVE_FB`, always write the
+  trigger (when non-zero), then clear the framebuffer and set the foreground
+  colour. The old `JT_DECON_TRIG == 0` clear-only branch is gone.
+
+Local build (not a device claim):
+
+- `shim/jackpotlte/out/Image` = **51,984 B**, 0 ABS64 relocations, `mov
+  w1,#0x1281` / `str w1,[x0]` with `x0=0x14860070` confirmed by objdump.
+- Probe image `/var/tmp/a8-probe-jt.img` = **940,048 B**,
+  sha256 `2f6424a43c8bbf37affa007126f205ed430a80eb41b8b47c5a45d5ba0837b5be`
+  (kernel 51,984 B, empty ramdisk 43 B, DT 882,688 B) on `boot_a530f_q.img`.
+  Expected on the phone: the `JACKPOTLTE LOADER BEGIN` banner on the A8 panel,
+  then the DT probe, then the 8 s canary reset to recovery.
+- Full image `/var/tmp/a8-xnu-jt.img` = **17,485,840 B**,
+  sha256 `69755a6fc096eedd12ac540b478fa38eeb7440e1d844e17afdcc91f8344cc86e`
+  (jackpotlte shim 51,984 B, payload 16,547,216 B, DT 882,688 B). Kernel is the
+  `0127` build from run `42472946452` (`kernel.development.a5xelte` 16,553,152 B,
+  sha256 `22c8d8cd3f75a39c9b88425a3e4b1b4bb3950b0249aef830a3b7cab5781884a6`),
+  with `A5 de:`, `A5 dg:`, `A5 dg2:`, `A5 dg3:` verified present. Built with
+  `/var/tmp/xnu-build/mkimg-jt.sh` (jackpotlte shim + `tools/jackpotlte_mkboot.py`;
+  it still appends `samsung,a5xelte` to the ADT root compatible because the
+  kernel's `IONameMatch` is the donor board name).
+
+Not yet flashed: no phone attached (`fastboot devices` empty, 2026-11-08). The
+probe image is the display proof; the full image carries the `0127` layout probe.
+
 ### iOS root image (host build, not a device result)
 
 - Built with `tools/mkiosroot.sh OS.dmg SYSTEMOS.dmg APPOS.dmg
@@ -286,11 +330,12 @@ Source now includes the **Eureka-Kernel** Samsung 4.4 tree for this device
 
 ## Build results (local, not device)
 
-- `shim/jackpotlte/build.sh` → `out/Image` = **48,384 bytes**, 0 ABS64
-  relocations, above the 16 KiB stub gate. Reproducible on this machine.
+- `shim/jackpotlte/build.sh` → `out/Image` = **51,984 bytes** with the DECON
+  trigger (48,384 B before it), 0 ABS64 relocations, above the 16 KiB stub
+  gate. Reproducible on this machine.
 - `shim/jackpotlte/build.sh --probe STOCK OUT` → shim-only flash image
-  (48,384-byte loader + a minimal newc cpio.gz ramdisk); 61,456 bytes with a
-  synthetic stock header. This is the stage-2 bring-up image.
+  (51,984-byte loader + a minimal newc cpio.gz ramdisk). This is the stage-2
+  bring-up/display image; see the DECON section for the current artifact.
 - `tools/mkadt_jackpotlte.py` → ADT = 8,920 bytes (without the iPhone X
   `/product` node, which is an Apple artifact kept out of git).
 - `tools/jackpotlte/selftest.py` → the full pack chain (loader → ADT → payload

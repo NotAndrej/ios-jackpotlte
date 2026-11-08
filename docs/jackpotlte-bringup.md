@@ -34,8 +34,21 @@ Then read: the framebuffer / reserved-memory nodes, `/chosen` bootargs
 (`s3cfb.bootloaderfb`), the ramoops node, the `mmc@13500000` node, gpio-keys.
 
 Recorded:
-- framebuffer base / geometry: _pending_
-- DECON base / trigger: _pending_
+- framebuffer base / geometry: `0xec000000`, 20 MiB, 1080x2220, 32 bpp
+  (stride 4320). Source: Samsung 4.4
+  `arch/arm64/boot/dts/exynos/{dtb,dtbo}/exynos7884-rmem.dtsi` /
+  `exynos7885-rmem.dtsi` `fb_handover: framebuffer@0xEC000000` with
+  `compatible = "exynos,dpu_fb_handover"` and `reg = <0x0 0xEC000000 0x1400000>`;
+  panel `s6e3fa7` 1080x2220 in `exynos7885-jackpotlte_common.dtsi`. Confirmed
+  on the phone: the loader banner is visible at this address (stage 2/4,
+  2026-11-08).
+- DECON base / trigger: `0x14860000`, `HW_SW_TRIG_CONTROL` `+0x0070`,
+  write **`0x1281`**. Source: `dpu_7885/regs-decon.h` (`HW_TRIG_EN` bit 0,
+  `HW_TRIG_EDGE_POLARITY` bit 7, `TRIG_AUTO_MASK_EN` bit 12, `SW_TRIG_EN`
+  bit 8 deliberately clear). Confirmed on the phone: with `0x1281` written by
+  the S8 shim the panel showed the loader + XNU text; with no trigger the
+  panel held the S-Boot frame. The same trigger is now in `shim/jackpotlte`
+  (built, not yet flashed).
 - ramoops base / size / console+pmsg offsets: _pending_
 - eMMC node reg + phandle/timings: _pending_
 

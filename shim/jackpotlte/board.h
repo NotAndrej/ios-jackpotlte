@@ -57,6 +57,21 @@
 #define JT_PMU_CPU_STEP		0x80
 #define JT_PMU_CPU_PWR		0xf
 
+/* PMU reset / reboot reason (SAM-K drivers/soc/samsung/exynos-reboot.c and the
+ * "exynos,reboot { pmu_base = <0x11C80000> }" node in exynos7885.dtsi).
+ * exynos_reboot() writes the reason to SYSIP_DAT0 and then 1 to SWRESET. */
+#define JT_PMU_SYSIP_DAT0	0x0810U	/* reboot reason / boot command */
+#define JT_PMU_SWRESET		0x0400U	/* write 1: SoC software reset */
+#define JT_REBOOT_RECOVERY	0xffU	/* REBOOT_MODE_RECOVERY */
+#define JT_REBOOT_NORMAL	0x00U	/* REBOOT_MODE_NORMAL */
+
+/* Bring-up canary. The shim has no readable output when DECON is not scanning
+ * out the handover framebuffer, so every terminal state (probe done, failure,
+ * exception) waits this long and then resets the SoC into the recovery
+ * partition. A phone that drops into recovery by itself is proof the shim ran
+ * even when the screen showed nothing. Set 0 to disable. */
+#define JT_CANARY_MS		8000U
+
 /* ---- Timer (SAM-K exynos7885.dtsi timer) ----
  * arm,armv8-timer, clock-frequency 26000000. The arch timer PPIs (with the
  * DT GIC numbering): secure phys 13, non-secure phys 14, virtual 11, hyp 10.
@@ -92,9 +107,16 @@
  * 0x1400000 (20 MiB). dpp_drv.c reads exactly this reg (res[1],res[2]) as the
  * bootloader framebuffer's phy_addr and size.
  * Panel s6e3fa7: resolution 1080x2220, MIPI command mode, 4 data lanes.
- * DECON_F @ 0x14860000, HW_SW_TRIG_CONTROL at offset 0x0070; the panel runs
- * trig_mode=0 (HW trigger) from the DSI TE line, so the loader must NOT force
- * a software trigger before XNU drives the display. */
+ * DECON_F @ 0x14860000, HW_SW_TRIG_CONTROL at offset 0x0070
+ * (drivers/video/fbdev/exynos/dpu_7885/regs-decon.h). The panel runs
+ * trig_mode=0 (HW trigger) from the DSI TE line. S-Boot leaves that trigger
+ * masked, so the panel keeps the last frame until the loader re-arms it:
+ * writing HW_TRIG_EN (bit 0) | HW_TRIG_EDGE_POLARITY (bit 7) |
+ * TRIG_AUTO_MASK_EN (bit 12) = 0x1281 enables the HW trigger without setting
+ * SW_TRIG_EN (bit 8), so DECON keeps scanning the handover framebuffer on each
+ * TE. It is the S8 shim's proven trigger and put the loader banner and XNU
+ * kprintf on the A8 panel (stage 2/4 photos, 2026-11-08). "Using
+ * TRIG_AUTO_MASK_EN=1'b0 is strictly prohibited" (regs-decon.h). */
 #define JT_HAVE_FB		1
 #define JT_FB_BASE		0xec000000UL
 #define JT_FB_WIDTH		1080U
@@ -102,19 +124,39 @@
 #define JT_FB_STRIDE		(JT_FB_WIDTH * 4)
 #define JT_DECON_BASE		0x14860000UL
 #define JT_DECON_TRIG_OFF	0x0070U	/* HW_SW_TRIG_CONTROL */
-#define JT_DECON_TRIG		0UL	/* do not poke DECON before XNU */
+#define JT_DECON_TRIG		(JT_DECON_BASE + JT_DECON_TRIG_OFF)
+#define JT_DECON_TRIG_UNMASK	0x1281U	/* HW_TRIG_EN|EDGE_POLARITY|AUTO_MASK */
 
-/* ---- ramoops / pstore (log channel) ----
- * Samsung 4.4: the pstore/ramoops zone comes from the exynos-snapshot (ESS)
- * region named by the bootargs ess_setup=0x86000000 ("log_pstore" item), set
- * up in drivers/trace/exynos-ss.c. The exact sub-offset of the "log_pstore"
- * item inside the ESS region must be read from exynos-ss.c's ESS layout for
- * 7885 (or from the live DT / TWRP /proc/iomem). Until then the pstore
- * console stays off; the screen console above is the stage-2 channel. */
-#define JT_HAVE_RAMOOPS		0
-#define JT_RAMOOPS_CONSOLE	0UL		/* TODO(SAM-K exynos-ss.c / LIVE-DT) */
-#define JT_RAMOOPS_PMSG		0UL		/* TODO(SAM-K exynos-ss.c / LIVE-DT) */
-#define JT_RAMOOPS_SIZE		0x80000UL	/* dreamlte's zone size; unconfirmed */
+/* ---- ramoops / pstore (the text log channel) ----
+ * Derived from the ROM's own kernel: it is Eureka 4.4.302-p6 (uname on the
+ * phone), i.e. this tree. /proc/config.gz on the phone says
+ *   CONFIG_EXYNOS_SNAPSHOT=y, _PSTORE=y, _HOOK_LOGGER=y, _SFRDUMP=y,
+ *   MINIMIZED_MODE not set, EXYNOS_CORESIGHT_ETR not set,
+ *   CONFIG_PSTORE=y, PSTORE_RAM=y, PSTORE_CONSOLE=y, PSTORE_PMSG=y.
+ * drivers/trace/exynos-ss.c then lays the ESS region out from ess_setup=
+ * 0x86000000 (S-Boot's /chosen bootargs) in ess_items[] order, each item
+ * taking its size because entry.enabled_init is true and persist is true for
+ * log_pstore (so exynos_ss_fixmap does not memset it):
+ *   log_kevents   0x800000  @ +0x0000000
+ *   log_kernel    0x200000  @ +0x0800000
+ *   log_platform  0x400000  @ +0x0a00000   (HOOK_LOGGER)
+ *   log_sfr       0x400000  @ +0x0e00000   (SFRDUMP)
+ *   log_pstore    0x008000  @ +0x1200000   (32 KiB)
+ *   -> 0x86000000 + 0x1200000 = 0x87200000.
+ * ess_pstore_init() hands that zone to ramoops with mem_size = 32 KiB,
+ * pmsg_size = 16 KiB, record_size = 16 KiB, dump_oops = 1, no console zone and
+ * no ECC. fs/pstore/ram.c allocates the dump records first, then console
+ * (size 0, skipped), then ftrace (size 0), then pmsg, so:
+ *   dmesg record zone (PRZ "DBGC") 0x87200000, 16 KiB
+ *   pmsg zone  (PRZ "DBGC")        0x87204000, 16 KiB
+ * A record written here becomes /sys/fs/pstore/dmesg-ramoops-0 on the next
+ * boot; AOSP's PstoreManager copies it to dropbox as SYSTEM_LAST_KMSG, which
+ * `adb shell dumpsys dropbox --print` shows without root. Reading it in
+ * Lineage recovery's root shell works too. */
+#define JT_HAVE_RAMOOPS		1
+#define JT_RAMOOPS_CONSOLE	0x87200000UL	/* dmesg record 0 */
+#define JT_RAMOOPS_PMSG		0x87204000UL	/* pmsg */
+#define JT_RAMOOPS_SIZE		0x4000UL	/* 16 KiB per zone */
 
 /* XNU's start_first_cpu writes an 8-byte entry marker into the loader's
  * pstore text (A5_ENTRY_MARKER_PHYS). Derived from the ramoops base once

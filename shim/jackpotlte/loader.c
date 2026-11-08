@@ -185,6 +185,41 @@ static void dec(uint64_t v)
 		log_ch(b[--n]);
 }
 
+/* Wait about ms milliseconds. S-Boot has been seen to hand over with
+ * CNTFRQ_EL0 = 0 (dreamlte probe), so fall back to a fixed instruction count:
+ * the canary must not depend on a timer that may never have been programmed. */
+static void delay_ms(uint32_t ms)
+{
+	uint64_t frq;
+	__asm__ volatile("mrs %0, cntfrq_el0" : "=r"(frq));
+	if (frq) {
+		uint64_t start, now, want = (frq / 1000U) * ms;
+		__asm__ volatile("isb; mrs %0, cntpct_el0" : "=r"(start));
+		do {
+			__asm__ volatile("isb; mrs %0, cntpct_el0" : "=r"(now));
+		} while (now - start < want);
+		return;
+	}
+	for (volatile uint64_t i = 0; i < 30000000ULL; i++)
+		;
+}
+
+/* Reset the SoC with the "recovery" reboot reason (exynos-reboot.c: write the
+ * reason to PMU SYSIP_DAT0, then 1 to PMU SWRESET). The screen may show
+ * nothing, so a phone that ends up in recovery by itself is the proof that the
+ * shim ran. Returns only if the PMU write is ignored. */
+static void canary(void)
+{
+#if JT_CANARY_MS > 0
+	delay_ms(JT_CANARY_MS);
+	out("reboot -> recovery (canary)\n");
+	*(volatile uint32_t *)(JT_PMU_BASE + JT_PMU_SYSIP_DAT0) = JT_REBOOT_RECOVERY;
+	__asm__ volatile("dsb sy" ::: "memory");
+	*(volatile uint32_t *)(JT_PMU_BASE + JT_PMU_SWRESET) = 1;
+	__asm__ volatile("dsb sy" ::: "memory");
+#endif
+}
+
 /* MMU off: everything is Device memory, keep accesses naturally aligned. */
 static void copy(uintptr_t dst, uintptr_t src, uint64_t n)
 {
@@ -231,6 +266,7 @@ static uint64_t fail(const char *why)
 	out("FAIL: ");
 	out(why);
 	out("\n");
+	canary();
 	return 0;
 }
 
@@ -290,8 +326,17 @@ static void dt_probe(uintptr_t dtb)
 
 uint64_t jt_main(uintptr_t dtb, uint64_t el, uint64_t sctlr)
 {
-#if JT_HAVE_FB && JT_DECON_TRIG
+#if JT_HAVE_FB
+	/* Re-arm the DECON HW trigger so the panel keeps scanning the handover
+	 * framebuffer, then clear it for the banner. This is a mode bit, not a
+	 * one-shot: once armed, DECON pushes the buffer on every TE. */
+#if JT_DECON_TRIG
 	*(volatile uint32_t *)JT_DECON_TRIG = JT_DECON_TRIG_UNMASK;
+#endif
+	for (int y = 0; y < (int)JT_FB_HEIGHT; y++)
+		for (int x = 0; x < (int)JT_FB_WIDTH; x++)
+			((volatile uint32_t *)JT_FB_BASE)[y * (JT_FB_STRIDE / 4) + x] = 0xff000000U;
+	fg = 0xffffff00U;
 #endif
 #if JT_HAVE_RAMOOPS
 	prz->sig = PRZ_SIG;
@@ -299,22 +344,20 @@ uint64_t jt_main(uintptr_t dtb, uint64_t el, uint64_t sctlr)
 	prz2->sig = PRZ_SIG;
 	prz2->start = prz2->size = 0;
 #endif
-#if JT_HAVE_FB && JT_DECON_TRIG == 0
-	/* No verified trigger: clear the screen only, never poke DECON. */
-	for (int y = 0; y < (int)JT_FB_HEIGHT; y++)
-		for (int x = 0; x < (int)JT_FB_WIDTH; x++)
-			((volatile uint32_t *)JT_FB_BASE)[y * (JT_FB_STRIDE / 4) + x] = 0xff000000U;
-	fg = 0xffffff00U;
-#endif
 	out("JACKPOTLTE LOADER BEGIN  (ios-jackpotlte, Exynos 7885)\n");
 	fg = 0xffffffffU;
-	kv("EL", el);
+	kv("entry EL", el);
+	if (el == 2)
+		out("(EL2 handoff, dropped to EL1 in start.S)\n");
 	kv("SCTLR", sctlr);
 	kv("DTB", dtb);
 	out("\n");
 	dt_probe(dtb);
-	if (el != 1)
-		return fail("not entered at EL1");
+	/* start.S drops an EL2 handoff to EL1; anything else means the shim is
+	 * running below EL1 and the EL1 register accesses above would have
+	 * trapped. */
+	if (el != 1 && el != 2)
+		return fail("entered below EL1");
 
 	uint64_t rd_start, rd_end;
 	if (!fdt_chosen_u64(dtb, "linux,initrd-start", &rd_start) ||
@@ -335,6 +378,7 @@ uint64_t jt_main(uintptr_t dtb, uint64_t el, uint64_t sctlr)
 		 * the probe result rather than looking like a crash. */
 		fg = 0xff40ff40U;
 		out("no SWEETXNU payload in the ramdisk; probe-only run\n");
+		canary();
 		for (;;)
 			__asm__ volatile("wfe");
 	}
@@ -441,6 +485,7 @@ void jt_exception(uint64_t slot)
 	kv("ELR", elr);
 	kv("FAR", far);
 	out("\n");
+	canary();
 	for (;;)
 		__asm__ volatile("wfe");
 }
