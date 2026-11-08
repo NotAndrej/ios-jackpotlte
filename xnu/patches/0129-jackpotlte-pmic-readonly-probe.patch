@@ -1,11 +1,11 @@
 diff --git a/bsd/conf/files b/bsd/conf/files
-index 851addd..000cd73 100644
+index 7dab39e..649b3c4 100644
 --- a/bsd/conf/files
 +++ b/bsd/conf/files
-@@ -108,6 +108,7 @@ bsd/dev/sweet_ufs.c			standard
- bsd/dev/a5xelte_emmc.c			standard
+@@ -109,6 +109,7 @@ bsd/dev/a5xelte_emmc.c			standard
  bsd/dev/a5xelte_keys.c			standard
  bsd/dev/a5xelte_touch.c			standard
+ bsd/dev/a5xelte_usb.c			standard
 +bsd/dev/jackpotlte_pmic.c		standard
  bsd/dev/sweet_sample.c			standard
  bsd/dev/sweet_keys.c			standard
@@ -384,26 +384,26 @@ index 0000000..bd01079
 +}
 +#endif /* ARM64_BOARD_CONFIG_A5XELTE && JACKPOTLTE */
 diff --git a/iokit/bsddev/IOKitBSDInit.cpp b/iokit/bsddev/IOKitBSDInit.cpp
-index b6ba676..99ecf50 100644
+index c745d46..a344650 100644
 --- a/iokit/bsddev/IOKitBSDInit.cpp
 +++ b/iokit/bsddev/IOKitBSDInit.cpp
-@@ -71,6 +71,9 @@ extern boolean_t cpuid_vmm_present(void);
- extern void a5xelte_emmc_probe(void);
+@@ -72,6 +72,9 @@ extern void a5xelte_emmc_probe(void);
  extern void a5xelte_keys_init(void);
  extern void a5xelte_touch_probe(void);
+ extern void a5xelte_usb_probe(void);
 +#if defined(JACKPOTLTE)
 +extern void jackpotlte_pmic_probe(void);
 +#endif
  #endif
  
  #define ROUNDUP(a, b) (((a) + ((b) - 1)) & (~((b) - 1)))
-@@ -774,6 +777,9 @@ IOFindBSDRoot( char * rootName, unsigned int rootNameSize,
+@@ -775,6 +778,9 @@ IOFindBSDRoot( char * rootName, unsigned int rootNameSize,
  #if defined(ARM64_BOARD_CONFIG_A5XELTE)
  	a5xelte_keys_init();
  	a5xelte_touch_probe();
 +#if defined(JACKPOTLTE)
 +	jackpotlte_pmic_probe();
 +#endif
- 	{
- 	uint32_t emmcprobe = 0;
- 	PE_parse_boot_argn("emmcprobe", &emmcprobe, sizeof(emmcprobe));
+ #if defined(JACKPOTLTE)
+ 	/* Galaxy A8 2018: read-only DWC3 + PHY state probe (bsd/dev/a5xelte_usb.c). */
+ 	a5xelte_usb_probe();

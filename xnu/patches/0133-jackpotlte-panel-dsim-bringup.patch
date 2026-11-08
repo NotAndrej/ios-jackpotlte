@@ -1,4 +1,5 @@
 diff --git a/bsd/conf/files b/bsd/conf/files
+index 649b3c4..1ec5dfd 100644
 --- a/bsd/conf/files
 +++ b/bsd/conf/files
 @@ -107,6 +107,7 @@ bsd/dev/memdev.c			standard
@@ -7,10 +8,11 @@ diff --git a/bsd/conf/files b/bsd/conf/files
  bsd/dev/a5xelte_keys.c			standard
 +bsd/dev/a5xelte_panel.c			standard
  bsd/dev/a5xelte_touch.c			standard
- bsd/dev/sweet_sample.c			standard
- bsd/dev/sweet_keys.c			standard
+ bsd/dev/a5xelte_usb.c			standard
+ bsd/dev/jackpotlte_pmic.c		standard
 diff --git a/bsd/dev/a5xelte_panel.c b/bsd/dev/a5xelte_panel.c
 new file mode 100644
+index 0000000..7a3d6a1
 --- /dev/null
 +++ b/bsd/dev/a5xelte_panel.c
 @@ -0,0 +1,566 @@
@@ -581,6 +583,7 @@ new file mode 100644
 +}
 +#endif /* ARM64_BOARD_CONFIG_A5XELTE && JACKPOTLTE */
 diff --git a/iokit/bsddev/IOKitBSDInit.cpp b/iokit/bsddev/IOKitBSDInit.cpp
+index a344650..7b31ff2 100644
 --- a/iokit/bsddev/IOKitBSDInit.cpp
 +++ b/iokit/bsddev/IOKitBSDInit.cpp
 @@ -70,6 +70,7 @@ extern boolean_t cpuid_vmm_present(void);
@@ -589,13 +592,13 @@ diff --git a/iokit/bsddev/IOKitBSDInit.cpp b/iokit/bsddev/IOKitBSDInit.cpp
  extern void a5xelte_keys_init(void);
 +extern void a5xelte_panel_init(void);
  extern void a5xelte_touch_probe(void);
- #endif
- 
-@@ -774,6 +775,7 @@ IOFindBSDRoot( char * rootName, unsigned int rootNameSize,
+ extern void a5xelte_usb_probe(void);
+ #if defined(JACKPOTLTE)
+@@ -778,6 +779,7 @@ IOFindBSDRoot( char * rootName, unsigned int rootNameSize,
  #if defined(ARM64_BOARD_CONFIG_A5XELTE)
  	a5xelte_keys_init();
  	a5xelte_touch_probe();
 +	a5xelte_panel_init();
- 	{
- 	uint32_t emmcprobe = 0;
- 	PE_parse_boot_argn("emmcprobe", &emmcprobe, sizeof(emmcprobe));
+ #if defined(JACKPOTLTE)
+ 	jackpotlte_pmic_probe();
+ #endif
