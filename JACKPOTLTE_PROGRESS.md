@@ -978,8 +978,16 @@ back out of the finished image with `7z e -so`:
 
 The live image is now **`/var/tmp/IOSRoot.img`** (16 GiB apparent, 11.31 GiB
 allocated), rebuilt from the flashable sparse because of the hazard below.
-The flashable derivative is re-sparsed from it with `img2simg`. Flashing
-USERDATA is destructive and still needs the owner's confirmation.
+The flashable derivative is re-sparsed from it with `img2simg`:
+
+| file | bytes | sha256 |
+| --- | --- | --- |
+| `/var/tmp/IOSRoot.img` (master) | 17,179,869,184 | — |
+| `/var/tmp/IOSRoot.sparse.img` (flash this) | 12,145,451,332 | `0d5b7a3bff914e363e61c976a4cfaa0e7ebee7b2bab462ec9257bcb62b478b63` |
+
+`img2simg` produced it in 2m44s; a full `simg2img` parse of every chunk exits
+0, and the sparse magic is `0xED26FF3A`. Flashing USERDATA is destructive and
+still needs the owner's confirmation. Nothing here has been booted.
 
 **Host filesystem hazard (2026-11-08) — worked around, cause not fixed.**
 The ext4 directory index for `/var/tmp/iosroot` is damaged. A fresh *lookup*
