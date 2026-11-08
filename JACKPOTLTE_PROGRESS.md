@@ -691,6 +691,13 @@ any secondary (especially an A73) fails to start via PSCI within 10 s it panics.
 Verified only that `0001`-`0134` applies on a pristine tree and builds in CI; the
 core bring-up itself is untested.
 
+CI `42497660560` built it green (`kernel.development.a5xelte`, sha256
+`dc60d32faa0a8710be2635e0b2af94a81636ea304f17b05f7a04f37af473a414`). Image
+**`/var/tmp/a8-xnu-jt11.img`** = 17,485,840 B, sha256
+`e3a379317d70632d52d0ca88678e24c09e69e135e0468bef591c3bc356685323`, same cmdline
+as `jt10` but `cpus=8`. Not yet flashed: `jt10` is still creeping through the iOS
+boot on one core, and swapping images drops that run.
+
 ### iOS root image (host build, not a device result)
 
 - Built with `tools/mkiosroot.sh OS.dmg SYSTEMOS.dmg APPOS.dmg
