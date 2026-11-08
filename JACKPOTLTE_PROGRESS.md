@@ -966,8 +966,40 @@ New BOOT images from the same verified `0137` kernel (`d47087a2...`), ADT
 `cpus=4` first (owner's request): the platform panic is core-independent, so a
 `cpus=4` image would have hit it too. Four cores isolates the DataMigration
 test from the still-unproven `0137` cluster change; `cpus=8` is the next trial
-if `0137` needs verifying. Neither is flashed yet; the patched root is already
-on USERDATA.
+if `0137` needs verifying. The patched root was already on USERDATA.
+
+`jt16-cpus8` was flashed (photo `IMG_20261108_210452786.jpg`, 21:04). It
+clears both earlier failures and then stops one step further:
+
+    A5XELTE: platform expert registered                 <- ADT fix
+    A5XELTE CPU: requested=8 selected=8 (limit=8)
+    [0]ml_processor_register>pset_find(cluster_id=0) returned pset 0   x8
+    ... cpu_number 0..5 ...
+    A5XELTE CPU: cpu=6 NOT registered (IOKit matching timeout)
+    A5XELTE CPU: cpu=7 NOT registered (IOKit matching timeout)
+    panic: A5XELTE CPU: CPU registration timeout @SweetCPU.cpp:199
+
+So the platform panic is gone and `0137` holds (one pset, no ticket lock),
+but the two A73 big cores never register. `SweetCPU.cpp:192` prints "NOT
+registered" when `sweet_cpus[i]` is still `NULL` -- i.e. the nub was never
+*created*, an IOKit match failure, not a PSCI/power failure. The cause:
+`iokit/KernelConfigTables.cpp` gave SweetCPU `IONameMatch = 'arm,cortex-a53'`
+only, while `mkadt_jackpotlte.py` builds cpu6/cpu7 (MPIDR 0x000/0x001, Aff1 0)
+with `compatible = 'arm,cortex-a73'`. Extending the match to the tuple
+`('arm,cortex-a53','arm,cortex-a73')` (the same trick `0124` used for the
+platform expert) fixes it. Kernel-only.
+
+That hunk is parked as `docs/drafts/jackpotlte-cpus8/0146-...patch.draft`:
+`tools/validate-repo.py` needs `xnu/patches/` contiguous (0001-0139) and
+0140-0145 are held by the six subsystem tracks still on their own branches,
+so a main-repo 0146 left a 0139 -> 0146 gap. A branch `jackpotlte-cpus8`
+carries it as 0146 purely for a compile verdict; renumber on merge. The
+owner has parked 8 cores for now.
+
+Interim 6-core image (A53s only, skips the A73 pair): **flashed** after the
+owner asked for 6 cores for now.
+`/var/tmp/a8-xnu-jt17-cpus6.img`, 17,485,840 B, sha256
+`fd3ab067e97131079c30881cc6336156bf61e432fbe22396fd8bb8c4f5e8408a`.
 
 ### SCSC/Maxwell WiFi port start (`0138`, `0139`, 2026-11-08)
 
