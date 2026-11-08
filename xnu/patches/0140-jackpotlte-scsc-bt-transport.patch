@@ -1,0 +1,519 @@
+diff --git a/bsd/conf/files b/bsd/conf/files
+index 051083d..66cc3ec 100644
+--- a/bsd/conf/files
++++ b/bsd/conf/files
+@@ -112,6 +112,7 @@ bsd/dev/a5xelte_touch.c			standard
+ bsd/dev/a5xelte_usb.c			standard
+ bsd/dev/a5xelte_scsc.c			standard
+ bsd/dev/a5xelte_wifi.c			standard
++bsd/dev/a5xelte_bt.c			standard
+ bsd/dev/jackpotlte_pmic.c		standard
+ bsd/dev/sweet_sample.c			standard
+ bsd/dev/sweet_keys.c			standard
+diff --git a/bsd/dev/a5xelte_bt.c b/bsd/dev/a5xelte_bt.c
+new file mode 100644
+index 0000000..8f62520
+--- /dev/null
++++ b/bsd/dev/a5xelte_bt.c
+@@ -0,0 +1,195 @@
++/*
++ * Galaxy A8 2018 (SM-A530F, jackpotlte, Exynos7885) Samsung SCSC / Maxwell
++ * (MX140) Bluetooth service, step 1 (patch 0140).
++ *
++ * WLAN and Bluetooth are two services on the same Maxwell R4 core, over the
++ * same MX mailbox + MIF transport (include/scsc/scsc_mx.h:27-35).  Patch 0138
++ * brings up that shared transport (PMU rails, mailbox bank, MIF DRAM, smxf
++ * firmware load, MBOX0-3 startup, reset release).  This file adds the
++ * Bluetooth-service half on top of it:
++ *
++ *   - reads the BT configuration table the vendor driver requests
++ *     ("bluetooth/bt.hcf", scsc_bt_module.c:578-579; the local dump carries it
++ *     as mx140_bt.hcf);
++ *   - allocates and fills the BSMHCP_PROTOCOL region (zeroed + magic) and the
++ *     BHCS host configuration structure in MIF DRAM, exactly where the vendor
++ *     does (scsc_shm.c:1577-1600, bhcs.h:33-42);
++ *   - reports the service-start message the vendor would send next.
++ *
++ * What is deliberately NOT done here (marked STUBBED in docs/research/
++ * jackpotlte-bt.md, and logged at runtime):
++ *   - the three MIF interrupt bits (one to-host, two from-host) are allocated
++ *     by the MX core in the vendor tree (scsc_shm.c:95-128); that allocator is
++ *     not ported, so the BSMHCP interrupt-source fields stay zero;
++ *   - the BSMHCP transfer-ring mailbox indices are likewise left zero;
++ *   - the SM_MSG_START_REQ service-start message is not sent: it travels on
++ *     the mxmgmt transport (scsc_service.c:147-168), whose streams 0138 does
++ *     not serialise, and no mailbox ISR is registered, so SM_MSG_START_CFM
++ *     could never be received;
++ *   - the Bluetooth address is left 0: the vendor takes it from the SoC unique
++ *     id (scsc_bt_module.c:628-635) or /csa/bluetooth/.bd_addr (scsc_bt_priv.h:53),
++ *     neither of which exists on XNU yet;
++ *   - there is no HCI character device or virtual HCI device.  The vendor's
++ *     host-facing contract is HCI H4 on /dev/scsc_h4_0 under SCSC_BT, or a
++ *     virtual HCI device under SCSC_BT_BLUEZ (scsc_bluez.c:178-194).
++ *
++ * Safety: everything here is behind the "a8bt" boot argument, which is off by
++ * default.  It reuses the 0138 transport, which is itself unproven on this
++ * phone; nothing writes a partition and nothing touches bootloaders, EFS or
++ * recovery.  The "a8wifi" gate is untouched.
++ *
++ * The first thing to look for on hardware is the ordered pair of lines
++ *   A5XELTE SCSC: WLBT released from reset; transport up ...
++ *   A5XELTE BT: service id 2 descriptor ...
++ * If the first never appears the shared transport is the problem, not BT; if
++ * the second appears but the config line above it reports a read error, the
++ * blob is not staged at A5BT_CONF_PATH.
++ */
++#if defined(ARM64_BOARD_CONFIG_A5XELTE) && defined(JACKPOTLTE)
++
++#include <sys/param.h>
++#include <sys/systm.h>
++#include <sys/errno.h>
++#include <kern/clock.h>
++#include <kern/thread.h>
++#include <pexpert/pexpert.h>
++
++#include "a5xelte_scsc.h"
++#include "a5xelte_bt.h"
++
++void a5xelte_bt_probe(void);
++
++/* struct BHCS, bhcs.h:33-42.  23 bytes; the firmware reads it through the
++ * reference handed to the service-start callback (bhcs.h:9-16). */
++struct a5bt_bhcs {
++	uint32_t version;                /* bhcs.h:34 */
++	uint32_t bsmhcp_protocol_offset; /* bhcs.h:35 */
++	uint32_t bsmhcp_protocol_length; /* bhcs.h:36 */
++	uint32_t configuration_offset;   /* bhcs.h:37 */
++	uint32_t configuration_length;   /* bhcs.h:38 */
++	uint32_t bluetooth_address_lap;  /* bhcs.h:39 */
++	uint8_t  bluetooth_address_uap;  /* bhcs.h:40 */
++	uint16_t bluetooth_address_nap;  /* bhcs.h:41 */
++} __attribute__((packed));
++
++/* One attempt at the BT-service descriptor.  Returns 0 when the shared
++ * transport is up and the descriptor is placed; EAGAIN when the transport is
++ * not up yet (root not mounted / another bring-up in progress). */
++static int
++a5bt_setup(void)
++{
++	struct a5bt_bhcs *bhcs;
++	uint32_t bhcs_ref = 0, bsmhcp_ref = 0, conf_ref = 0;
++	void *bsmhcp;
++	size_t conf_size = 0;
++	int err;
++
++	if (!a5scsc_transport_up()) {
++		return EAGAIN;
++	}
++
++	/* BSMHCP_PROTOCOL: zeroed, header magic written.  Same two operations
++	 * the vendor performs (scsc_shm.c:1583-1585), minus the interrupt-bit
++	 * and mailbox-index setup it does at 1586-1600 / 95-128 (STUBBED). */
++	if (!a5scsc_mifram_alloc(A5BT_BSMHCP_SIZE, A5BT_BSMHCP_ALIGN, &bsmhcp_ref)) {
++		printf("A5XELTE BT: BSMHCP allocation failed (%u bytes)\n", A5BT_BSMHCP_SIZE);
++		return ENOMEM;
++	}
++	bsmhcp = a5scsc_mifram_ptr(bsmhcp_ref);
++	bzero(bsmhcp, A5BT_BSMHCP_SIZE);
++	*(volatile uint32_t *)bsmhcp = A5BT_BSMHCP_MAGIC;
++
++	/* BHCS (bhcs.h:33-42).  Fields the host owns are filled here. */
++	if (!a5scsc_mifram_alloc(sizeof(struct a5bt_bhcs), A5BT_BSMHCP_ALIGN, &bhcs_ref)) {
++		printf("A5XELTE BT: BHCS allocation failed\n");
++		return ENOMEM;
++	}
++	bhcs = a5scsc_mifram_ptr(bhcs_ref);
++	bzero(bhcs, sizeof(*bhcs));
++	bhcs->version = A5BT_BHCS_VERSION;                    /* bhcs.h:31 */
++	bhcs->bsmhcp_protocol_offset = bsmhcp_ref;            /* bhcs.h:35 */
++	bhcs->bsmhcp_protocol_length = A5BT_BSMHCP_SIZE;      /* bhcs.h:36 */
++	bhcs->configuration_offset = 0;                       /* bhcs.h:37 */
++	bhcs->configuration_length = 0;                       /* bhcs.h:38 */
++	bhcs->bluetooth_address_lap = 0;                      /* bhcs.h:39 */
++	bhcs->bluetooth_address_uap = 0;                      /* bhcs.h:40 */
++	bhcs->bluetooth_address_nap = 0;                      /* bhcs.h:41 */
++
++	/* BT configuration table.  A missing file is not fatal in the vendor
++	 * driver (scsc_bt_module.c:580-583); it just leaves the config empty. */
++	if (a5scsc_mifram_alloc(A5BT_CONF_MAX, 64, &conf_ref)) {
++		err = a5scsc_read_file(A5BT_CONF_PATH, a5scsc_mifram_ptr(conf_ref),
++		    A5BT_CONF_MAX, &conf_size);
++		if (err != 0) {
++			printf("A5XELTE BT: config %s not readable (%d); config empty\n",
++			    A5BT_CONF_PATH, err);
++			conf_size = 0;
++		} else {
++			bhcs->configuration_offset = conf_ref;
++			bhcs->configuration_length = (uint32_t)conf_size;
++			printf("A5XELTE BT: config %s %u bytes at MIF 0x%x\n",
++			    A5BT_CONF_PATH, (unsigned)conf_size, conf_ref);
++		}
++	} else {
++		printf("A5XELTE BT: config region allocation failed\n");
++	}
++
++	printf("A5XELTE BT: service id %u descriptor bhcs=0x%x bsmhcp=0x%x len=0x%x ver=%u\n",
++	    A5BT_SERVICE_ID, bhcs_ref, bsmhcp_ref, A5BT_BSMHCP_SIZE, A5BT_BHCS_VERSION);
++
++	/* Next vendor step, not performed: scsc_mx_service_start() sends
++	 * sm_msg_packet{service_id, SM_MSG_START_REQ, bhcs_ref} on
++	 * MMTRANS_CHAN_ID_SERVICE_MANAGEMENT and waits for SM_MSG_START_CFM
++	 * (scsc_service.c:147-168; servman_messages.h:15-38).  STUBBED. */
++	printf("A5XELTE BT: STUB service-start id=%u msg=%u ref=0x%x; hci dev %s not created\n",
++	    A5BT_SERVICE_ID, A5BT_SM_MSG_START_REQ, bhcs_ref, A5BT_H4_DEVICE_NAME);
++	return 0;
++}
++
++static void
++a5bt_bringup_thread(void *param __unused, wait_result_t wr __unused)
++{
++	int attempt;
++
++	/* The staged iOS root (firmware/config) may not be mounted yet. */
++	for (attempt = 0; attempt < 60; attempt++) {
++		if (a5bt_setup() == 0) {
++			printf("A5XELTE BT: BT service descriptor ready (transport unproven)\n");
++			return;
++		}
++		delay(500000);  /* 500 ms */
++	}
++	printf("A5XELTE BT: bring-up did not complete\n");
++}
++
++/* ---- public entry point --------------------------------------------------- */
++
++void
++a5xelte_bt_probe(void)
++{
++	int enabled = 0;
++	thread_t thread = THREAD_NULL;
++
++	/* Separate, default-off gate: "a8bt" never enables anything on its own
++	 * and does not read or change the WLAN "a8wifi" gate. */
++	(void)PE_parse_boot_argn("a8bt", &enabled, sizeof(enabled));
++	if (!enabled) {
++		printf("A5XELTE BT: probe only (a8bt=0); BT service not started\n");
++		return;
++	}
++
++	if (kernel_thread_start((thread_continue_t)a5bt_bringup_thread, NULL, &thread) == KERN_SUCCESS) {
++		thread_deallocate(thread);
++	} else {
++		printf("A5XELTE BT: bring-up thread failed to start\n");
++	}
++}
++
++#else   /* ARM64_BOARD_CONFIG_A5XELTE && JACKPOTLTE */
++
++void
++a5xelte_bt_probe(void)
++{
++}
++
++#endif  /* ARM64_BOARD_CONFIG_A5XELTE && JACKPOTLTE */
+\ No newline at end of file
+diff --git a/bsd/dev/a5xelte_bt.h b/bsd/dev/a5xelte_bt.h
+new file mode 100644
+index 0000000..c1b3d20
+--- /dev/null
++++ b/bsd/dev/a5xelte_bt.h
+@@ -0,0 +1,102 @@
++/*
++ * Galaxy A8 2018 (SM-A530F, jackpotlte, Exynos7885) Samsung SCSC / Maxwell
++ * (MX140) Bluetooth service: hardware/protocol facts (patch 0140).
++ *
++ * Bluetooth is a *second service* on the same Maxwell R4 that the WLAN port
++ * (patch 0138) starts, not a separate chip.  This header carries only values
++ * that are quoted from Samsung's own sources, plus two constants derived by
++ * arithmetic on quoted values (marked DERIVED).
++ *
++ *   MX    = Eureka-Kernel/include/scsc/scsc_mx.h
++ *   PRIV  = Eureka-Kernel/drivers/misc/samsung/scsc_bt/scsc_bt_priv.h
++ *   BTMOD = Eureka-Kernel/drivers/misc/samsung/scsc_bt/scsc_bt_module.c
++ *   SHM   = Eureka-Kernel/drivers/misc/samsung/scsc_bt/scsc_shm.c
++ *   BHCS  = Eureka-Kernel/include/scsc/api/bhcs.h
++ *   BSM   = Eureka-Kernel/include/scsc/api/bsmhcp.h
++ *   FILE  = Eureka-Kernel/drivers/misc/samsung/scsc/mx140_file.c
++ *   SERV  = Eureka-Kernel/drivers/misc/samsung/scsc/scsc_service.c
++ *   SRVMSG= Eureka-Kernel/drivers/misc/samsung/scsc/servman_messages.h
++ *
++ * Status of each item is marked implemented / stubbed / unknown in
++ * docs/research/jackpotlte-bt.md.
++ */
++#ifndef _A5XELTE_BT_H_
++#define _A5XELTE_BT_H_
++
++#include <sys/types.h>
++
++/* ---- service identity -----------------------------------------------------
++ * The BT service id the vendor driver passes to scsc_mx_service_open()
++ * (BTMOD:770-773).  WLAN is 1, ANT is 3 (MX:28-30).
++ */
++#define A5BT_SERVICE_ID                 2u      /* MX:29 */
++
++/* Service-management message sent by scsc_mx_service_start():
++ *   struct sm_msg_packet { service_id, msg, optional_data }   (SRVMSG:28-38)
++ * SM_MSG_START_REQ is the first enumerator, value 0 (SRVMSG:16-19).
++ */
++#define A5BT_SM_MSG_START_REQ           0u      /* SRVMSG:17 */
++
++/* ---- BHCS (Bluetooth Host Configuration Structure) ------------------------
++ * Written by the host, passed to the firmware as the service-start argument
++ * (BHCS:9-16, 33-42).  The structure is 23 bytes; the driver aligns every
++ * MIF allocation to BSMHCP_ALIGNMENT == 32 (BSM:78).
++ *
++ *   struct BHCS {
++ *       uint32_t version;                 // BHCS:34
++ *       uint32_t bsmhcp_protocol_offset;  // BHCS:35
++ *       uint32_t bsmhcp_protocol_length;  // BHCS:36
++ *       uint32_t configuration_offset;    // BHCS:37
++ *       uint32_t configuration_length;    // BHCS:38
++ *       uint32_t bluetooth_address_lap;   // BHCS:39
++ *       uint8_t  bluetooth_address_uap;   // BHCS:40
++ *       uint16_t bluetooth_address_nap;   // BHCS:41
++ *   };
++ */
++#define A5BT_BHCS_VERSION               2u      /* BHCS:31 */
++
++/* ---- BSMHCP_PROTOCOL region ----------------------------------------------
++ * The vendor allocates sizeof(struct BSMHCP_PROTOCOL), zeroes it, writes the
++ * header magic and (separately) the interrupt-source bits and the transfer
++ * ring indices (SHM:1577-1600, 95-128).  The layout is BSM:275-321.
++ *
++ * Both numbers below are DERIVED from quoted values; the arithmetic is shown
++ * so it can be re-checked instead of trusted:
++ *
++ *   offsetof(BSMHCP_PROTOCOL, acl_tx_buffer) = 0x2AA0        (BSM:290)
++ *   sizeof(BSMHCP_PROTOCOL) = 0x165C0
++ *       acl_tx_free_transfer_ring starts at 0x16540          (BSM:319-321)
++ *       x BSMHCP_TRANSFER_RING_ACL_SIZE(32) * sizeof(BSMHCP_TD_ACL_TX_FREE)(4)
++ *       = 0x16540 + 0x80 = 0x165C0
++ *   BSMHCP_PROTOCOL_MAGICVALUE                               (BSM:326-329)
++ *       = (BSMHCP_ACL_BUFFER_SIZE(1024) | BSMHCP_CMD_EVT_BUFFER_SIZE(258) |
++ *          (0x2AA0 << 15)) ^ 0x165C0
++ *       = (0x400 | 0x102 | 0x15550000) ^ 0x165C0
++ *       = 0x15550502 ^ 0x165C0 = 0x155460C2
++ */
++#define A5BT_BSMHCP_ALIGN               32u      /* BSM:78 */
++#define A5BT_BSMHCP_ACL_TX_OFF          0x2AA0u /* BSM:290 */
++#define A5BT_BSMHCP_SIZE                0x165C0u /* DERIVED, see above */
++#define A5BT_BSMHCP_MAGIC               0x155460C2u /* DERIVED, see above */
++
++/* ---- BT configuration table ----------------------------------------------
++ * The vendor asks for
++ *   mx140_file_request_conf(core, &firm, "bluetooth", "bt.hcf")
++ * (BTMOD:578-579) with SCSC_BT_CONF "bt.hcf" (PRIV:51).  mx140_file.c's flat
++ * naming turns that into "<base>/mx140_bt.hcf" (FILE:145-152), which is
++ * exactly the name the local jackpotlte firmware dump carries (116 bytes).
++ * The path below is a port staging choice mirroring A5SCSC_FW_PATH: the
++ * blob lives on the staged iOS root and is never committed to git.
++ */
++#define A5BT_CONF_PATH                  "/private/var/wifi/mx140_bt.hcf"
++#define A5BT_CONF_MAX                   0x1000u
++
++/* ---- host-facing contract (vendor side; NOT implemented here) -------------
++ * SCSC_BT=y exposes HCI H4 on a character device named SCSC_H4_DEVICE_NAME
++ * "scsc_h4_0" (PRIV:57, BTMOD:2079-2094).  SCSC_BT_BLUEZ (default N, not set
++ * in the jackpot defconfig) registers a virtual HCI device with
++ * hci_alloc_dev()/HCI_VIRTUAL/HCI_BREDR (scsc_bluez.c:178-194).
++ */
++#define A5BT_H4_DEVICE_NAME             "scsc_h4_0" /* PRIV:57 */
++
++#endif /* _A5XELTE_BT_H_ */
+\ No newline at end of file
+diff --git a/bsd/dev/a5xelte_scsc.c b/bsd/dev/a5xelte_scsc.c
+index 57eb7cb..e356711 100644
+--- a/bsd/dev/a5xelte_scsc.c
++++ b/bsd/dev/a5xelte_scsc.c
+@@ -117,7 +117,7 @@ a5scsc_pmu_set(uint32_t off, uint32_t mask, uint32_t value)
+  * enough for the single load in this first patch and cannot fragment, but it
+  * has no free(), so it is marked STUBBED in PORT-START.md.
+  */
+-static bool
++int
+ a5scsc_mifram_alloc(uint32_t nbytes, uint32_t align, uint32_t *out_off)
+ {
+ 	uint32_t off;
+@@ -168,7 +168,7 @@ a5scsc_parse_fwhdr(const uint8_t *fw, uint32_t size,
+  * Reads up to max bytes of path into dst.  Returns 0 on success.
+  * Same idiom as vfs_syscalls.c:517-525.
+  */
+-static int
++int
+ a5scsc_read_file(const char *path, void *dst, size_t max, size_t *out_size)
+ {
+ 	vfs_context_t ctx = vfs_context_current();
+@@ -414,25 +414,64 @@ a5scsc_print_identity(void)
+ 	}
+ }
+ 
+-/* ---- bring-up thread ------------------------------------------------------ */
++/* ---- shared transport bring-up (a8wifi and a8bt) --------------------------
++ * The PMU/mailbox/MIF startup contract belongs to the shared R4, not to one
++ * service.  The vendor does the same in mxman_start() before any service is
++ * opened (mxman.c:976-991); scsc_mx_service_open() then only calls
++ * mxman_open(), which is a no-op once the core is up (scsc_service.c:582-583).
++ * Both the "a8wifi" thread and the "a8bt" thread (patch 0140) come through
++ * here, so this runs at most once.
++ *
++ * a5scsc_transport_state is not atomic.  Boot-time init is single-threaded and
++ * the two boot args are intended as alternatives; if both are set, the second
++ * caller backs off (returns 0) and its own retry loop tries again later.
++ */
++static int a5scsc_transport_state;      /* 0 down, 1 starting, 2 up */
+ 
+-static void
+-a5scsc_bringup_thread(void *param __unused, wait_result_t wr __unused)
++void *
++a5scsc_mifram_ptr(uint32_t off)
++{
++	if (off >= A5SCSC_MIF_DRAM_SIZE) {
++		return NULL;
++	}
++	return (void *)(a5scsc.mif + off);
++}
++
++int
++a5scsc_transport_up(void)
+ {
+ 	uint32_t mxconf_ref;
+-	int attempt, err = 0;
++	uint8_t *mxconf;
++	int err;
+ 
+-	/* The staged iOS root may not be mounted yet; retry for a while. */
+-	for (attempt = 0; attempt < 60; attempt++) {
+-		err = a5scsc_load_firmware();
+-		if (err == 0) {
+-			break;
++	if (a5scsc_transport_state == 2) {
++		return 1;
++	}
++	if (!a5scsc.pmu_mapped || !a5scsc.mif_mapped) {
++		return 0;
++	}
++	if (a5scsc_transport_state == 1) {
++		return 0;
++	}
++	a5scsc_transport_state = 1;
++
++	if (!a5scsc.mbox_mapped) {
++		a5scsc.mbox_r4 = ml_io_map(A5SCSC_MBOX_R4_PA, A5SCSC_MBOX_SIZE);
++		a5scsc.mbox_m4 = ml_io_map(A5SCSC_MBOX_M4_PA, A5SCSC_MBOX_SIZE);
++		if (a5scsc.mbox_r4 == 0 || a5scsc.mbox_m4 == 0) {
++			printf("A5XELTE SCSC: mailbox map failed\n");
++			a5scsc_transport_state = 0;
++			return 0;
+ 		}
+-		delay(500000);  /* 500 ms */
++		a5scsc.mbox_mapped = true;
+ 	}
+-	if (err != 0) {
+-		printf("A5XELTE SCSC: firmware not loaded (%d); restart later\n", err);
+-		return;
++
++	if (!a5scsc.fw_loaded) {
++		err = a5scsc_load_firmware();
++		if (err != 0) {
++			a5scsc_transport_state = 0;
++			return 0;
++		}
+ 	}
+ 
+ 	a5scsc_mbox_bank_init();
+@@ -441,24 +480,45 @@ a5scsc_bringup_thread(void *param __unused, wait_result_t wr __unused)
+ 	 * (mxman.c:721-733).  Transport streams: STUBBED. */
+ 	if (!a5scsc_mifram_alloc(A5SCSC_MXCONF_RESERVE, 64, &mxconf_ref)) {
+ 		printf("A5XELTE SCSC: mxconf allocation failed\n");
+-		return;
+-	}
+-	{
+-		uint8_t *mxconf = (uint8_t *)a5scsc.mif + mxconf_ref;
+-		bzero(mxconf, A5SCSC_MXCONF_RESERVE);
+-		*(volatile uint32_t *)(mxconf + 0) = A5SCSC_MXCONF_MAGIC;
+-		*(volatile uint16_t *)(mxconf + 4) = A5SCSC_MXCONF_VERSION_MAJOR;
+-		*(volatile uint16_t *)(mxconf + 6) = A5SCSC_MXCONF_VERSION_MINOR;
++		a5scsc_transport_state = 0;
++		return 0;
+ 	}
++	mxconf = (uint8_t *)a5scsc.mif + mxconf_ref;
++	bzero(mxconf, A5SCSC_MXCONF_RESERVE);
++	*(volatile uint32_t *)(mxconf + 0) = A5SCSC_MXCONF_MAGIC;
++	*(volatile uint16_t *)(mxconf + 4) = A5SCSC_MXCONF_VERSION_MAJOR;
++	*(volatile uint16_t *)(mxconf + 6) = A5SCSC_MXCONF_VERSION_MINOR;
+ 
+ 	a5scsc_mbox_init(a5scsc.fw_entry, mxconf_ref);
+ 
+ 	err = a5scsc_pmu_reset_release();
+ 	if (err != 0) {
+ 		printf("A5XELTE SCSC: reset release failed (%d)\n", err);
+-		return;
++		a5scsc_transport_state = 0;
++		return 0;
++	}
++	a5scsc_transport_state = 2;
++	printf("A5XELTE SCSC: WLBT released from reset; transport up (firmware handshake STUBBED)\n");
++	return 1;
++}
++
++/* ---- bring-up thread ------------------------------------------------------ */
++
++static void
++a5scsc_bringup_thread(void *param __unused, wait_result_t wr __unused)
++{
++	int attempt;
++
++	/* The staged iOS root may not be mounted yet; retry for a while.  All the
++	 * work (firmware load included) is inside a5scsc_transport_up(), so two
++	 * bring-up threads cannot both start the same R4. */
++	for (attempt = 0; attempt < 60; attempt++) {
++		if (a5scsc_transport_up()) {
++			return;
++		}
++		delay(500000);  /* 500 ms */
+ 	}
+-	printf("A5XELTE SCSC: WLBT released from reset; firmware handshake STUBBED\n");
++	printf("A5XELTE SCSC: transport bring-up did not complete\n");
+ }
+ 
+ /* ---- public entry points -------------------------------------------------- */
+diff --git a/bsd/dev/a5xelte_scsc.h b/bsd/dev/a5xelte_scsc.h
+index 443c406..b984941 100644
+--- a/bsd/dev/a5xelte_scsc.h
++++ b/bsd/dev/a5xelte_scsc.h
+@@ -149,4 +149,13 @@
+  * (mx140_file.c:38, 96-98); on iOS the staged iOS root supplies them. */
+ #define A5SCSC_FW_PATH          "/private/var/wifi/mx140.bin"
+ 
++/* ---- transport API exported for the BT service (patch 0140) ----------------
++ * bsd/dev/a5xelte_bt.c reuses these instead of duplicating the transport.
++ * None of them changes the "a8wifi" gate; each caller owns its own gate.
++ */
++int  a5scsc_transport_up(void);          /* idempotent PMU/mailbox/MIF start */
++int  a5scsc_mifram_alloc(uint32_t nbytes, uint32_t align, uint32_t *out_off);
++void *a5scsc_mifram_ptr(uint32_t off);
++int  a5scsc_read_file(const char *path, void *dst, size_t max, size_t *out_size);
++
+ #endif /* _A5XELTE_SCSC_H_ */
+diff --git a/iokit/bsddev/IOKitBSDInit.cpp b/iokit/bsddev/IOKitBSDInit.cpp
+index d4f573f..1500900 100644
+--- a/iokit/bsddev/IOKitBSDInit.cpp
++++ b/iokit/bsddev/IOKitBSDInit.cpp
+@@ -75,6 +75,7 @@ extern void a5xelte_touch_probe(void);
+ extern void a5xelte_usb_probe(void);
+ extern void a5xelte_scsc_probe(void);
+ extern void a5xelte_wifi_probe(void);
++extern void a5xelte_bt_probe(void);
+ #if defined(JACKPOTLTE)
+ extern void jackpotlte_pmic_probe(void);
+ #endif
+@@ -795,6 +796,9 @@ IOFindBSDRoot( char * rootName, unsigned int rootNameSize,
+ 	/* Galaxy A8 2018: Apple80211 glue (en0 + SIOCS/GA80211), off unless
+ 	 * "a8wifi" is 1 (bsd/dev/a5xelte_wifi.c). */
+ 	a5xelte_wifi_probe();
++	/* Galaxy A8 2018: SCSC/Maxwell Bluetooth service descriptor on the same
++	 * R4 transport, off unless "a8bt" is 1 (bsd/dev/a5xelte_bt.c). */
++	a5xelte_bt_probe();
+ #endif
+ 	{
+ 	uint32_t emmcprobe = 0;
