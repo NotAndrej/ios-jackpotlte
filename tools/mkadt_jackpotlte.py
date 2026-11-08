@@ -89,10 +89,21 @@ def cpu_node(logical, mpidr, kind):
 
 def build():
     root = mkadt.build(seed=os.urandom(64), qemu=True)
-    # The kernel's SweetPlatformExpert personality matches a Samsung name
-    # (KernelConfigTables.cpp); jackpotlte is added there by the device patch.
+    # The kernel's SweetPlatformExpert personality matches 'samsung,a5xelte'
+    # (and, since 0124, 'samsung,dreamlte') in iokit/KernelConfigTables.cpp.
+    # No personality matches 'samsung,jackpotlte', and IODTPlatformExpert
+    # matches against *every* entry of this list, so it must contain a name
+    # the kernel accepts -- otherwise no IOPlatformExpert matches, the
+    # IOPanicPlatform fallback runs and the boot dies at
+    # "Unable to find driver for this platform". Keep jackpotlte first for
+    # identification and append the kernel-matchable name.
+    #
+    # This append was previously an uncommitted local edit: the jt10/jt13
+    # images carried it, jt14 did not, and jt14 panicked at IOPlatformExpert.
+    # Commit it so it cannot be lost again.
     set_prop(root, 'compatible', mkadt.cstr('samsung,jackpotlte') +
-             mkadt.cstr('samsung,exynos7885') + mkadt.cstr('AppleARM'))
+             mkadt.cstr('samsung,exynos7885') + mkadt.cstr('AppleARM') +
+             mkadt.cstr('samsung,a5xelte'))
     chosen = child(root, 'chosen')
     set_prop(chosen, 'dram-base', mkadt.u64(DRAM_BASE))
     set_prop(chosen, 'dram-size', mkadt.u64(DRAM_SIZE))
