@@ -663,16 +663,31 @@ Snapdragon A530W/U. The mainline `exynos7885*` values above therefore apply.
    reads on the phone (`SYSTEM` LBA 409600, 11,078,400 sectors).
 2. **Stage 6 is reached** (`jt6`): the `USERDATA` HFS root mounts and
    `/sbin/launchd` executes.
-3. **Stage 7 (launchd):** launchd was SIGKILLed as `EXEC_EXIT_REASON_WRONG_PLATFORM`
-   because the cmdline lacked `unentitled_ios_sim_launch=1`. Corrected image
-   `/var/tmp/a8-xnu-jt7.img` adds it plus `cs_enforcement_disable=1`; flash and
-   photograph. Next likely walls after this: the 16 KiB dyld shared cache
-   (A5 needed `0107`, already in this kernel) and launchd's mount phase (needs
-   the writable root `emmcwrite=1`, already set).
-4. **Console hygiene (2026-11-08):** the A5 VM/pmap diagnostic patches
-   (old 0125–0127) were removed and the remaining patches renumbered (see the
-   "Patch renumbering" note). Rebuild the kernel so the per-call `kprintf` spam
-   is gone and the real boot tail (launchd / SpringBoard) is visible.
-4. Older housekeeping (still open): read the remaining board unknowns (ramoops
+3. **Stage 7 (launchd), clean build ready:** the A5 VM/pmap diagnostic patches
+   were removed and the rest renumbered (see the "Patch renumbering" note), so
+   the console no longer drowns in `A5 expand`/`pgalloc`/`steal` lines and the
+   boot tail (launchd / SpringBoard) can be read. CI `42486906977` (push of the
+   renumbered tree) built **successfully**; the artifact
+   `kernel.development.a5xelte` = 16,553,272 bytes, sha256
+   `a0b451285c3aa34298ddfbbf5eaeceb92104ab661674070444fc7614b9764756`, and
+   contains **zero** `A5 expand|pgalloc|tt_alloc|steal|pg|dg|de` strings.
+   Image **`/var/tmp/a8-xnu-jt9.img`** (sha256
+   `267262398cc113b22504aab0fa23b604ccb3b0bb9153bf7ede82e8bdc5f0d59b`) = clean
+   kernel + the multi-bank shim + the `jt8` cmdline
+   `rd=emmcroot0 emmcroot=USERDATA emmcwrite=1 unentitled_ios_sim_launch=1
+   cs_enforcement_disable=1 launchd_unsecure_cache=1 ignition_level=1`. This is
+   the image to flash next; the `launchd_cache_loader` "Unable to find AMFI"
+   wall (jt7) is addressed by `launchd_unsecure_cache=1`.
+4. **DRAM map (for "all 4 GB"):** `shim/fdt.c` gained `fdt_memory_all()`, which
+   enumerates every `/memory` node; `dt_probe()` now prints each bank
+   (`mem bank N base=.. size=.. (MiB)`) plus the total. Host-verified against a
+   synthetic 3-bank DTB. On the phone this line reports the real banks in one
+   flash. Source banks (Eureka `exynos7885-jackpotlte_common.dtsi:28-41`): low
+   `0x80000000+0x3DA00000` (986 MiB), mid `0xC0000000+0x40000000` (1024 MiB),
+   high `0x880000000+0x40000000` (1024 MiB) ≈ 3034 MiB. XNU takes one
+   contiguous window (`arm_init.c` → `gPhysBase`/`gPhysSize`; ADT
+   `DRAM_BASE=0x880000000`/`DRAM_SIZE=0x20000000` today), so widening it to
+   fill the largest contiguous bank is the follow-up.
+5. Older housekeeping (still open): read the remaining board unknowns (ramoops
    `log_pstore` offset, gpa1 bank offset, eMMC CIU timings) from the live DT /
    Samsung source and fill `board.h`, then enable `JT_HAVE_RAMOOPS`.
