@@ -9,12 +9,12 @@ reaches the iOS lock screen. The A8 reuses that kernel patch set, shim and
 tooling, and replaces the SoC-specific parts (display hand-off, GIC, timer,
 storage, ADT).
 
-> ⚠️ Early bring-up, not a usable port yet. **On the A8, XNU boots, detects
-> the eMMC, mounts the HFS+ iOS root from `USERDATA` and executes `/sbin/launchd`.**
-> launchd then stops at the next userspace wall (`launchd_cache_loader`). No
-> SpringBoard yet, so the device does not reach a usable UI. Installing the root
-> image **erases USERDATA** (all Android data). SM-A530F only, other models of
-> the A8 might not work properly.
+> ⚠️ Early bring-up, but iOS now boots. **On the A8, XNU detects the eMMC,
+> mounts the HFS+ iOS root from `USERDATA`, runs launchd and starts SpringBoard;
+> the panel shows the iOS Apple logo and boot progress bar** (2026-11-08, on one
+> core). Reaching the lock screen is not yet confirmed. Installing the root image
+> **erases USERDATA** (all Android data). SM-A530F only, other models of the A8
+> might not work properly.
 
 The living status, with every image hash and photo reference, is
 **[JACKPOTLTE_PROGRESS.md](JACKPOTLTE_PROGRESS.md)**. The readings still to be
@@ -34,7 +34,7 @@ from the phone. Build success is never a boot claim.
 | 4 | XNU prints to the framebuffer | **reached** (screen, 2026-11-08) |
 | 5 | Storage (eMMC) detected | **reached** (screen, 2026-11-08) — `dwmmc0@13500000` maps and the GPT reads |
 | 6 | Root filesystem mounts | **reached** (screen, 2026-11-08) — the HFS+ root mounts from `USERDATA` and `/sbin/launchd` executes |
-| 7 | launchd, then SpringBoard | in progress — `jt7` cleared `EXEC_EXIT_REASON_WRONG_PLATFORM`; `launchd_cache_loader` now aborts on AMFI, addressed by `launchd_unsecure_cache=1` (`jt8`/`jt9`) |
+| 7 | launchd, then SpringBoard | **reached (screen output, 2026-11-08)** — launchd clears AMFI with `launchd_unsecure_cache=1`, SpringBoard execs and the panel shows the iOS Apple logo + boot progress bar; reaching the lock screen is not yet confirmed |
 
 ### What the phone actually showed (stages 4–7)
 
@@ -55,11 +55,12 @@ HFS+ root and executes `/sbin/launchd`. The S8-derived kernel killed launchd as
 exec an iOS userland process; adding it (plus `cs_enforcement_disable=1`) fixed
 that kill.
 
-**Stage 7 (in progress).** launchd now runs past the platform check and gets to
-`launchd_cache_loader`, which aborts with `Unable to find AMFI` (`namespace 7`,
-`OS_REASON_LIBXPC`). The documented S8/A5 fix is `launchd_unsecure_cache=1`
-(launchd accepts its job cache without AMFI), which the current image carries.
-The next boot must show whether launchd gets past it.
+**Stage 7 (reached).** launchd runs past the platform check; `launchd_cache_loader`
+aborts with `Unable to find AMFI` (`namespace 7`, `OS_REASON_LIBXPC`) until
+`launchd_unsecure_cache=1` (the documented S8/A5 fix) is added. With it, on
+`jt10`, SpringBoard execs and the panel switches to the iOS Apple logo with the
+boot progress bar — iOS userland running on the A8, on one core. Whether it
+finishes to the lock screen is not yet confirmed.
 
 ### The `-DJACKPOTLTE=1` build flag is mandatory
 
@@ -90,13 +91,13 @@ pristine `xnu-8796.141.3` tree. Those are host results, not boot claims.
 | Kernel | xnu-8796 DEVELOPMENT, `MACHINE_CONFIG=A5XELTE` with `-DJACKPOTLTE=1` (mandatory), 4 KiB pages, built on GitHub Actions |
 | Storage | eMMC `dwmmc0@13500000` maps and the GPT reads (`0127`) |
 | Root filesystem | The HFS+ iOS root mounts from `USERDATA` (`rd=emmcroot0 emmcroot=USERDATA`) |
-| Userland | `/sbin/launchd` executes (`unentitled_ios_sim_launch=1`); stops at `launchd_cache_loader` / AMFI |
+| Userland | `/sbin/launchd` executes (`unentitled_ios_sim_launch=1`) and starts SpringBoard (`launchd_unsecure_cache=1`); the panel shows the iOS Apple logo + progress bar |
 | Ported drivers | Read-only probes for dwc3 USB (`0128`), the PMIC fuel gauge + charger (`0129`), sec_ts touch (`0130`/`0131`), the gpa1 buttons (`0132`) and the DSIM panel (`0133`, log-only by default) |
 | RAM | Physmap at `0x880000000`, 512 MiB window (`DRAM_SIZE 0x20000000`) |
 | Timer | 26 MHz arch timer, non-secure physical timer PPI 14 (INTID 30) |
 
-Everything below stage 6 — dyld, the shared cache, backboardd, SpringBoard — is
-untouched on this device and is what the S8 tree already solved.
+Past SpringBoard — the lock screen and the stock apps — the S8 tree already
+solved it; on the A8 those are what remain to confirm.
 
 ## How it boots
 
@@ -109,8 +110,8 @@ S-Boot (stock Samsung bootloader)
         -> XNU (xnu-8796, A5XELTE + -DJACKPOTLTE=1)
            -> GIC + framebuffer console
            -> eMMC (dwmmc0) -> HFS+ root in USERDATA
-              -> /sbin/launchd  <- reached; stops at launchd_cache_loader / AMFI
-                 -> [not yet on the A8] dyld + shared cache -> backboardd -> SpringBoard
+              -> /sbin/launchd -> SpringBoard (iOS Apple logo + progress bar)
+                 -> [not yet confirmed] lock screen
 ```
 
 ## Flashing
