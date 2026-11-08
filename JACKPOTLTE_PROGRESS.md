@@ -1100,13 +1100,22 @@ jt17 cmdline **plus** `sweetfb_noconsole=1`, nothing else changed. Not
 flashed yet.
 
 **Correction (owner, 2026-11-08 ~21:25): the extra boot args were not needed
-and `jt19` should be ignored.** Plain `jt17-cpus6` **does draw the Apple logo
-properly**. The earlier raw log output before the Apple logo was simply the
-early-boot console phase before userland's `BootProgress` took the panel, not
-a suppressed UI. So `-noprogress` is confirmed inert on this kernel by
-observation, matching `pe_init.c:287`, and `jt19`/`jt20`'s UI experiments are
-unnecessary for this question. The jt18 "Assertion failed" therefore was
-**not** a cmdline effect and remains unexplained; it did not recur on jt17.
+for the logo.** Plain `jt17-cpus6` **does draw the Apple logo properly**. The
+earlier raw log output before the Apple logo was simply the early-boot
+console phase before userland's `BootProgress` took the panel, not a
+suppressed UI. So `-noprogress` is confirmed inert on this kernel by
+observation, matching `pe_init.c:287`. The jt18 "Assertion failed" therefore
+was **not** a cmdline effect and remains unexplained; it did not recur on
+jt17.
+
+**`jt19` is now the active image** (flashed 2026-11-08 ~21:35 on the owner's
+request to stop kernel logs painting over the Apple logo). `jt17`'s cmdline
+plus `sweetfb_noconsole=1`, nothing else. Once iOS presents its first frame
+`sweet_console_muted` is set, so console text stops being drawn over the GUI
+while still reaching the persistent log, and panics still draw
+(`serial_console.c:296`). `/var/tmp/a8-xnu-jt19-cpus6-ui2.img`,
+17,485,840 B, sha256
+`a8fbf0073aa424fb51038cb1605f8882bdfdbf30c8696872e4f5b8161967865a`.
 
 ### SCSC/Maxwell WiFi port start (`0138`, `0139`, 2026-11-08)
 
