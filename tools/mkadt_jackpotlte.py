@@ -65,7 +65,12 @@ def cpu_node(logical, mpidr, kind):
          mkadt.cstr('ARM,v8')),
         ('reg', mkadt.u32(mpidr)),
         ('cpu-id', mkadt.u32(logical)),
-        ('cluster-id', mkadt.u32(cluster)),
+        # Every CPU advertises logical cluster 0 so XNU builds a single pset
+        # (patch 0137): a logical cluster per physical AFF1 gives three psets
+        # on this non-__AMP__ build and the boot CPU deadlocks on a half-owned
+        # ticket lock. die-cluster-id / l2-cache-id keep the hardware grouping
+        # for the cluster power-up logging in 0136.
+        ('cluster-id', mkadt.u32(0)),
         ('cluster-type', mkadt.u32(0)),
         ('die-cluster-id', mkadt.u32(cluster)),
         ('cluster-core-id', mkadt.u32(mpidr & 0xff)),
