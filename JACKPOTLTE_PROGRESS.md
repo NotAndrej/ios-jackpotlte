@@ -1017,7 +1017,33 @@ draws, so this image **cannot** answer the DataMigration question. Built
 `/var/tmp/a8-xnu-jt18-cpus6-ui.img` (same `art0137` kernel, 17,485,840 B,
 sha256 `77cee4472e44a48a80c39d4993aeb740df0880ccb0ecb25989336ef953031d29`)
 with the identical cmdline **minus** `-noprogress` and
-`-enable_kprintf_spam`, so the Apple logo + bar draw. Not flashed yet.
+`-enable_kprintf_spam`, so the Apple logo + bar draw. Flashed; it **panicked
+with "Assertion failed"** (text not captured) and jt17 was flashed back as a
+bisect.
+
+Two findings from that round:
+
+- `-noprogress` is **inert on iOS**. `pexpert/arm/pe_init.c:284-289` gates the
+  `-noprogress` branch under `XNU_TARGET_OS_OSX`; the iOS build sets
+  `show_progress = FALSE` and only honours `-progress`. The boot UI on this
+  kernel is userland (`BootProgress`), not pe_init. So removing `-noprogress`
+  cannot have caused the panic; the only real change was dropping
+  `-enable_kprintf_spam` (`pe_kprintf.c:48-51`), or the panic was independent
+  of the cmdline (USERDATA state written by the previous boot with
+  `emmcwrite=1`).
+- The right knob for "see the UI and keep the logs" already exists:
+  `sweetfb_noconsole=1` muting is compiled for this board
+  (`osfmk/console/serial_console.c:275` includes
+  `ARM64_BOARD_CONFIG_A5XELTE`; `0109` wires it), console text still goes to
+  the persistent log, and panics still draw (`sweet_console_muted &&
+  !panic_active()`).
+
+Because kprintf spam paints over the framebuffer console, jt17 can show logs
+*or* the GUI but not both, which is why no logo was visible on it.
+`/var/tmp/a8-xnu-jt19-cpus6-ui2.img` (17,485,840 B, sha256
+`a8fbf0073aa424fb51038cb1605f8882bdfdbf30c8696872e4f5b8161967865a`) is the
+jt17 cmdline **plus** `sweetfb_noconsole=1`, nothing else changed. Not
+flashed yet.
 
 ### SCSC/Maxwell WiFi port start (`0138`, `0139`, 2026-11-08)
 
