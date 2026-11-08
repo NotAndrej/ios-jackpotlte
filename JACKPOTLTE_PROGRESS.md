@@ -1009,6 +1009,16 @@ tweaks, verified in the image but never booted) and does SpringBoard appear.
 `jt10` already reached logo + bar, so "boots properly" is progress on
 stability, not yet proof of stage 8.
 
+**Why the screen shows no logo/bar on `jt17-cpus6`:** its cmdline carries
+`-noprogress`, which exists only to stop the graphical boot indicator from
+corrupting console text (`NOTES.md:245`). With it set, the owner sees the
+kernel/userland log stream and the progress UI never
+draws, so this image **cannot** answer the DataMigration question. Built
+`/var/tmp/a8-xnu-jt18-cpus6-ui.img` (same `art0137` kernel, 17,485,840 B,
+sha256 `77cee4472e44a48a80c39d4993aeb740df0880ccb0ecb25989336ef953031d29`)
+with the identical cmdline **minus** `-noprogress` and
+`-enable_kprintf_spam`, so the Apple logo + bar draw. Not flashed yet.
+
 ### SCSC/Maxwell WiFi port start (`0138`, `0139`, 2026-11-08)
 
 `0138-jackpotlte-scsc-mx-transport.patch` adds `bsd/dev/a5xelte_scsc.{c,h}`:
