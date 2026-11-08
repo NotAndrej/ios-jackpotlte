@@ -16,8 +16,8 @@ output from the phone.**
 | 2 | Loader runs on the A8 and prints the banner | **reached (screen output, 2026-11-08)** |
 | 3 | Payload passes its check; jump to XNU | **reached (loader prints through `JUMP TO XNU`)** |
 | 4 | XNU prints to the framebuffer (log or panic) | **reached (screen output, 2026-11-08)** |
-| 5 | Storage (eMMC) detected | not started |
-| 6 | Root filesystem mounts | not started |
+| 5 | Storage (eMMC) detected | **next / blocker** — XNU now waits on `IOMedia`/`Apple_HFS` (`0129`, 2026-11-08) |
+| 6 | Root filesystem mounts | blocked on 5 |
 | 7 | launchd, then SpringBoard | not started |
 
 ### Stage 2 evidence
@@ -330,6 +330,43 @@ Note (not yet changed): `MAX_CPU_CLUSTERS` is 2, and the three 7885 clusters
 (A53 ×2, A73 ×1) would need 3 if `cpus` is raised above 1. With `cpus=1` only
 cluster 0 is enumerated, so this is not on the current path.
 
+### `0129` flashed and decoded (2026-11-08) — XNU now boots to the root-mount wait
+
+CI run `42476875488` (`-DJACKPOTLTE=1`) built commit `cb2b7c0`. Kernel
+`kernel.development.a5xelte` 16,553,152 B, sha256
+`5ab08dfaf313cf7d449e68748306a8f438b15fb16749fe8cbc0610c1f2488b41`; the
+`xnu-buildtree` artifact shows the jackpotlte branch present in
+`iokit/Kernel/arm/SweetCPU.cpp`. Image `/var/tmp/a8-xnu-jt3.img` 17,485,840 B,
+sha256 `36e75126b1464a4098f64f1b969e24dd1ab0e8236295c12102629ef9c307a189`,
+flashed to `BOOT` (RC=0).
+
+Photos `IMG_20261108_125108590.jpg` and `IMG_20261108_125126851.jpg` show the
+CPU-topology panic is gone and the boot now reaches BSD and the root wait:
+
+- `A5XELTE CPU: requested=1 selected=1 (limit=8)`
+- `A5XELTE CPU: cpu=0 entered initCPU mpidr=0x100 EL1 IRQs=1`
+- `A5XELTE CPU: cpu=0 mpidr=0x100 came alive; SGI1 OK`
+- `MAC Framework successfully initialized`; `using 2411 buffer headers`
+- `A5XELTE CPU: 1/1 CPUs initialized, SGI1 verified`
+- `SWEET AKS/WDT/SURF/HID ... registered`; `SWEET BATTERY: static fallback`
+- `SK[0]: skmem_region_init`, `Skywalk: running self-tests` → every case
+  `PASSED`
+- `bsd_autoconf: calling kminit`; `ifnet_attach: ... lo0 / gif0 / stf0 ...
+  Proceeding.`
+- `A5XELTE KEYS: GPA2 con=0x1111 dat=0xf pud=0x3300 (read only)`
+
+The last line is the stop:
+
+```
+Waiting on <dict ID="0"><key>IOProviderClass</key><string ID="1">IOMedia
+</string><key>Content</key><string ID="2">Apple_HFS</string></dict>
+```
+
+That is the root-mount wait: XNU is up (single core), VM / security / MAC /
+BSD / Skywalk / networking have all initialized, and the boot is now blocking
+on a block device that publishes an HFS volume. No storage driver provides one
+yet, so **stage 5 (storage) is now the blocker** (previously stage 4).
+
 ### Display: DECON trigger ported into the jackpotlte shim (2026-11-08)
 
 Stage 2/4 were reached with the **S8 `shim/dreamlte`** loader, which is what
@@ -484,14 +521,24 @@ Snapdragon A530W/U. The mainline `exynos7885*` values above therefore apply.
 
 ## Next concrete action
 
-1. Build `0129` on CI (`MACHINE_CONFIG=A5XELTE -DJACKPOTLTE=1`), download
-   `xnu-kernel`, and pack `/var/tmp/a8-xnu-jt3.img` with
-   `bash /var/tmp/xnu-build/mkimg-jt.sh <kernel> /var/tmp/a8-xnu-jt3.img`.
-2. `fastboot flash BOOT` it and photograph: the expected next stop is either
-   the `0129` CPU-topology check passing into `A5XELTE CPU: requested=... `,
-   or a later device/root message. Record the exact last lines.
-3. Then continue down the boot: root-device (`ufsroot0` / `sweet_ufs.c`) and
-   the iOS root once approved.
+1. Storage bring-up (stage 5) — the current blocker. XNU waits on
+   `IOMedia`/`Apple_HFS`; the A8 eMMC is `samsung,exynos-dw-mshc`
+   `dwmmc0@13500000` (+ cmdq `0x13508000`) per Samsung's `exynos7885.dtsi`.
+   Two concrete gaps found in the tree:
+   - `tools/mkadt_jackpotlte.py` adds **no** eMMC ADT node, but
+     `bsd/dev/a5xelte_emmc.c` (patch `0104`) probes
+     `SecureDTLookupEntry(NULL, "/a5xelte-emmc", ...)`. Add that node with
+     `reg = <0x13500000 0x2000>`.
+   - `a5xelte_emmc.c` hard-checks `reg[0] != 0x13540000u`, which is the
+     **A5 (Exynos7580)** base (`tools/mkadt_a5xelte.py`), not the 7885's
+     `0x13500000`. Make the driver accept both (or gate on
+     `ARM64_BOARD_CONFIG_A5XELTE && JACKPOTLTE`).
+2. Rebuild the ADT + image (shim-side only, no XNU patch needed for the node),
+   add `emmcprobe=1` to the cmdline first, flash, and photograph the GPT
+   probe output (system/userdata partition LBA+size). Then switch to
+   `emmcroot0` to mount the root.
+3. Only once the eMMC path is proven: the iOS root in `userdata` (approved
+   direction), then stage 6/7.
 4. Older housekeeping (still open): read the remaining board unknowns (ramoops
-   `log_pstore` offset, gpa1 bank offset, eMMC timings) from the live DT /
+   `log_pstore` offset, gpa1 bank offset, eMMC CIU timings) from the live DT /
    Samsung source and fill `board.h`, then enable `JT_HAVE_RAMOOPS`.
