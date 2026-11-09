@@ -31,7 +31,11 @@
 +#define JT_CMU_G3D_PA		0x11400000u
 +#define JT_CMU_G3D_WINDOW	0x8000u
 +#define JT_PMU_PA		0x11c80000u
-+#define JT_PMU_WINDOW		0x1000u
++/* The PMU syscon is a 0x10000 window (exynos7885.dtsi:298-301, "reg =
++ * <0x11c80000 0x10000>"), the same size 0128/0135 map.  A 0x1000 window
++ * does not reach the G3D gate at +0x40A0: reading it faults (translation
++ * fault level 3 seen on the M0 boot). */
++#define JT_PMU_WINDOW		0x10000u
 +
 +/* PMU, always-on.  g3d_on[] writes 0x40A0 and waits on 0x40A4 (Eureka
 + * drivers/soc/samsung/cal-if/exynos7885/pmucal_local_exynos7885.h:273-276). */
