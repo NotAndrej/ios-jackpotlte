@@ -1145,7 +1145,7 @@ This supersedes `jt21-cpus8` (built from the older `930af8d2`, before
 `0141`-`0143`). **Flashed 2026-11-09 to `BOOT` (`fastboot flash BOOT`, RC=0,
 `Sending OKAY` / `Writing OKAY`) and rebooted.**
 
-**RESULT: `jt25-cpus8` does NOT panic with 8 CPUs -- owner statement, 2026-11-09**
+**RESULT: `jt25-cpus8` does NOT panic with 8 CPUs -- owner statement, 2026-11-09.**
 This is the first all-8-core boot on this
 unit; the `0140` A73 SweetCPU match fixed the earlier `cpus=8` panic that
 `jt12`/`jt14`/`jt16` hit. Evidence level: **owner report, no photo/log yet** --
