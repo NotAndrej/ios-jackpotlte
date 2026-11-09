@@ -1127,6 +1127,24 @@ KTD2692 s-wire on gpg1-%u ...`). From it:
 `e1280e223bbaff35f3dbf819342158903da3f5c003ce51a255ea0f4539d16c8f` -- 6 cores,
 quiet display + quiet AKS, flashlight probe present. Not flashed.
 
+**`0143` (sensors) is merged and green** (`42567284722` xnu and
+`42567284615` loader both **success** on `105b680`). Main-built kernel sha256
+`e43ad49d869314651f09f76fd4e1388b5220360972aaebe00d063a6d49d3b00f`; the probe is
+linked in (strings `A8SENSORS: probe (a8sensors=1, read only)`, `A8SENSORS:
+hall gpa0-...`, `A8SENSORS: grip i2c5@...`). From it:
+`/var/tmp/a8-xnu-jt24-cpus6.img`, sha256
+`7342f5a3634e61307f89e8ab990315301c52170cc24edf50cbff04559e90a9fb` -- 6 cores,
+quiet display + quiet AKS, flashlight + sensors probes present. Not flashed.
+
+**Branch cleanup (owner instruction, 2026-11-09).** Deleted after verifying
+their content is on `main` (renumbered/re-anchored, so not git ancestors):
+`a8-keys` `aae20be`, `a8-panel` `84fdb71`, `a8-pmic` `79ff634`, `a8-touch`
+`326ba70`, `a8-usb` `1539fcb` (all -> `0128`-`0133`), `jackpotlte-cpus8`
+`a6a47f6` (-> `0140`), `jackpotlte-flashlight` `702718d` (-> `0142`),
+`jackpotlte-sensors` `0fed091` (-> `0143`). Local and remote. Undo: the tip
+SHAs above; objects remain in reflog for a while. `wifi-port` (detached
+`c55c7bb`) is already an ancestor of `main` and was left in place.
+
 **Subagent loss (server restart, 2026-11-09 06:15).** The xpcproxy
 investigation subagent was killed by a host restart before it wrote anything:
 worktree `/tmp/opencode/wt-xpcproxy` was clean, no doc, nothing pushed. It has
