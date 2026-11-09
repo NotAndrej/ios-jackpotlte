@@ -1,6 +1,6 @@
 --- a/bsd/dev/a5xelte_touch.c
 +++ b/bsd/dev/a5xelte_touch.c
-@@ -940,9 +940,366 @@
+@@ -940,9 +940,480 @@
  }
  #endif /* JACKPOTLTE */
  
@@ -39,6 +39,10 @@
 +#define JTTS_PIN_CON		0x00u
 +#define JTTS_PIN_DAT		0x04u
 +#define JTTS_PIN_PUD		0x08u
++#define JTTS_PIN_INPUT		0x0u
++#define JTTS_PIN_OUTPUT	0x1u
++#define JTTS_PIN_FUNC2		0x2u
++#define JTTS_PIN_PULLUP	0x3u
 +
 +/* S3C2440 I2C register map: Eureka drivers/i2c/busses/i2c-s3c2410.c:51-55
 + * (IICCON/IICSTAT/IICADD/IICDS, S3C2440_IICLC 0x10) and bits :60-75. */
@@ -53,6 +57,9 @@
 +#define JTTS_IICSTAT_MASTER_RX	0x90u	/* MASTER_RX | TXRXEN */
 +#define JTTS_IICSTAT_START	0x20u	/* also BUSBUSY when read */
 +#define JTTS_IICSTAT_LASTBIT	0x01u	/* 0 = ACK, 1 = NACK */
++#define JTTS_IICSTAT_TXRXEN	0x10u	/* cleared to release a stuck bus */
++#define JTTS_IICCON_INIT	0xe3u	/* ACKEN|TXDIV_512|IRQEN|scale 3 */
++#define JTTS_IICLC_VALUE	0x7u	/* SDA delay, samsung,i2c-sda-delay */
 +
 +/* sec_ts register map: Eureka
 + * drivers/input/touchscreen/sec_ts/sec_ts.h:181-256. */
@@ -101,13 +108,110 @@
 +		delay(1);
 +	}
 +}
++/* Bring the controller to a known state: IICCON=0, IICSTAT=0, then
++ * reprogram, the vendor's hardware init (Eureka
++ * drivers/i2c/busses/i2c-s3c2410.c:820-828).  A controller left mid-transfer
++ * by S-Boot keeps IICSTAT bit 5 (START/BUSBUSY) set and every read then bails
++ * as "bus busy" before it can start. */
++static void
++jtts_bus_init(void)
++{
++	a5touch_write(jt_ts_bus, JTTS_IICCON, 0);
++	a5touch_write(jt_ts_bus, JTTS_IICSTAT, 0);
++	a5touch_write(jt_ts_bus, JTTS_IICADD, JT_TS_SLAVE << 1);
++	a5touch_write(jt_ts_bus, JTTS_IICLC, JTTS_IICLC_VALUE);
++	a5touch_write(jt_ts_bus, JTTS_IICCON, JTTS_IICCON_INIT);
++	printf("A8 TOUCH: i2c4 init con=%#x stat=%#x add=%#x lc=%#x\n",
++	    a5touch_read(jt_ts_bus, JTTS_IICCON),
++	    a5touch_read(jt_ts_bus, JTTS_IICSTAT),
++	    a5touch_read(jt_ts_bus, JTTS_IICADD),
++	    a5touch_read(jt_ts_bus, JTTS_IICLC));
++}
++
++static vm_offset_t
++jtts_pinctrl3(void)
++{
++	static vm_offset_t base;
++	if (!base) {
++		base = ml_io_map(JTTS_PINCTRL3, 0x1000);
++	}
++	return base;
++}
++
++/* Raw pad levels.  gpp4-0 is SDA and gpp4-1 is SCL (i2c4_bus,
++ * exynos7885-pinctrl.dtsi:769): the sda=/scl= order in exynos7885.dtsi is
++ * lower pin number = SDA, e.g. i2c_1 gpio_sda=<&gpc1 0>, gpio_scl=<&gpc1 1>
++ * (:833-834).  Tells a bus held low from a floating one. */
++static void
++jtts_pad_levels(const char *tag)
++{
++	vm_offset_t pinctrl3 = jtts_pinctrl3();
++	uint32_t dat;
++	if (!pinctrl3) {
++		printf("A8 TOUCH: %s pinctrl3 map failed\n", tag);
++		return;
++	}
++	dat = a5touch_read(pinctrl3, JTTS_GPP4_OFF + JTTS_PIN_DAT);
++	printf("A8 TOUCH: %s gpp4 dat=%#x sda=%u scl=%u\n",
++	    tag, dat, dat & 1u, (dat >> 1) & 1u);
++}
++
++/* Recover a stuck I2C4 bus: reset the controller, and if the lines are still
++ * low, clock SCL as a GPIO until the slave releases SDA -- the vendor's
++ * recover_i2c_gpio (i2c-s3c2410.c:185-260) -- then mux the pads back. */
++static void
++jtts_bus_recover(void)
++{
++	vm_offset_t pinctrl3 = jtts_pinctrl3();
++	uint32_t con;
++	uint32_t dat;
++	uint32_t pud;
++	bool sda_high;
++
++	printf("A8 TOUCH: bus busy stat=%#x, recovering\n",
++	    a5touch_read(jt_ts_bus, JTTS_IICSTAT));
++	jtts_pad_levels("busy");
++	a5touch_write(jt_ts_bus, JTTS_IICSTAT,
++	    a5touch_read(jt_ts_bus, JTTS_IICSTAT) & ~JTTS_IICSTAT_TXRXEN);
++	jtts_bus_init();
++	jtts_pad_levels("reset");
++	if (!pinctrl3) {
++		return;
++	}
++
++	/* gpp4-1 (SCL) as output, gpp4-0 (SDA) as input. */
++	con = a5touch_read(pinctrl3, JTTS_GPP4_OFF + JTTS_PIN_CON);
++	a5touch_write(pinctrl3, JTTS_GPP4_OFF + JTTS_PIN_CON,
++	    (con & ~0xffu) | (JTTS_PIN_OUTPUT << 4) | JTTS_PIN_INPUT);
++	dat = a5touch_read(pinctrl3, JTTS_GPP4_OFF + JTTS_PIN_DAT) & ~0x3u;
++	a5touch_write(pinctrl3, JTTS_GPP4_OFF + JTTS_PIN_DAT, dat | 0x2u);
++	sda_high = (a5touch_read(pinctrl3, JTTS_GPP4_OFF + JTTS_PIN_DAT) & 1u) != 0;
++	for (unsigned n = 0; n < 100 && !sda_high; n++) {
++		a5touch_write(pinctrl3, JTTS_GPP4_OFF + JTTS_PIN_DAT, dat);
++		delay(1);
++		a5touch_write(pinctrl3, JTTS_GPP4_OFF + JTTS_PIN_DAT, dat | 0x2u);
++		delay(1);
++		sda_high = (a5touch_read(pinctrl3, JTTS_GPP4_OFF + JTTS_PIN_DAT) & 1u) != 0;
++	}
++	printf("A8 TOUCH: bus recover clocks sda_high=%u\n", sda_high);
++
++	pud = a5touch_read(pinctrl3, JTTS_GPP4_OFF + JTTS_PIN_PUD);
++	con = a5touch_read(pinctrl3, JTTS_GPP4_OFF + JTTS_PIN_CON);
++	a5touch_write(pinctrl3, JTTS_GPP4_OFF + JTTS_PIN_CON,
++	    (con & ~0xffu) | (JTTS_PIN_FUNC2 << 4) | JTTS_PIN_FUNC2);
++	a5touch_write(pinctrl3, JTTS_GPP4_OFF + JTTS_PIN_PUD,
++	    (pud & ~0xffu) | (JTTS_PIN_PULLUP << 4) | JTTS_PIN_PULLUP);
++	jtts_bus_init();
++	jtts_pad_levels("recovered");
++}
++
 +
 +/* START + 8-bit slave address.  True when the address was ACKed. */
 +static bool
 +jtts_address(uint32_t mode, uint8_t addr8)
 +{
-+	a5touch_write(jt_ts_bus, JTTS_IICCON, 0xe3u);	/* ACKEN|IRQEN|div */
-+	a5touch_write(jt_ts_bus, JTTS_IICLC, 7u);	/* SDA delay + filter */
++	a5touch_write(jt_ts_bus, JTTS_IICCON, JTTS_IICCON_INIT);
++	a5touch_write(jt_ts_bus, JTTS_IICLC, JTTS_IICLC_VALUE);
 +	a5touch_write(jt_ts_bus, JTTS_IICSTAT, mode);
 +	a5touch_write(jt_ts_bus, JTTS_IICDS, addr8);
 +	delay(1);
@@ -167,16 +271,22 @@
 +jtts_read_reg(uint8_t reg, uint8_t *data, unsigned count)
 +{
 +	bool ok = false;
++	int recovered = 0;
 +	if (!count || count > 16) {
 +		return false;
 +	}
-+	for (unsigned n = 0; n < 5000; n++) {
++retry:
++	for (unsigned n = 0; n < 2000; n++) {
 +		if (!(a5touch_read(jt_ts_bus, JTTS_IICSTAT) & JTTS_IICSTAT_START)) {
 +			break;
 +		}
-+		if (n == 4999) {
-+			printf("A8 TOUCH: i2c4 busy before read\n");
-+			return false;
++		if (n == 1999) {
++			if (recovered++) {
++				printf("A8 TOUCH: i2c4 still busy after recovery\n");
++				return false;
++			}
++			jtts_bus_recover();
++			goto retry;
 +		}
 +		delay(1);
 +	}
@@ -294,6 +404,7 @@
 +	printf("A8 TOUCH PWR: gpp4 i2c4 pads con %#x -> %#x pud %#x -> %#x\n",
 +	    con, a5touch_read(pinctrl3, JTTS_GPP4_OFF + JTTS_PIN_CON),
 +	    pud, a5touch_read(pinctrl3, JTTS_GPP4_OFF + JTTS_PIN_PUD));
++	jtts_pad_levels("after mux");
 +	delay(70);	/* settle (sec_ts.c:2223 regulator_boot_on path) */
 +}
 +
@@ -325,7 +436,10 @@
 +	    a5touch_read(jt_ts_bus, JTTS_IICSTAT),
 +	    a5touch_read(jt_ts_bus, JTTS_IICADD),
 +	    a5touch_read(jt_ts_bus, JTTS_IICLC));
++	jtts_bus_init();
++	jtts_pad_levels("before read");
 +	if (!jtts_read_reg(JTTS_READ_ID, id, sizeof(id))) {
++		jtts_pad_levels("read failed");
 +		printf("A8 TOUCH: product id read failed stat=%#x con=%#x\n",
 +		    a5touch_read(jt_ts_bus, JTTS_IICSTAT),
 +		    a5touch_read(jt_ts_bus, JTTS_IICCON));
