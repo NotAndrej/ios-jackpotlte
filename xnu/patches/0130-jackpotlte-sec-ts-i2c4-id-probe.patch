@@ -1,6 +1,6 @@
 --- a/bsd/dev/a5xelte_touch.c
 +++ b/bsd/dev/a5xelte_touch.c
-@@ -940,9 +940,347 @@
+@@ -940,9 +940,349 @@
  }
  #endif /* JACKPOTLTE */
  
@@ -64,6 +64,8 @@
 +#define JTTS_STATUS_APP_MODE	0x20u
 +
 +static vm_offset_t jt_ts_bus;
++
++static void jackpotlte_touch_power_up(void);
 +
 +static bool
 +jtts_wait_irq(void)

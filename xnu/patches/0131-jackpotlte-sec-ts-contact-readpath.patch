@@ -14,7 +14,7 @@
  
  static vm_offset_t jt_ts_bus;
  
-@@ -1158,6 +1162,183 @@
+@@ -1160,6 +1164,183 @@
  }
  
  /*
@@ -198,7 +198,7 @@
   * Optional touch power bring-up, debug only (boot-arg a8touchpwr=1, default
   * off).  S-Boot can leave the touch rail cold: tsp_ldo_en (gpg3-0, DTS
   * "regulator-fixed" 1.8 V, enable-active-high) reads low, so the sec_ts chip
-@@ -1271,6 +1452,7 @@
+@@ -1273,6 +1454,7 @@
  		printf("A8 TOUCH: fw version %02x%02x%02x%02x\n",
  		    fw[0], fw[1], fw[2], fw[3]);
  	}
