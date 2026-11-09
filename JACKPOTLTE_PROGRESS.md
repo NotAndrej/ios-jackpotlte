@@ -32,6 +32,7 @@ pre-rewrite and no longer resolve; any existing clone or fork must re-clone.
 | 5 | Storage (eMMC) detected | **reached (screen output, 2026-11-08)** — `0127` (was `0130`) maps `dwmmc0@13500000` and reads the GPT (`SYSTEM` LBA 409600, 11,078,400 sectors) |
 | 6 | Root filesystem mounts | **reached (screen output, 2026-11-08)** — `rd=emmcroot0 emmcroot=USERDATA emmcwrite=1` mounts the HFS root and execs launchd |
 | 7 | launchd, then SpringBoard | **reached (screen output, 2026-11-08)** — `jt10`: launchd clears AMFI with `launchd_unsecure_cache=1`, SpringBoard execs, and the A8 panel shows the iOS Apple logo + boot progress bar (photo `IMG_20261108_170011203.jpg`) |
+| 8 | DataMigration completes; SpringBoard lock screen | **reached (owner-observed screen output, 2026-11-09)** — `jt25-cpus8` (8 cores, `0140` A73 match + `0141`-`0143`): after ~20+ minutes the phone shows the iOS **lock screen**, i.e. DataMigration ran to completion and SpringBoard's UI is up. Owner report; photo still wanted |
 
 ### Patch renumbering (2026-11-08)
 
@@ -1166,6 +1167,20 @@ it establishes "no panic with the A73 pair enabled", not yet how far userland
 gets. Worth a photo to promote it, and worth re-running the same image with
 `cpus=6` vs `cpus=8` to confirm the A73 pair is actually scheduled rather than
 just tolerated.
+
+**RESULT (continued): `jt25-cpus8` reaches the SpringBoard lock screen --
+owner-observed screen output, 2026-11-09.** After roughly 20+ minutes on this
+image the phone shows the iOS **lock screen**: DataMigration ran to completion
+(the long first-boot pass, not a hang) and SpringBoard's UI is up. This is the
+first time this port has gone past the Apple logo + progress bar to real
+SpringBoard UI. Evidence level: **owner report of the on-screen result, no
+photo yet**; a photo would promote it to the same bar as every other stage.
+Practical takeaways: (1) the long post-logo wait is DataMigration, so an image
+should be left 20-40 min before it is called hung; (2) the earlier
+`xpcproxy`/`bluetoothd`/`fairplayd.H2` verdict stands -- those were launchd
+noise and the real gate was DataMigration/SpringBoard, not a daemon; (3)
+`-noprogress` suppresses the graphical progress indicator, so a boot that looks
+idle on the logo can still be migrating.
 
 **Policy (owner, 2026-11-09): `cpus=8` is now the default for new kernel
 images.** The earlier owner guidance to run 6 cores for now is superseded. All
