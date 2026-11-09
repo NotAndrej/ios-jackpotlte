@@ -11,6 +11,13 @@ plug-in with Bifrost **v6** enabled (our G71 is v6; the HakiOS reference is v7).
 
 ### M0 + M1 in patch `0144` (code complete, not yet on the phone)
 
+> **Verify before flashing:** a green CI run is not proof the driver is in the
+> kernel. The first "green" build of this patch silently skipped it — blacktop's
+> `build.sh` only warns on `git apply` failure — so always confirm
+> `strings <kernel> | grep 'JACKPOTLTE MALI'` before packing (see
+> `pack-gpu.sh`, which does this). The workflow now also fails if any
+> `xnu/patches/*.patch` is skipped.
+
 `xnu/patches/0144-jackpotlte-mali-probe.patch`, entry point
 `jackpotlte_mali_probe()`, called from `IOKitBSDInit` next to the touch probe.
 
