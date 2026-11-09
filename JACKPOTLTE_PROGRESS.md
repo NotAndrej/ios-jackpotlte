@@ -908,7 +908,7 @@ Scoping only — nothing applied and no boot-path change. Full write-up:
   not, no GPU register read works until the power/clock sequence runs. Source
   cannot answer this; one readback can. That is what M0 is for.
 
-#### GPU port started, then paused (2026-11-09)
+#### GPU port (2026-11-09): M0+M1 in patch 0144, branch jackpotlte-gpu
 
 The port runs on its **own branch `jackpotlte-gpu`** (worktree
 `/home/not_andrej/ios-jackpotlte-gpu`), forked from `main` at `523beb5`, so it
@@ -922,15 +922,36 @@ State when the worker stopped: patch
 probe on boot arg `jtmaliprobe=1`) is committed on the branch and **CI-green**
 (`gh workflow run xnu.yml --ref jackpotlte-gpu`, run `42632879797`); nothing has
 been flashed from that branch, so there is no device result for M0 yet.
-Next steps on resume: pack/flash `0144` and read the raw `JACKPOTLTE MALI:`
-lines (that answers the biggest unknown above), then M1 power/clock
-(`pd_g3d`, `PLL_G3D`/`CMU_G3D`), M2 MMU + one job, M3 a `RedwoodMali`-shaped
-user client, M4 Mesa panfrost with **arch 6** enabled plus the Metal plug-in.
+Next steps: pack/flash the `jtmaliprobe=1` build and read the raw
+`JACKPOTLTE MALI:` lines (that answers the biggest unknown above), then the
+`jtmalipwr=1` build for M1; then M2 MMU + one job (INTIDs JOB/MMU/GPU =
+191/192/190), M3 a `RedwoodMali`-shaped user client, M4 Mesa panfrost with
+**arch 6** enabled plus the Metal plug-in.
 
 The worker was an `ollama-cloud/beam` subagent; it stopped on the provider's
-monthly usage limit (not a technical failure) and the owner chose to wait for
-credits rather than switch model, so the branch is deliberately frozen where it
-is. Note the host is Linux with no Apple SDK/KDK, so **kernel builds only come
+monthly usage limit (not a technical failure). The owner then said to take it
+over, so **the main assistant owns the GPU port** from here (no subagent).
+
+Latest state (commit `0d49191` on `jackpotlte-gpu`): patch
+`xnu/patches/0144-jackpotlte-mali-probe.patch` now carries **M0 + M1**.
+M0 (`jtmaliprobe=1`) logs PMU `0x40A0`/`0x40A4` and, only once the domain reads
+up, `PLL_G3D` and the Mali `GPU_ID`; the earlier draft read `CMU_G3D`/`PLL_G3D`
+before checking status, which can stall a bus on a powered-off block (those
+registers are in the G3D domain, `pmucal_local_exynos7885.h:279-306`) — fixed.
+M1 (`jtmalipwr=1`) powers `pd_g3d` and its clocks (PMU `0x40A0=0xF`/wait
+`0x40A4`; seven `CMU_G3D` QCHs; `PLL_G3D` ENABLE bit31/STABLE bit29; eleven
+manual gates bit20+bit21) and then brings the GPU itself up: soft reset
+(`GPU_CMD`) + `L2`/`TILER`/`SHADER_PWRON` + `*_READY`, the reference's
+`mali_up()` step 4 (`redwood_mali.c:544-567`). A Bifrost needs no firmware, so
+`M1 done, GPU up and reset` with a Bifrost `GPU_ID` is M1 complete.
+Build was re-dispatched as run `42640666505` (the previous queued run was
+cancelled to free the runner); pack/flash with `docs/gpu-bringup.md`. **Nothing
+from this branch has been flashed, so M0/M1 still have no device result.**
+Note the branch is based on `523beb5`, so its image predates the jt28 touch
+fix; that is fine for GPU testing but the branch will need a merge onto `main`
+(conflict expected only in this progress file) before it lands.
+
+Note the host is Linux with no Apple SDK/KDK, so **kernel builds only come
 from the `macos-15` CI runner**; push triggers only `main`/`s8-dreamlte`, so the
 branch must be built with `gh workflow run xnu.yml --ref jackpotlte-gpu`.
 
