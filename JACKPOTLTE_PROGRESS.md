@@ -1151,6 +1151,39 @@ worktree `/tmp/opencode/wt-xpcproxy` was clean, no doc, nothing pushed. It has
 been relaunched on the same session, reset to `origin/main`, with the added
 requirement to survey how sibling ports handled the same loops.
 
+**Verdict (subagent, 2026-11-09, branch `jackpotlte-xpcproxy` `51f9689`,
+doc `docs/research/jackpotlte-xpcproxy-loop.md`, 694 lines).** The three
+loopers are almost certainly **not** the blocker:
+
+- `xpcproxy` is launchd's trampoline, so one *successful* launch prints both
+  `exec xpcproxy` and `exec <program>`. Most of the lines are just `bluetoothd`
+  / `fairplayd.H2` restarting. A **bare** `exec xpcproxy` (target never exec'd)
+  is the only interesting case and is structurally unattributable in the
+  current log.
+- `bluetoothd` loops because its job is `KeepAlive={SuccessfulExit=False}` and
+  main has **no BT transport** (that is only on branch `jackpotlte-bt`).
+- `fairplayd.H2` loops because its job is `KeepAlive=true` (unconditional) and
+  it wants the IOKit user client `com_apple_driver_FairPlayIOKitUserClient`,
+  which this kernel lacks.
+- `driverkitd` is `RunAtLoad` with no `KeepAlive`, so it crashes once and stays
+  down (non-fatal thanks to the `_PanicOnCrasX` rename).
+
+**Most likely real blocker: SpringBoard's own launch**, not the daemons --
+either its spawn never completes (which would make the bare `xpcproxy` lines
+*be* SpringBoard, at its 5 s `ThrottleInterval`) or it execs once and stalls in
+the backboardd system-shell check-in. Two cheap greps of the existing log
+separate the cases. Siblings (`georgev-6974/s9plus-ios` via `disabled.plist`,
+`lechaukha12/xnu-xzs` via a 25-job whitelist) all treated the pair as launchd
+noise, never as the blocker. A draft exec-logging patch is on the branch at
+`docs/drafts/jackpotlte-xpcproxy/0144-sweet-exec-argv-exit-log.patch.draft`
+(kept out of `xnu/patches/` so it does not collide with BT's `0144`); it has
+only had `patch -p1 --dry-run`, no compile or CI.
+
+**Subagent model policy (owner, 2026-11-09).** All subagents now default to
+`ollama-cloud/beam` via the `agents` block in
+`~/.config/opencode/opencode.json` (`general` and `explore`). Environment note:
+that provider resolves its key from `OLLAMA_API_KEY`.
+
 Interim 6-core image (A53s only, skips the A73 pair): **flashed 2026-11-08
 ~21:15** after the owner asked for 6 cores for now, and the owner
 reports it **boots properly**. `/var/tmp/a8-xnu-jt17-cpus6.img`, 17,485,840 B,
