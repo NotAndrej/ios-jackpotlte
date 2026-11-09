@@ -1103,6 +1103,23 @@ failures. **The merge is not a `git merge`; each patch must be regenerated on
 top of the accumulated tree (and ideally rebuilt in CI) in the order above.**
 That work is not started.
 
+**`0142` (flashlight) is merged and green** (`42522434510` xnu and
+`42522434566` loader both **success** on `052a4b9` -- the first green `loader`
+run since the 0139->0146 numbering gap appeared, because the sequence is now
+genuinely contiguous). Main-built kernel sha256
+`8e1e00aec9e4806cab35264e1256647330433ddd38d2a42175284eadf56e7eed`; the
+probe is linked in (strings `_a5xelte_flashlight_probe`, `A5XELTE FLASH:
+KTD2692 s-wire on gpg1-%u ...`). From it:
+`/var/tmp/a8-xnu-jt23-cpus6.img`, 17,485,840 B, sha256
+`e1280e223bbaff35f3dbf819342158903da3f5c003ce51a255ea0f4539d16c8f` -- 6 cores,
+quiet display + quiet AKS, flashlight probe present. Not flashed.
+
+**Subagent loss (server restart, 2026-11-09 06:15).** The xpcproxy
+investigation subagent was killed by a host restart before it wrote anything:
+worktree `/tmp/opencode/wt-xpcproxy` was clean, no doc, nothing pushed. It has
+been relaunched on the same session, reset to `origin/main`, with the added
+requirement to survey how sibling ports handled the same loops.
+
 Interim 6-core image (A53s only, skips the A73 pair): **flashed 2026-11-08
 ~21:15** after the owner asked for 6 cores for now, and the owner
 reports it **boots properly**. `/var/tmp/a8-xnu-jt17-cpus6.img`, 17,485,840 B,
