@@ -1,6 +1,6 @@
 --- a/bsd/dev/jackpotlte_mali.c
 +++ b/bsd/dev/jackpotlte_mali.c
-@@ -0,0 +1,229 @@
+@@ -0,0 +1,300 @@
 +/*
 + * Galaxy A8 2018 (SM-A530F, jackpotlte, Exynos 7885) Mali GPU bring-up.
 + *
@@ -69,12 +69,23 @@
 +	0x2028u, 0x202cu, 0x2030u, 0x2034u, 0x2038u,
 +};
 +
-+/* Mali identity/presence (Linux panfrost register map; hakios-xnu-kernel
-+ * bsd/dev/redwood_mali.c:304-311). */
++/* Mali GPU registers (Linux panfrost register map, the same block the
++ * HakiOS reference uses: hakios-xnu xnu/files/bsd/dev/redwood_mali.c:304-318). */
 +#define JT_MALI_GPU_ID		0x000u
++#define JT_MALI_GPU_INT_RAWSTAT	0x020u
++#define JT_MALI_GPU_INT_CLEAR	0x024u
++#define JT_MALI_GPU_INT_MASK	0x028u
++#define JT_MALI_GPU_CMD		0x030u
 +#define JT_MALI_SHADER_PRESENT	0x100u
 +#define JT_MALI_TILER_PRESENT	0x110u
 +#define JT_MALI_L2_PRESENT	0x120u
++#define JT_MALI_SHADER_READY	0x140u
++#define JT_MALI_TILER_READY	0x150u
++#define JT_MALI_L2_READY	0x160u
++#define JT_MALI_SHADER_PWRON	0x180u
++#define JT_MALI_TILER_PWRON	0x190u
++#define JT_MALI_L2_PWRON	0x1a0u
++#define JT_MALI_IRQ_RESET_DONE	(1u << 8)	/* GPU_INT_RAWSTAT */
 +
 +static volatile uint32_t *
 +jt_map(uint32_t pa, uint32_t size)
@@ -159,6 +170,66 @@
 +	return true;
 +}
 +
++/* Soft-reset the GPU, then power the L2, tiler and shader cores -- the
++ * reference's mali_up() step 4 (redwood_mali.c:544-567).  A Bifrost needs
++ * no firmware, so this and the clocks are the whole of its bring-up: when
++ * the *_READY bits come back, the GPU is up. */
++static bool
++jt_mali_up(volatile uint32_t *mali)
++{
++	uint32_t shaders, tiler, l2, v;
++	unsigned n;
++
++	shaders = jt_rd(mali, JT_MALI_SHADER_PRESENT);
++	tiler = jt_rd(mali, JT_MALI_TILER_PRESENT);
++	l2 = jt_rd(mali, JT_MALI_L2_PRESENT);
++	printf("JACKPOTLTE MALI: present shaders=%#x tiler=%#x l2=%#x\n",
++	    shaders, tiler, l2);
++	if (!shaders || !tiler || !l2) {
++		printf("JACKPOTLTE MALI: nothing present, is the block clocked?\n");
++		return false;
++	}
++
++	jt_wr(mali, JT_MALI_GPU_INT_MASK, 0);
++	jt_wr(mali, JT_MALI_GPU_INT_CLEAR, 0xffffffffu);
++	jt_wr(mali, JT_MALI_GPU_CMD, 1u);	/* soft reset */
++	for (n = 0; n < 100; n++) {
++		if (jt_rd(mali, JT_MALI_GPU_INT_RAWSTAT) & JT_MALI_IRQ_RESET_DONE) {
++			break;
++		}
++		delay(1);
++	}
++	v = jt_rd(mali, JT_MALI_GPU_INT_RAWSTAT);
++	printf("JACKPOTLTE MALI: reset rawstat=%#x done=%u\n", v,
++	    (v & JT_MALI_IRQ_RESET_DONE) ? 1u : 0u);
++	if (!(v & JT_MALI_IRQ_RESET_DONE)) {
++		printf("JACKPOTLTE MALI: reset did not complete\n");
++		return false;
++	}
++	jt_wr(mali, JT_MALI_GPU_INT_CLEAR, 0xffffffffu);
++
++	jt_wr(mali, JT_MALI_L2_PWRON, l2);
++	jt_wr(mali, JT_MALI_TILER_PWRON, tiler);
++	jt_wr(mali, JT_MALI_SHADER_PWRON, shaders);
++	for (n = 0; n < 50; n++) {
++		if ((jt_rd(mali, JT_MALI_L2_READY) & l2) == l2 &&
++		    (jt_rd(mali, JT_MALI_TILER_READY) & tiler) == tiler &&
++		    (jt_rd(mali, JT_MALI_SHADER_READY) & shaders) == shaders) {
++			break;
++		}
++		delay(1);
++	}
++	printf("JACKPOTLTE MALI: ready shaders=%#x tiler=%#x l2=%#x\n",
++	    jt_rd(mali, JT_MALI_SHADER_READY), jt_rd(mali, JT_MALI_TILER_READY),
++	    jt_rd(mali, JT_MALI_L2_READY));
++	if ((jt_rd(mali, JT_MALI_SHADER_READY) & shaders) != shaders) {
++		printf("JACKPOTLTE MALI: shader cores did not all power up\n");
++		return false;
++	}
++	printf("JACKPOTLTE MALI: M1 done, GPU up and reset\n");
++	return true;
++}
++
 +void
 +jackpotlte_mali_probe(void)
 +{
@@ -217,9 +288,9 @@
 +		return;
 +	}
 +	v = jt_rd(mali, JT_MALI_GPU_ID);
-+	printf("JACKPOTLTE MALI: GPU_ID=%#x (arch=%u) shaders=%#x tiler=%#x l2=%#x\n",
-+	    v, (v >> 12) & 0xf, jt_rd(mali, JT_MALI_SHADER_PRESENT),
-+	    jt_rd(mali, JT_MALI_TILER_PRESENT), jt_rd(mali, JT_MALI_L2_PRESENT));
++	printf("JACKPOTLTE MALI: GPU_ID=%#x arch=%u rev=%u\n", v,
++	    (v >> 12) & 0xf, (v >> 4) & 0xff);
++	(void)jt_mali_up(mali);
 +}
 +
 +#else   /* ARM64_BOARD_CONFIG_A5XELTE && JACKPOTLTE */

@@ -27,6 +27,12 @@ plug-in with Bifrost **v6** enabled (our G71 is v6; the HakiOS reference is v7).
   the eleven per-IP clock gates in manual mode (`MANUAL` bit20 + `CG_VAL`
   bit21, `ra.c:391-410`, offsets `cmucal-sfr.c:717-729`). It logs the raw
   values before/after each step.
+- **M1 also brings the GPU itself up** (`jt_mali_up()`): once the register
+  reads answer, read `SHADER`/`TILER`/`L2_PRESENT`, soft-reset via `GPU_CMD`
+  and wait `GPU_INT_RAWSTAT` reset-complete, then `L2`/`TILER`/`SHADER_PWRON`
+  and wait the matching `*_READY` bits — the reference's `mali_up()` step 4
+  (`redwood_mali.c:544-567`). A Bifrost needs no firmware, so `M1 done, GPU up
+  and reset` plus a Bifrost `GPU_ID` (arch nibble 6 for a G71) is M1 complete.
 
 Deliberately **not** touched yet: the G3D clock dividers (`CLK_CON_DIV_DIV_CLK_G3D_BUSP`
 `0x1800`, `CLK_CON_MUX_MUX_CLK_G3D_BUSD` `0x1004`) and the PLL dividers. The
