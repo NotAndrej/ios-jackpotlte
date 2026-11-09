@@ -1457,8 +1457,28 @@ both boot-arg gated so a normal boot is unchanged:
 
 Both patches still apply cleanly to the pristine donor `a5xelte_touch.c`
 (reproduce the intended file exactly) and `tools/validate-repo.py` passes
-(143 patches, contiguous). CI-built and flashed-vs-milestone split: **not yet
-built, not yet flashed** — the phone has not run this pair.
+(143 patches, contiguous).
+
+Build + flash status (2026-11-09): CI `42624666857` (`xnu`, `main`)
+**success**, kernel `kernel.development.a5xelte` 16,554,072 B sha256
+`8a0cc95ce68ded7ca31a64f94751c1238eca4390004f9c8afb52c001331e9bca` (the first
+build attempt `42622932947` failed: `jackpotlte_touch_power_up` was called by
+`0131`'s contact path before its definition; fixed by a static prototype in
+`0130`, `38c212c`). The kernel carries the new strings `A8 TOUCH PWR: ldo
+before`, `A8 TOUCH PWR: i2c4 qch`, `A8 TOUCH: contact worker started (debug log
+on)`, `A8 TOUCH: read ... left=`, `A8 TOUCH: %s id=... raw=(...)
+panel=(...)`, and the `a8touchpwr`/`a8touchlog` boot args.
+
+Image **`/var/tmp/a8-xnu-jt26-cpus8-touch.img`** (17,475,600 B, sha256
+`1b2b78c524238fa226793d0ed44fc3574edae36d4c1248c964469c26347f96f5`), cmdline
+`debug=0xc serial=3 cpus=8 keepsyms=1 rd=emmcroot0 emmcroot=USERDATA
+emmcwrite=1 unentitled_ios_sim_launch=1 cs_enforcement_disable=1
+launchd_unsecure_cache=1 ignition_level=1 a8touchlog=1 a8touchpwr=1
+-enable_kprintf_spam -noprogress sweetfb_noconsole=1` (verified inside the
+image). **Flashed to `BOOT` 2026-11-09 (`fastboot flash BOOT`, product
+`jackpotlte`, `is-userspace: yes`, RC=0, `Sending OKAY` / `Writing OKAY`) and
+rebooted.** Result pending: watch the console for `A8 TOUCH PWR:` lines, then a
+product id, then `press/move/release`.
 
 ## Hardware facts (from Samsung's own 4.4 source and the mainline DT; NOT yet confirmed on the phone)
 
@@ -1553,8 +1573,8 @@ none of the donor tweaks").
 
 1. **Touch:** `0130`/`0131` were regenerated with `a8touchpwr=1` (touch rail
    gpg3-0 + I2C4 clock gate) and `a8touchlog=1` (every event, raw + decoded).
-   Push → CI builds the kernel → pack the next image (default `cpus=8`) with
-   `... a8touchlog=1 a8touchpwr=1 ...` on the cmdline, flash to `BOOT`, and
+   CI `42624666857` built the kernel, **`/var/tmp/a8-xnu-jt26-cpus8-touch.img`**
+   (`cpus=8` + both flags) is **flashed to `BOOT`** and booting (2026-11-09);
    watch for `A8 TOUCH PWR: ldo before/on ...`, a product id, then `press/move/
    release`. If touch still dies, the next step is `SEC_TS_CMD_SENSE_ON` and
    then firmware (`tsp_sec/y661_a5y18.fw`, verify it exists on the vendor
