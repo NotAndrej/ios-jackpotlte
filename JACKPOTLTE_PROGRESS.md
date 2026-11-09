@@ -1892,3 +1892,26 @@ phone rebooted (probe sha256 `a556f11824251a67123ad9497810c8a61b76dc8e974cc8d012
 Device result pending: photograph the `JACKPOTLTE MALI:` block —
 `g3d_config=.../status=...`, `pll_g3d_con0=`, then `GPU_ID=... arch=?` (arch 6
 = Bifrost/G71) or `G3D domain off, GPU not read`.
+
+**Rebuild after the hunk fix (2026-11-09).** CI `42667447712` (main @
+`7c3e2ab`) is **success**, and the `xnu-kernel` artifact carries all four
+strings (`JACKPOTLTE MALI: probe start`, `g3d_config=`, `GPU_ID=`, `PMU`), so
+the file now materialises with its closing `#endif`. Kernel sha256
+`b62f622da02e879859d43f96ac6d0d40978f9e89603353ba6ac04da3ad8f2f4b`, 16,554,272 B.
+
+Images repacked from that kernel (same `jt28`-style base cmdline):
+`a8-xnu-gpu-probe.img` sha256 `1787e5d0...` (`jtmaliprobe=1`) and
+`a8-xnu-gpu-pwr.img` sha256 `28c233a1...` (`jtmaliprobe=1 jtmalipwr=1`).
+
+Because the phone is only on when the owner plugs it in, a single boot is
+worth more than two: a **combined** image is armed instead —
+`/var/tmp/a8-xnu-gpuprobe-hidtest.img`, sha256 `4436ac72...`, cmdline
+`... a8touchlog=1 a8touchpwr=1 sweethidtest=5 ... jtmaliprobe=1` (verified: no
+`jtmalipwr`). One boot then answers both (a) whether the PMU-window fix stops
+the M0 panic and what `g3d_config`/`status`/`GPU_ID` read, and (b) the touch
+client count. Watcher `/tmp/opencode/gpu/wait-probe-hidtest.sh` (pid 64555)
+flashes it once when `52005b4aec8d15b1` next appears in fastboot;
+`/tmp/opencode/gpu/flash-probe-hidtest.log` records it. The earlier
+`a8-xnu-jt29-hidtest.img` watcher (pid 58899) was **stopped**: `jt29` predates
+the PMU-window fix, so that kernel carries the panicking `JT_PMU_WINDOW
+0x1000`.
