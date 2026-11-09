@@ -1984,3 +1984,22 @@ What that proves, each against a source:
 hunk `+1,309`, every hunk re-counted before pushing) and says
 `reset done, GPU up and cores powered` instead of "M1 done", because M1's
 power path was skipped when the domain was already up.
+
+**jt31 combined image flashed (2026-11-09 19:35).** One `main` build now
+carries both tracks: GPU `0144` (with the decode fix) and touch
+`0131`+`0145`+`0146`.  CI `42673299985` attempt 2 **succeeded**; the
+downloaded kernel `/tmp/opencode/touch/art-jt31/kernel.development.a5xelte`,
+16,554,272 B, sha256 `b5b41e35...`, was string-checked to contain **all four**
+Mali strings (`probe start`, the new `GPU_ID=... id=... arch=...` line,
+`reset done, GPU up and cores powered`, `g3d_config=%#x status=%#x`) **and all
+three** Sweet HID strings (`clients buttons=%u touch=%u`, the touch log, the
+buttons test log).  Packed to `/var/tmp/a8-xnu-jt31-gputouch.img`, 17,475,600 B,
+sha256 `3b3da3f5aaf74c3b0e34b62795cfbd49800a410e39e3598d7c64e9e387ecc3b1`,
+cmdline `... a8touchlog=1 a8touchpwr=1 sweethidtest=5 ... jtmaliprobe=1` (no
+`jtmalipwr`).  Flashed to `BOOT` and rebooted at 19:35:27
+(`/tmp/opencode/gpu/flash-jt31.log`).  The decisive line to read on the
+console is the last `SWEET HID: clients buttons=N touch=N` before the GUI
+takes over (`sweetfb_noconsole=1` mutes the console only at the first
+present): `touch>0` → the digitizer pipe works and the remaining fault is
+geometry; `touch=0` → backboardd never opened it.  Awaiting the owner's
+photo/video of this boot.
