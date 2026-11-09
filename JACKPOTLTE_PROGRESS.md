@@ -908,6 +908,32 @@ Scoping only — nothing applied and no boot-path change. Full write-up:
   not, no GPU register read works until the power/clock sequence runs. Source
   cannot answer this; one readback can. That is what M0 is for.
 
+#### GPU port started, then paused (2026-11-09)
+
+The port runs on its **own branch `jackpotlte-gpu`** (worktree
+`/home/not_andrej/ios-jackpotlte-gpu`), forked from `main` at `523beb5`, so it
+never touches the touch work on `main`. Its reference is HakiOS's Mali-G52
+stack (Bifrost **v7**); our G71 is **v6**, so v6 must be re-enabled in the Mesa
+build and in `pan_screen.c`'s arch dispatch (`arch == 7` today) before anything
+can render.
+
+State when the worker stopped: patch
+`xnu/patches/0144-jackpotlte-mali-probe.patch` (M0, the read-only PMU/CMU/GPU-id
+probe on boot arg `jtmaliprobe=1`) is committed on the branch and **CI-green**
+(`gh workflow run xnu.yml --ref jackpotlte-gpu`, run `42632879797`); nothing has
+been flashed from that branch, so there is no device result for M0 yet.
+Next steps on resume: pack/flash `0144` and read the raw `JACKPOTLTE MALI:`
+lines (that answers the biggest unknown above), then M1 power/clock
+(`pd_g3d`, `PLL_G3D`/`CMU_G3D`), M2 MMU + one job, M3 a `RedwoodMali`-shaped
+user client, M4 Mesa panfrost with **arch 6** enabled plus the Metal plug-in.
+
+The worker was an `ollama-cloud/beam` subagent; it stopped on the provider's
+monthly usage limit (not a technical failure) and the owner chose to wait for
+credits rather than switch model, so the branch is deliberately frozen where it
+is. Note the host is Linux with no Apple SDK/KDK, so **kernel builds only come
+from the `macos-15` CI runner**; push triggers only `main`/`s8-dreamlte`, so the
+branch must be built with `gh workflow run xnu.yml --ref jackpotlte-gpu`.
+
 ### All eight cores in one logical cluster (`0137`) + the iOS-root gap (2026-11-08)
 
 `0137-jackpotlte-single-logical-cluster.patch` (31 insertions, 2 hunks) takes
