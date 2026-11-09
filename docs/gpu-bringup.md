@@ -48,8 +48,39 @@ Nothing from this branch has been flashed, so M0/M1 have **no device result**.
 2. Pack with `cpus=8 ... jtmaliprobe=1` (probe only) and flash BOOT; read the
    `g3d_config`/`g3d_status` line. That answers whether S-Boot leaves G3D up.
 3. Then pack with `jtmalipwr=1`, flash, and read the power/QCH/PLL/gate lines
-   plus `GPU_ID`. A Bifrost GPU_ID with a matching arch nibble is M1 done.
-4. M2: MMU + one job.
+   plus `GPU_ID`. A Bifrost GPU_ID (arch nibble 6) with `M1 done, GPU up and
+   reset` and the `*_READY` bits set is M1 done.
+4. M2: MMU + one job (recipe below).
+
+## M2 recipe (from the reference, not yet written)
+
+Port from `hakios-xnu xnu/files/bsd/dev/redwood_mali.c`; the same Linux
+panfrost register map applies to a Bifrost G71. Gate on `jtmalijob=1` and only
+run after `jt_mali_up()` returns true.
+
+- Job slot 1 at `JS1 = 0x1880`; per-slot: `JS_STATUS 0x24`,
+  `JS_HEAD_NEXT_LO 0x40`, `JS_HEAD_NEXT_HI 0x44`, `JS_AFFINITY_NEXT_LO 0x50`,
+  `JS_CONFIG_NEXT 0x58`, `JS_COMMAND_NEXT 0x60` (write 1 to start);
+  `JS_CONFIG = (3<<8)|(3<<12)|(8<<16)` (AS 0, flush caches both ends).
+- Interrupts: `JOB_INT_RAWSTAT 0x1000`, `JOB_INT_CLEAR 0x1004`,
+  `JOB_INT_MASK 0x1008`; completion is `(1<<1)|(1<<17)` with `1<<1` wanted.
+- Address space 0 at `AS0 = 0x2400`: `AS_TRANSTAB_LO 0x00`/`_HI 0x04`,
+  `AS_COMMAND 0x18` (1 = update), `AS_FAULTSTATUS 0x1c`, `AS_STATUS 0x28`
+  (wait for 0), `AS_TRANSCFG_LO 0x30`, `AS_MEMATTR_LO 0x08 = 0x88888888`
+  (all write-back).
+- Two jobs, the reference's `first_jobs()`: first **identity** (`AS_TRANSCFG`
+  mode 2, transtab 0 — needs no page tables, so it proves the job manager
+  works); then the same job through **AArch64 4 KB page tables**
+  (`AS_TRANSCFG` mode 6 with the walk flags). The job is the reference's
+  `run_write_job`: a header at page+0 saying "write value" (`word[4] =
+  (2<<1)|1|(1<<16)`), a 64-bit target at +0x800, immediate 6, value
+  `0xc0ffee01`; success = `*target == 0xc0ffee01`. Flush the page from the
+  processor caches (GPU here does not snoop them) before and after.
+- Page tables: AArch64 stage-1, 4 KB, three levels for 35 address bits
+  (`top[(gpu>>30)&31]`, `mid[(gpu>>21)&511]`, `bot[(gpu>>12)&511]`); PTE =
+  `phys | AF | SH_INNER | AP_RW | 3`.
+- Success = the word is written and `JOB_INT_RAWSTAT` shows the completion
+  bit, with `AS_FAULTSTATUS` clear.
 
 ## Device safety
 
