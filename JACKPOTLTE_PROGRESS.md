@@ -1510,6 +1510,16 @@ pins 0,1 -> function 2 (`(con & ~0xff) | 0x22`) and PUD -> pull-up
 new hardware write; the vendor skips its 70 ms settle only because
 `regulator_boot_on` is set, so the delay stays after enabling the rail.
 
+CI `42628632064` (attempt 2; attempt 1 died on GitHub's macOS-runner capacity,
+"job was not acquired by Runner of type hosted", not on this change) built that
+kernel green; the artifact was checked locally (`strings` shows
+`A8 TOUCH PWR: gpp4 i2c4 pads`). **`/var/tmp/a8-xnu-jt27-cpus8-touchmux.img`**,
+17,475,600 B, sha256
+`23057c05dd73c0530f74f4f986b08fc640fe944c2a8e8aca713b9c02b8ca4941`, cmdline
+`cpus=8 ... a8touchlog=1 a8touchpwr=1` (verified in the image), **flashed to
+`BOOT` and rebooted 2026-11-09 (RC=0)**. Device result pending: look for the
+`gpp4 i2c4 pads` line, then a product id, then `press/move/release`.
+
 The remaining `read-only`/`writes nothing` boilerplate was also stripped from the
 probe patches and their on-screen lines (the PMIC line is now
 `JACKPOTLTE PMIC: probe (fuel gauge/charger state)`).
