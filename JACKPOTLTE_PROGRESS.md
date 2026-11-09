@@ -1714,10 +1714,12 @@ none of the donor tweaks").
    (`42685239062`) and the kernel carries every new string; the image is
    **packed and ready** — `/var/tmp/a8-xnu-jt33-touchretry.img` (sha256
    `b349c7e2...446764c9d`), no `sweetfb_noconsole=1`. **Flashed to `BOOT` and
-   rebooted 21:00:20** (`/tmp/opencode/touch/flash-jt33.log`); now swipe up
-   from the bottom of the lock screen and read the on-screen counters plus
-   `SWEET HID: clients buttons=... touch=...` (see the "`0147` — the A8 IC
-   init" section above).
+   rebooted 21:00:20** (`/tmp/opencode/touch/flash-jt33.log`); that boot
+   logged **no `A8 TOUCH` line at all**, which the probe's single-attempt
+   product-id read explains (see "`0148` — the jt33 boot logged nothing at
+   all"). `0148` retries it, recovers the bus and starts the contact path even
+   when the id never reads; build/flash it next and read the unconditional
+   counters line.
 2. **8 cores:** flash **`/var/tmp/a8-xnu-jt14-cpus8.img`** (sha256
    `aeb3a979...e427a9`, kernel = `0137`) to `BOOT` and look for
    `requested=8 selected=8` with no ticket-lock panic. If it still panics, the
@@ -2021,6 +2023,35 @@ swipe up from the bottom of the lock screen, and read the on-screen
 **Flashed to `BOOT` and rebooted at 21:00:20** (`/tmp/opencode/touch/flash-jt33.log`),
 device `52005b4aec8d15b1`.  Result pending: a swipe up from the lock screen
 and a photo of the on-screen counters.
+
+### `0148` — the jt33 boot logged nothing at all
+
+The jt33 boot produced **no `A8 TOUCH` output of any kind**, not even the
+periodic counters.  The log is not off: `strings` on the flashed image shows
+`a8touchlog=1` in the cmdline and the kernel carries every `A8 TOUCH:`
+string.  The reason is upstream of the counters: `jackpotlte_touch_probe()`
+reads the product id **once** (`jtts_read_reg`, no retry) and **returns** if
+that read fails, and the `jackpotlte_touch_contacts()` call that starts the
+worker sits *after* it.  So one NACK on the very first boot read leaves the
+digitizer with **no worker at all** — no heartbeat, no `read`/`press` lines,
+no counters, exactly what was seen.  The read is the same flaky one jt31
+showed (`status read failed after power`); `0147` hardened the contact path
+but not this first probe read.
+
+`0148` (`xnu/patches/0148-jackpotlte-touch-probe-resilient.patch`,
+`bsd/dev/a5xelte_touch.c` only) makes that path survivable:
+
+1. The probe's product-id read uses `jtts_read_retry` (10x, as `0147` added),
+   then one `jtts_bus_recover()` + 2 ms and a second retry round (the failure
+   signature is a stuck bus, `stat=0x30` with SDA held low).
+2. If it still fails, the probe **no longer returns**: it starts the contact
+   path anyway (`jackpotlte_touch_contacts(boot)`), so the worker, the enable
+   sequence and the counters run regardless.
+3. The contact path's own id read uses `jtts_read_retry` too.
+4. The counters line prints **unconditionally every ~16 s** instead of only on
+   change, so a boot always shows `A8 TOUCH: moves=... i2c_retries=...
+   lost_reads=...` even with zero touch — the worker's liveness is never
+   ambiguous again.
 
 ### GPU 0144 is really in the shippable kernel
 
