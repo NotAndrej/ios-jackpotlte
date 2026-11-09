@@ -15,34 +15,22 @@ new file mode 100644
 index 0000000..bd01079
 --- /dev/null
 +++ b/bsd/dev/jackpotlte_pmic.c
-@@ -0,0 +1,368 @@
+@@ -0,0 +1,356 @@
 +/*
 + * Galaxy A8 2018 (SM-A530F, jackpotlte, Exynos 7885) power probe.
 + *
-+ * STAGE: LOG-ONLY.  This file reads and prints the charger and fuel-gauge
-+ * identity, status, voltages and currents that S-Boot handed us, so the real
-+ * values are visible instead of only the static "SWEET BATTERY: static
-+ * fallback, 100% 4200mV" line (the donor battery service itself is left
-+ * untouched this stage).  It writes NOTHING on the power path: no
-+ * PMIC/charger/fuel-gauge register, no voltage or current setting, no IRQ
-+ * mask, no GPIO/LDO/regulator enable, no mode change.  The only MMIO stores
-+ * are to the Exynos S3C2440 I2C controllers, which are the transport, not a
-+ * power register (i2c-s3c2410.c:51-58).
++ * Reads the charger and fuel-gauge identity, status, voltages and currents so
++ * the real values are visible instead of the donor's static "SWEET BATTERY"
++ * fallback.
 + *
 + * The fuel gauge and the sub-PMIC/MUIC (s2mu004) sit on ordinary S3C2440 I2C
-+ * buses that S-Boot leaves muxed, so they can be read with the same polled
-+ * transfer the A5 touch driver already uses (bsd/dev/a5xelte_touch.c:224-318).
++ * buses that S-Boot leaves muxed; they are read with the same polled transfer
++ * the A5 touch driver uses (bsd/dev/a5xelte_touch.c:224-318).
 + *
-+ * The main PMIC (s2mpu08) is NOT read here.  Its DTS node is under
-+ * speedy@11CE0000 with acpm-ipc-channel = <2>
-+ * (exynos7885-jackpotlte_common.dtsi:196-198), and its registers are reached
-+ * through the ACPM mailbox, not the I2C bus (acpm_mfd.c:20, s2mpu08_core.c:76).
-+ * Reading it needs the ACPM IPC protocol, so it is left for a later,
-+ * separately approved stage.  Its regulator map is named at the end of
-+ * jackpotlte_pmic_probe() for that stage.
-+ *
-+ * Every register and every address below is cited to Samsung's Eureka
-+ * 4.4.302 kernel tree or to shim/jackpotlte/board.h.
++ * The main PMIC (s2mpu08) is reached through the ACPM mailbox, not I2C
++ * (exynos7885-jackpotlte_common.dtsi:196-198, acpm_mfd.c:20,
++ * s2mpu08_core.c:76); its regulator map is named at the end of
++ * jackpotlte_pmic_probe() for a later stage.
 + */
 +#if defined(ARM64_BOARD_CONFIG_A5XELTE) && defined(JACKPOTLTE)
 +#include <sys/param.h>
@@ -347,8 +335,8 @@ index 0000000..bd01079
 +	vm_offset_t fg;
 +	vm_offset_t chg;
 +
-+	printf("JACKPOTLTE PMIC: read-only power probe "
-+	    "(no PMIC/charger/fuel-gauge writes)\n");
++	printf("JACKPOTLTE PMIC: probe "
++	    "(fuel gauge/charger state)\n");
 +
 +	/* I2C_FUELGAUGE (i2c_0, 0x13830000): s2mu004 fuel gauge @0x3B. */
 +	fg = ml_io_map(JT_I2C_FUELGAUGE_PA, JT_I2C_WINDOW);

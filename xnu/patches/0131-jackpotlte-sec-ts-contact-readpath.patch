@@ -18,14 +18,14 @@
  }
  
  /*
-+ * Mode-0 contact path.  It polls the sec_ts event queue and feeds
-+ * SweetHIDTouch, exactly like the native driver's coordinate event.  Every
-+ * event read is logged raw and decoded so a dead or half-brought-up
-+ * controller can be diagnosed.  It writes nothing to the controller itself
-+ * (no SENSE_ON, no TOUCH_FUNCTION, no NVM); the only optional writes are the
-+ * touch rail/clock enable in jackpotlte_touch_power_up() (boot-arg
-+ * a8touchpwr=1).  The worker starts even if the controller is not yet in
-+ * application mode, so the interrupt line can still be watched.
++ * Mode-0 contact path.  Polls the sec_ts event queue and feeds
++ * SweetHIDTouch like the native driver's coordinate event.  Every event is
++ * logged raw and decoded so a dead controller can be diagnosed.  The only
++ * controller writes are the optional touch rail/clock enable in
++ * jackpotlte_touch_power_up() (boot-arg a8touchpwr=1).  The worker starts
++ * even if the controller is not yet in application mode, so the interrupt
++ * line can still be watched.
++ * Touches are forwarded to SweetHIDTouch as press/move/release.
 + */
 +static int jt_ts_sleep;
 +static vm_offset_t jt_ts_pinctrl0;

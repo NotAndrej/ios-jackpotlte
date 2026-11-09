@@ -1477,8 +1477,37 @@ launchd_unsecure_cache=1 ignition_level=1 a8touchlog=1 a8touchpwr=1
 -enable_kprintf_spam -noprogress sweetfb_noconsole=1` (verified inside the
 image). **Flashed to `BOOT` 2026-11-09 (`fastboot flash BOOT`, product
 `jackpotlte`, `is-userspace: yes`, RC=0, `Sending OKAY` / `Writing OKAY`) and
-rebooted.** Result pending: watch the console for `A8 TOUCH PWR:` lines, then a
-product id, then `press/move/release`.
+rebooted.**
+
+**RESULT: `jt26` brings the rail and clock gate up, but I2C4 still NACKs —
+owner photo `Screenshot_20261109-143446.png`, 2026-11-09.** On-screen:
+
+```
+A8 TOUCH: tsp_ldo_en(gpg3-0) 1800000 uV dat=0 -> NOT enabled by S-Boot
+A8 TOUCH PWR: ldo before con=0x10 dat=0x00
+A8 TOUCH PWR: ldo on con=0x11 dat=0x01          <- rail now driven high
+A8 TOUCH PWR: i2c4 qch 0x300082 -> 0x300083     <- clock gate opened
+A8 TOUCH: i2c4@0x13870000 con=0x6 stat=0 add=0 lc=0
+A8 TOUCH: product id read failed stat=0xf0 con=0x3e3
+```
+
+So the power-up works at the pin level, but the controller still cannot read the
+sec_ts and `stat=0xf0` (MASTER_TX | START stuck) means the slave never ACKed.
+**Likely cause: the I2C4 bus pads are never muxed.** `i2c_4` in
+`exynos7885.dtsi:1070` has `pinctrl-0 = <&i2c4_bus>`; that group
+(`exynos7885-pinctrl.dtsi:769`) is **`gpp4-1`/`gpp4-0`, function 2, pull-up**,
+in `pinctrl_3 @ 0x139B0000`, bank offset **`0x0a0`** (`pinctrl-exynos.c:1737`,
+`bank_type_6` CON/DAT/PUD = `0x00/0x04/0x08`). S-Boot has no reason to leave
+those pads on the I2C function, and nothing in the probe muxes them, so the
+wires float. The vendor driver relies on the i2c controller to apply
+`i2c4_bus`. Next image should, inside the `a8touchpwr` path, set `gpp4` CON
+(pins 0,1 -> function 2) and PUD (pull-up) before the first I2C transfer; the
+vendor also skips its 70 ms settle only because `regulator_boot_on` is set, so
+keep the delay after enabling the rail.
+
+The remaining `read-only`/`writes nothing` boilerplate was also stripped from the
+probe patches and their on-screen lines (the PMIC line is now
+`JACKPOTLTE PMIC: probe (fuel gauge/charger state)`).
 
 ## Hardware facts (from Samsung's own 4.4 source and the mainline DT; NOT yet confirmed on the phone)
 

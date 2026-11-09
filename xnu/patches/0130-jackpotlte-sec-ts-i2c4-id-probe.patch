@@ -17,9 +17,9 @@
 + *   <4096 4096> (line 638); sec,project_name = "JACKPOT1","A530".
 + * The only touch rail is tsp_ldo_en, a fixed 1.8 V GPIO gate on gpg3-0
 + * (lines 611-619, regulator-min/max-microvolt 1800000).  This probe reads
-+ * that pin's state (does S-Boot leave the rail on?) but never writes any
-+ * regulator, LDO or PMIC register and never writes touch NVM.  Only the I2C
-+ * controller's own registers are written, which every I2C transfer needs.
++ * that pin's state (does S-Boot leave the rail on?).
++ *
++ * The I2C reads only touch the I2C4 controller registers.
 + */
 +#define JT_TS_I2C_PA		0x13870000u
 +#define JT_TS_SLAVE		0x48u
@@ -196,8 +196,8 @@
 +	return ok;
 +}
 +
-+/* Read-only power report: the touch rail is the fixed 1.8 V tsp_ldo_en on
-+ * gpg3-0.  Print whether S-Boot left it enabled; write nothing. */
++/* Power report: the touch rail is the fixed 1.8 V tsp_ldo_en on
++ * gpg3-0; print whether S-Boot left it enabled. */
 +static void
 +jackpotlte_touch_power_log(void)
 +{
@@ -231,7 +231,7 @@
 + * the I2C4 block clock is gated, opens it (QCH_CON_LBLK_PERIC_QCH_I2C4 = PERI
 + * CMU 0x10010000 + 0x3028, bit0 ENABLE | bit1 CLOCK_REQ; Eureka
 + * drivers/soc/samsung/cal-if/exynos7885/cmucal-sfr.c:978,3753-3755).  It
-+ * writes only that GPIO and that clock gate -- no PMIC and no touch NVM.
++ * writes only that GPIO and that clock gate.
 + */
 +#define JTTS_PERI_QCH_I2C4	0x10013028u
 +
@@ -302,7 +302,7 @@
 +		printf("A8 TOUCH: i2c4@%#x mapping failed\n", (unsigned)JT_TS_I2C_PA);
 +		return;
 +	}
-+	printf("A8 TOUCH: i2c4@%#x con=%#x stat=%#x add=%#x lc=%#x (read only)\n",
++	printf("A8 TOUCH: i2c4@%#x con=%#x stat=%#x add=%#x lc=%#x\n",
 +	    (unsigned)JT_TS_I2C_PA,
 +	    a5touch_read(jt_ts_bus, JTTS_IICCON),
 +	    a5touch_read(jt_ts_bus, JTTS_IICSTAT),
@@ -344,7 +344,7 @@
  a5xelte_touch_probe(void)
  {
 +#if defined(JACKPOTLTE)
-+	jackpotlte_touch_probe();   /* read-only sec_ts probe on the A8 */
++	jackpotlte_touch_probe();   /* sec_ts probe on the A8 */
 +	return;
 +#endif
  #if defined(DREAMLTE)

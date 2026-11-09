@@ -76,7 +76,7 @@ index 0000000..7a3d6a1
 +#define A5P_PHY_ISO_OFF		0x678U
 +#define A5P_PHY_ISO_BYPASS	0x1U
 +
-+/* DECON_F hardware trigger, read-only here (board.h JT_DECON_BASE/TRIG_OFF;
++/* DECON_F hardware trigger (board.h JT_DECON_BASE/TRIG_OFF;
 + * regs-decon.h HW_SW_TRIG_CONTROL). */
 +#define A5P_DECON_BASE		0x14860000UL
 +#define A5P_DECON_TRIG_OFF	0x0070U
@@ -346,7 +346,7 @@ index 0000000..7a3d6a1
 +static void
 +a5p_report_rails(void)
 +{
-+	printf("A5XELTE PANEL: rails read-only: gpg2-%u (ldo_3p0) dat=%d "
++	printf("A5XELTE PANEL: rails: gpg2-%u (ldo_3p0) dat=%d "
 +	    "gpg2-%u (vddr_en) dat=%d (S-Boot owned, not written)\n",
 +	    A5P_LDO_3P0_BIT, a5p_gpio_get(A5P_GPG2, A5P_LDO_3P0_BIT),
 +	    A5P_VDDR_EN_BIT, a5p_gpio_get(A5P_GPG2, A5P_VDDR_EN_BIT));

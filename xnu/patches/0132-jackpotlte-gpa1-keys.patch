@@ -103,7 +103,7 @@ diff --git a/bsd/dev/a5xelte_keys.c b/bsd/dev/a5xelte_keys.c
 -	printf("A5XELTE KEYS: GPA2 con=%#x dat=%#x pud=%#x (read only)\n",
 -	    a5_keys_read(A5_GPA2_CON), a5_keys_read(A5_GPA2_DAT),
 -	    a5_keys_read(A5_GPA2_PUD));
-+	printf("A5XELTE KEYS: " A5_KEY_BANK " con=%#x dat=%#x pud=%#x (read only)\n",
++	printf("A5XELTE KEYS: " A5_KEY_BANK " con=%#x dat=%#x pud=%#x\n",
 +	    a5_keys_read(A5_KEY_CON), a5_keys_read(A5_KEY_DAT),
 +	    a5_keys_read(A5_KEY_PUD));
  	kern_return_t kr = kernel_thread_start(a5_keys_thread, NULL, &thread);

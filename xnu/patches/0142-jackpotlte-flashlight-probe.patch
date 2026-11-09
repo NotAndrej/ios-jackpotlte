@@ -18,7 +18,7 @@ index 0000000..006a25e
 @@ -0,0 +1,148 @@
 +/*
 + * Galaxy A8 2018 (SM-A530F, jackpotlte, Exynos7885) camera flash / torch LED:
-+ * read-only probe of the KTD2692 single-wire control line.
++ * probe of the KTD2692 single-wire control line.
 + *
 + * The board's flash LED controller is a Kinetic KTD2692 (compatible "ktd2692",
 + * exynos7885-jackpotlte_common.dtsi:1537-1552).  It is NOT on I2C and has no
@@ -109,7 +109,7 @@ index 0000000..006a25e
 +	func = (con >> A5FL_FUNC_SHIFT) & A5FL_FUNC_MASK;
 +
 +	printf("A5XELTE FLASH: KTD2692 s-wire on gpg1-%u (single-wire, no I2C id "
-+	    "register) con=%#x dat=%#x pud=%#x func=%#x line=%u (read only)\n",
++	    "register) con=%#x dat=%#x pud=%#x func=%#x line=%u\n",
 +	    A5FL_PIN, con, dat, pud, func, (dat >> A5FL_PIN) & 1U);
 +	printf("A5XELTE FLASH: probe only; the LED-enable path is documented in "
 +	    "this file and NOT executed\n");
@@ -180,7 +180,7 @@ index d4f573f..87b686d 100644
  	/* Galaxy A8 2018: Apple80211 glue (en0 + SIOCS/GA80211), off unless
  	 * "a8wifi" is 1 (bsd/dev/a5xelte_wifi.c). */
  	a5xelte_wifi_probe();
-+	/* Galaxy A8 2018: KTD2692 flash/torch LED read-only S-Wire line probe,
++	/* Galaxy A8 2018: KTD2692 flash/torch LED S-Wire line probe,
 +	 * off unless "a8torch" is 1; it does not drive the LED
 +	 * (bsd/dev/a5xelte_flashlight.c). */
 +	a5xelte_flashlight_probe();

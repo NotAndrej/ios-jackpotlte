@@ -16,7 +16,7 @@ index 0000000..85b0c86
 +++ b/bsd/dev/a5xelte_sensors.c
 @@ -0,0 +1,311 @@
 +/*
-+ * Galaxy A8 2018 (SM-A530F, jackpotlte, Exynos7885) sensors: opt-in, read-only
++ * Galaxy A8 2018 (SM-A530F, jackpotlte, Exynos7885) sensors: opt-in
 + * bring-up probe.
 + *
 + * The A8's "easy" sensors split into two very different worlds:
@@ -239,7 +239,7 @@ index 0000000..85b0c86
 +		return;
 +	}
 +	dat = a8sns_read(pinctrl0, A8SNS_GPA0_OFF + A8SNS_PIN_DAT);
-+	printf("A8SENSORS: hall gpa0-%u level=%u; certify_hall gpa0-%u level=%u (gpa0 dat=%#x, read only)\n",
++	printf("A8SENSORS: hall gpa0-%u level=%u; certify_hall gpa0-%u level=%u (gpa0 dat=%#x)\n",
 +	    A8SNS_HALL_BIT, (dat >> A8SNS_HALL_BIT) & 1u,
 +	    A8SNS_CERTHALL_BIT, (dat >> A8SNS_CERTHALL_BIT) & 1u, dat);
 +}
@@ -256,7 +256,7 @@ index 0000000..85b0c86
 +		printf("A8SENSORS: i2c5@%#x mapping failed\n", (unsigned)A8SNS_I2C5_PA);
 +		return;
 +	}
-+	printf("A8SENSORS: grip i2c5@%#x addr %#x con=%#x stat=%#x lc=%#x (read only)\n",
++	printf("A8SENSORS: grip i2c5@%#x addr %#x con=%#x stat=%#x lc=%#x\n",
 +	    (unsigned)A8SNS_I2C5_PA, (unsigned)A8SNS_GRIP_SLAVE,
 +	    a8sns_read(a8sns_bus, A8SNS_IICCON),
 +	    a8sns_read(a8sns_bus, A8SNS_IICSTAT),
@@ -312,7 +312,7 @@ index 0000000..85b0c86
 +		return;
 +	}
 +
-+	printf("A8SENSORS: probe (a8sensors=1, read only)\n");
++	printf("A8SENSORS: probe (a8sensors=1)\n");
 +	a8sns_hall_report();
 +	a8sns_grip_report();
 +	a8sns_hub_report();
@@ -341,7 +341,7 @@ diff --git a/iokit/bsddev/IOKitBSDInit.cpp b/iokit/bsddev/IOKitBSDInit.cpp
  	 * default; full bring-up only with the "a8wifi" boot argument
  	 * (bsd/dev/a5xelte_scsc.c). */
  	a5xelte_scsc_probe();
-+	/* Galaxy A8 2018: read-only hall/grip/sensor-hub probe, off unless
++	/* Galaxy A8 2018: hall/grip/sensor-hub probe, off unless
 +	 * "a8sensors" is 1 (bsd/dev/a5xelte_sensors.c). */
 +	a5xelte_sensors_probe();
  	/* Galaxy A8 2018: Apple80211 glue (en0 + SIOCS/GA80211), off unless
