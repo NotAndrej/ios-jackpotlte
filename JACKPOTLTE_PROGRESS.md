@@ -1091,8 +1091,11 @@ Each track's own `loader` CI red is only the gap error
 numbering.
 
 **But they do not stack as-is (tested 2026-11-08 21:30).** Applying all six in
-order to a true `0139` tree (`/tmp/opencode/sns-base` is the reliable
-baseline; `/tmp/opencode/verify0138` is at 0138 and gives false failures):
+order to a true `0139` tree (reconstructed by reverse-applying the BT patch to
+`bt-base`; note `/tmp/opencode/sns-base` is *not* a `0139` baseline -- it
+already carries the sensors probe -- and `/tmp/opencode/verify0138` is at 0138,
+both giving false failures. All of `/tmp/opencode` was later wiped by a host
+restart, so these trees no longer exist):
 
 | order | patch | result |
 | --- | --- | --- |
@@ -1107,9 +1110,11 @@ Only 3 of 6 entries reach `bsd/conf/files`. Cause: all six append at the same
 two spots in `bsd/conf/files` and `iokit/bsddev/IOKitBSDInit.cpp`, and each
 patch was generated against the bare 0139 tree rather than against its
 predecessors. `dxb` applies them with `patch -p1`, so these are genuine
-failures. **The merge is not a `git merge`; each patch must be regenerated on
-top of the accumulated tree (and ideally rebuilt in CI) in the order above.**
-That work is not started.
+failures. **The merge is not a `git merge`; each patch must be re-anchored (or
+regenerated) on top of the accumulated tree and rebuilt in CI, one at a time.**
+Flashlight (`0142`) needed only renumbering; sensors (`0143`) needed its three
+wiring hunks re-anchored. The same holds for the remaining four (BT, audio,
+camera, mic), which still have to go through the next free number in turn.
 
 **`0142` (flashlight) is merged and green** (`42522434510` xnu and
 `42522434566` loader both **success** on `052a4b9` -- the first green `loader`
