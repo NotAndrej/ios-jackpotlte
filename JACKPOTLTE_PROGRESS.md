@@ -1954,6 +1954,10 @@ reports `N>0` clients.  Because the console mutes at the GUI's first present,
 the same verified jt31 kernel **without `sweetfb_noconsole=1`**, so the
 periodic client report and the `SWEET HID: touch ... (%u clients)` line keep
 drawing over the GUI; one boot + a tap on the lock screen answers it.
+**Flashed to BOOT and rebooted at 20:11:52** (`/tmp/opencode/gpu/flash-jt32.log`);
+the console now keeps drawing over the GUI, so the latest
+`SWEET HID: clients buttons=N touch=N` and any `SWEET HID: touch ... (N clients)`
+line are visible on the lock screen.
 
 ### GPU 0144 is really in the shippable kernel
 
