@@ -1713,10 +1713,11 @@ none of the donor tweaks").
    logs `A8 TOUCH: moves=%u i2c_retries=%u lost_reads=%u`. The build is green
    (`42685239062`) and the kernel carries every new string; the image is
    **packed and ready** — `/var/tmp/a8-xnu-jt33-touchretry.img` (sha256
-   `b349c7e2...446764c9d`), no `sweetfb_noconsole=1`. Flash it to `BOOT`,
-   reboot, swipe up from the bottom of the lock screen, and read the on-screen
-   counters plus `SWEET HID: clients buttons=... touch=...` (see the "`0147` —
-   the A8 IC init" section above).
+   `b349c7e2...446764c9d`), no `sweetfb_noconsole=1`. **Flashed to `BOOT` and
+   rebooted 21:00:20** (`/tmp/opencode/touch/flash-jt33.log`); now swipe up
+   from the bottom of the lock screen and read the on-screen counters plus
+   `SWEET HID: clients buttons=... touch=...` (see the "`0147` — the A8 IC
+   init" section above).
 2. **8 cores:** flash **`/var/tmp/a8-xnu-jt14-cpus8.img`** (sha256
    `aeb3a979...e427a9`, kernel = `0137`) to `BOOT` and look for
    `requested=8 selected=8` with no ticket-lock panic. If it still panics, the
@@ -2016,6 +2017,10 @@ cmdline plus `sweethidtest=5 jtmaliprobe=1`.  Flash it to `BOOT`, reboot,
 swipe up from the bottom of the lock screen, and read the on-screen
 `A8 TOUCH: moves=... i2c_retries=... lost_reads=...` line and the
 `SWEET HID: clients buttons=... touch=...` line together.
+
+**Flashed to `BOOT` and rebooted at 21:00:20** (`/tmp/opencode/touch/flash-jt33.log`),
+device `52005b4aec8d15b1`.  Result pending: a swipe up from the lock screen
+and a photo of the on-screen counters.
 
 ### GPU 0144 is really in the shippable kernel
 
