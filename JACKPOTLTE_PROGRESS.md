@@ -1710,10 +1710,13 @@ none of the donor tweaks").
    the boot-status read is flaky, so the driver was sending no
    `SET_TOUCHFUNCTION`/`SENSE_ON` and could drop movement events. `0147` adds
    the S8's sequence (sent whenever the IC answers) and 10x read retries, and
-   logs `A8 TOUCH: moves=%u i2c_retries=%u lost_reads=%u`. The build after
-   `0147` lands must be packed **without `sweetfb_noconsole=1`**; boot it,
-   swipe up from the bottom of the lock screen, and read the counters (see
-   the "`0147` — the A8 IC init" section above).
+   logs `A8 TOUCH: moves=%u i2c_retries=%u lost_reads=%u`. The build is green
+   (`42685239062`) and the kernel carries every new string; the image is
+   **packed and ready** — `/var/tmp/a8-xnu-jt33-touchretry.img` (sha256
+   `b349c7e2...446764c9d`), no `sweetfb_noconsole=1`. Flash it to `BOOT`,
+   reboot, swipe up from the bottom of the lock screen, and read the on-screen
+   counters plus `SWEET HID: clients buttons=... touch=...` (see the "`0147` —
+   the A8 IC init" section above).
 2. **8 cores:** flash **`/var/tmp/a8-xnu-jt14-cpus8.img`** (sha256
    `aeb3a979...e427a9`, kernel = `0137`) to `BOOT` and look for
    `requested=8 selected=8` with no ticket-lock panic. If it still panics, the
@@ -1997,6 +2000,22 @@ swipe up from the bottom of the lock screen, and read the counters — many
 `moves` with low `lost_reads` and iOS still ignoring it moves the hunt to the
 digitizer event/backboardd side; a failed enable write or repeated
 `bus recover`/`lost_reads` points back at the bus/IC.
+
+**Build and image (jt33).** CI `42685239062` (main @ `a2abbe7`, the `0147`
+commit) completed **success** and the downloaded `xnu-kernel` artifact
+(`kernel.development.a5xelte`, 16,554,512 B, sha256
+`feb10b7be1459eb3a1f93bcd8fe44b19e43c6972a181819cca5215591e43c9cb`) contains
+every new string — `A8 TOUCH: touch-function sent`, `sense-on sent`,
+`touch-function write failed`, `i2c4 still busy on write`, `A8 TOUCH:
+moves=%u i2c_retries=%u lost_reads=%u` and `SWEET HID: clients buttons=%u
+touch=%u` — so `0147` applied (green is not being trusted on its own again).
+The image is packed **without `sweetfb_noconsole=1`**:
+`/var/tmp/a8-xnu-jt33-touchretry.img` (17,475,600 B, sha256
+`b349c7e272dcefeaf12f4d414ad5aacf602ec4435c2fc9bee0fb70a446764c9d`), base
+cmdline plus `sweethidtest=5 jtmaliprobe=1`.  Flash it to `BOOT`, reboot,
+swipe up from the bottom of the lock screen, and read the on-screen
+`A8 TOUCH: moves=... i2c_retries=... lost_reads=...` line and the
+`SWEET HID: clients buttons=... touch=...` line together.
 
 ### GPU 0144 is really in the shippable kernel
 
