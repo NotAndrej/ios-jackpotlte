@@ -908,7 +908,7 @@ Scoping only — nothing applied and no boot-path change. Full write-up:
   not, no GPU register read works until the power/clock sequence runs. Source
   cannot answer this; one readback can. That is what M0 is for.
 
-#### GPU port (2026-11-09): M0+M1 in patch 0144, branch jackpotlte-gpu
+#### GPU port (2026-11-09): M0+M1 in patch 0144, merged to main
 
 The port runs on its **own branch `jackpotlte-gpu`** (worktree
 `/home/not_andrej/ios-jackpotlte-gpu`), forked from `main` at `523beb5`, so it
@@ -964,6 +964,12 @@ any `xnu/patches/*.patch` appears in a "Skipping patch" line** (`main` commit
 `9115b42`, and the same guard on the branch). Verify every future build with
 `strings` for the expected `JACKPOTLTE MALI:` / `A8 TOUCH` lines — a green run
 is not enough.
+
+**Merged to `main`** as `9876e87` (2026-11-09): the GPU branch is merged, so
+`xnu/patches/` is `0001-0144` contiguous on main and the CI guard is shared.
+The `jackpotlte-gpu` worktree/branch can be retired once its build is no longer
+needed. Main now rebuilds with 0144 (run `42644071418`); GPU work continues on
+`main` from here.
 
 Note the host is Linux with no Apple SDK/KDK, so **kernel builds only come
 from the `macos-15` CI runner**; push triggers only `main`/`s8-dreamlte`, so the
