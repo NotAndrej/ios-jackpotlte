@@ -129,8 +129,9 @@ diff --git a/iokit/bsddev/IOKitBSDInit.cpp b/iokit/bsddev/IOKitBSDInit.cpp
  extern void a5xelte_touch_probe(void);
 +extern void jackpotlte_mali_probe(void);
  extern void a5xelte_usb_probe(void);
-@@ -778,2 +779,4 @@
+@@ -784,3 +785,5 @@
  	a5xelte_touch_probe();
+ 	a5xelte_panel_init();
 +	/* Galaxy A8 2018: Mali GPU probe (M0), gated by jtmaliprobe. */
 +	jackpotlte_mali_probe();
  	{
