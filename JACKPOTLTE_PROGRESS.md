@@ -1772,6 +1772,18 @@ startup when the IC reports app mode and again on the watchdog status event
 Committed to `main` as `d2ef8d5`; `tools/validate-repo.py` passes and the new
 `0131` reproduces the edited tree exactly under `git apply`.
 
+**Built green:** CI `42646809859` (main @ `d2ef8d5`). Kernel
+`kernel.development.a5xelte`, 16,554,272 B, sha256
+`5473605ce4020ba0cffebf1b6cbf4a4bfa558bf938a6770f6ce6b95deed43ade`; the
+`xnu-kernel` artifact carries `A8 TOUCH: contact worker started`, `sense-on
+sent`, `event queue overflow`, `watchdog reset, re-sense` and `IC event queue
+full`, so the new worker is in the binary (not just the patch tree), and the
+Mali strings are still there too. Packed to
+**`/var/tmp/a8-xnu-jt29-cpus8-touchfix.img`**, 17,475,600 B, sha256
+`2c3a70f862b9469c03e7e20dce04d205816f47b0f939b5968ac092a1f19473ea`, cmdline
+the `jt28` base (cpus=8, `a8touchlog=1 a8touchpwr=1`, no GPU flags).
+**Not flashed yet**, so the jt28 panic has not been re-run on the phone.
+
 ### GPU 0144 is really in the shippable kernel
 
 CI `42644071418` (main @ `9e2c729`, the GPU merge) completed **success**, and
@@ -1781,3 +1793,10 @@ the downloaded `xnu-kernel` artifact contains the Mali strings
 trusted on its own again. Both images are packed in `/var/tmp/`:
 `a8-xnu-gpu-probe.img` (`jtmaliprobe=1`) and `a8-xnu-gpu-pwr.img`
 (`jtmaliprobe=1 jtmalipwr=1`), on the `jt28`-style base cmdline.
+
+**Probe flashed 2026-11-09 16:48** (`flash-watch.log`): device `52005b4aec8d15b1`
+appeared in fastboot as the queued watcher started, `BOOT` was written and the
+phone rebooted (probe sha256 `a556f11824251a67123ad9497810c8a61b76dc8e974cc8d0120cb4955cac8c7f`).
+Device result pending: photograph the `JACKPOTLTE MALI:` block —
+`g3d_config=.../status=...`, `pll_g3d_con0=`, then `GPU_ID=... arch=?` (arch 6
+= Bifrost/G71) or `G3D domain off, GPU not read`.
