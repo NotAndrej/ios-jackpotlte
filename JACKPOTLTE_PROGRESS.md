@@ -951,6 +951,20 @@ Note the branch is based on `523beb5`, so its image predates the jt28 touch
 fix; that is fine for GPU testing but the branch will need a merge onto `main`
 (conflict expected only in this progress file) before it lands.
 
+**Correction (important).** `42640666505` came back green but the kernel it
+produced **did not contain the driver**: blacktop's `build.sh` only warns when
+`git apply --check` fails, so 0144 was silently skipped
+(`error: patch failed: bsd/conf/files:109`) — the earlier "CI-green" M0 result
+was hollow for the same reason. The anchors were wrong: `bsd/conf/files` pads
+with **three** tabs, and after `a5xelte_panel_init();` comes
+`#if defined(JACKPOTLTE)/jackpotlte_pmic_probe()`, not a brace. Fixed in
+`87e4d92`; a dry-run against the run's own `xnu-buildtree` now applies 0144
+with no fuzz. To stop this class of bug, the workflow now **fails the run if
+any `xnu/patches/*.patch` appears in a "Skipping patch" line** (`main` commit
+`9115b42`, and the same guard on the branch). Verify every future build with
+`strings` for the expected `JACKPOTLTE MALI:` / `A8 TOUCH` lines — a green run
+is not enough.
+
 Note the host is Linux with no Apple SDK/KDK, so **kernel builds only come
 from the `macos-15` CI runner**; push triggers only `main`/`s8-dreamlte`, so the
 branch must be built with `gh workflow run xnu.yml --ref jackpotlte-gpu`.
