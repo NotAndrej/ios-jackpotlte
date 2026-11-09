@@ -1500,10 +1500,15 @@ in `pinctrl_3 @ 0x139B0000`, bank offset **`0x0a0`** (`pinctrl-exynos.c:1737`,
 `bank_type_6` CON/DAT/PUD = `0x00/0x04/0x08`). S-Boot has no reason to leave
 those pads on the I2C function, and nothing in the probe muxes them, so the
 wires float. The vendor driver relies on the i2c controller to apply
-`i2c4_bus`. Next image should, inside the `a8touchpwr` path, set `gpp4` CON
-(pins 0,1 -> function 2) and PUD (pull-up) before the first I2C transfer; the
-vendor also skips its 70 ms settle only because `regulator_boot_on` is set, so
-keep the delay after enabling the rail.
+`i2c4_bus`.
+
+**`jt27` (patch `0130`) now muxes the pads inside the `a8touchpwr` path**,
+after the rail and clock gate and before the first I2C transfer: `gpp4` CON
+pins 0,1 -> function 2 (`(con & ~0xff) | 0x22`) and PUD -> pull-up
+(`(pud & ~0xff) | 0x33`), then the existing 70 ms settle. It logs
+`A8 TOUCH PWR: gpp4 i2c4 pads con .. -> .. pud .. -> ..`. That is the only
+new hardware write; the vendor skips its 70 ms settle only because
+`regulator_boot_on` is set, so the delay stays after enabling the rail.
 
 The remaining `read-only`/`writes nothing` boilerplate was also stripped from the
 probe patches and their on-screen lines (the PMIC line is now
@@ -1603,11 +1608,16 @@ none of the donor tweaks").
 1. **Touch:** `0130`/`0131` were regenerated with `a8touchpwr=1` (touch rail
    gpg3-0 + I2C4 clock gate) and `a8touchlog=1` (every event, raw + decoded).
    CI `42624666857` built the kernel, **`/var/tmp/a8-xnu-jt26-cpus8-touch.img`**
-   (`cpus=8` + both flags) is **flashed to `BOOT`** and booting (2026-11-09);
-   watch for `A8 TOUCH PWR: ldo before/on ...`, a product id, then `press/move/
-   release`. If touch still dies, the next step is `SEC_TS_CMD_SENSE_ON` and
-   then firmware (`tsp_sec/y661_a5y18.fw`, verify it exists on the vendor
-   partition) before the controller reports coordinates.
+   (`cpus=8` + both flags) is **flashed to `BOOT`** and booting (2026-11-09).
+   **`jt26` result:** rail and clock gate come up (`ldo dat 0x00->0x01`,
+   `i2c4 qch 0x300082->0x300083`) but I2C4 still NACKs (`stat=0xf0`), because
+   the I2C4 bus pads (`gpp4-0/1`) were never muxed. `0130` now also muxes
+   them to function 2 + pull-up inside the `a8touchpwr` path. Next image
+   (`jt27`) must be built after that change lands, then watch for
+   `A8 TOUCH PWR: gpp4 i2c4 pads con ...` and a product id, then
+   `press/move/release`. If it still dies after the mux, the next step is
+   `SEC_TS_CMD_SENSE_ON` and then firmware (`tsp_sec/y661_a5y18.fw`, verify it
+   exists on the vendor partition) before the controller reports coordinates.
 2. **8 cores:** flash **`/var/tmp/a8-xnu-jt14-cpus8.img`** (sha256
    `aeb3a979...e427a9`, kernel = `0137`) to `BOOT` and look for
    `requested=8 selected=8` with no ticket-lock panic. If it still panics, the

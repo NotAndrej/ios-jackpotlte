@@ -1,6 +1,6 @@
 --- a/bsd/dev/a5xelte_touch.c
 +++ b/bsd/dev/a5xelte_touch.c
-@@ -940,9 +940,349 @@
+@@ -940,9 +940,366 @@
  }
  #endif /* JACKPOTLTE */
  
@@ -26,14 +26,16 @@
 +#define JT_TS_LDO_UV		1800000u	/* DTS tsp_ldo_en (line 614) */
 +
 +/* pinctrl bases: Eureka exynos7885.dtsi:601 (pinctrl_0 @ 0x11CB0000) and
-+ * :631 (pinctrl_3 @ 0x139B0000), board.h:92.  Bank offsets gpa0 0x040 and
-+ * gpg3 0x180 with CON/DAT/PUD at 0x00/0x04/0x08 are the exynos7885 tables
-+ * in drivers/pinctrl/samsung/pinctrl-exynos.c:1705-1747 (gpa0 :1710,
-+ * gpg3 :1745) and :49-52. */
++ * :631 (pinctrl_3 @ 0x139B0000), board.h:92.  Bank offsets gpa0 0x040,
++ * gpg3 0x180 and gpp4 0x0a0 with CON/DAT/PUD at 0x00/0x04/0x08 are the
++ * exynos7885 tables in drivers/pinctrl/samsung/pinctrl-exynos.c:1705-1747
++ * (gpa0 :1710, gpp4 :1737, gpg3 :1745) and :72-75 (bank_type_6, 4 bits
++ * per pin). */
 +#define JTTS_PINCTRL0		0x11cb0000u
 +#define JTTS_PINCTRL3		0x139b0000u
 +#define JTTS_GPA0_OFF		0x040u
 +#define JTTS_GPG3_OFF		0x180u
++#define JTTS_GPP4_OFF		0x0a0u
 +#define JTTS_PIN_CON		0x00u
 +#define JTTS_PIN_DAT		0x04u
 +#define JTTS_PIN_PUD		0x08u
@@ -230,8 +232,8 @@
 + * is unpowered and every I2C read NACKs.  This drives that pin high and, if
 + * the I2C4 block clock is gated, opens it (QCH_CON_LBLK_PERIC_QCH_I2C4 = PERI
 + * CMU 0x10010000 + 0x3028, bit0 ENABLE | bit1 CLOCK_REQ; Eureka
-+ * drivers/soc/samsung/cal-if/exynos7885/cmucal-sfr.c:978,3753-3755).  It
-+ * writes only that GPIO and that clock gate.
++ * drivers/soc/samsung/cal-if/exynos7885/cmucal-sfr.c:978,3753-3755), and muxes
++ * the I2C4 bus pads.  It writes only those pinctrl, GPIO and clock registers.
 + */
 +#define JTTS_PERI_QCH_I2C4	0x10013028u
 +
@@ -242,6 +244,7 @@
 +	vm_offset_t peri;
 +	uint32_t con;
 +	uint32_t dat;
++	uint32_t pud;
 +	uint32_t qch;
 +	int on = 0;
 +
@@ -277,6 +280,20 @@
 +		printf("A8 TOUCH PWR: i2c4 qch %#x -> %#x\n", qch,
 +		    a5touch_read(peri, JTTS_PERI_QCH_I2C4 & 0xfffu));
 +	}
++	/* Mux the I2C4 bus pads.  gpp4-0/1 are function 2 with pull-up in
++	 * the vendor tree via pinctrl-0 = <&i2c4_bus>
++	 * (exynos7885-pinctrl.dtsi:769); this probe applies no pinmux, so
++	 * the pads float and no slave can ACK.  CON/PUD are 4 bits per pin
++	 * (bank_type_6), so pins 0 and 1 are the low byte. */
++	con = a5touch_read(pinctrl3, JTTS_GPP4_OFF + JTTS_PIN_CON);
++	pud = a5touch_read(pinctrl3, JTTS_GPP4_OFF + JTTS_PIN_PUD);
++	a5touch_write(pinctrl3, JTTS_GPP4_OFF + JTTS_PIN_CON,
++	    (con & ~0xffu) | 0x22u);
++	a5touch_write(pinctrl3, JTTS_GPP4_OFF + JTTS_PIN_PUD,
++	    (pud & ~0xffu) | 0x33u);
++	printf("A8 TOUCH PWR: gpp4 i2c4 pads con %#x -> %#x pud %#x -> %#x\n",
++	    con, a5touch_read(pinctrl3, JTTS_GPP4_OFF + JTTS_PIN_CON),
++	    pud, a5touch_read(pinctrl3, JTTS_GPP4_OFF + JTTS_PIN_PUD));
 +	delay(70);	/* settle (sec_ts.c:2223 regulator_boot_on path) */
 +}
 +
