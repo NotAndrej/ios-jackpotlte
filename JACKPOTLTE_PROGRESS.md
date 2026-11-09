@@ -1873,8 +1873,35 @@ the driver still stops at 1919, so `ny = y/2220` would reach only the top 86%.
 An A5XELTE that mirrors the donor (present 1125x2436, digitizer over
 1125x2436 with `fOffY=108`, driver emitting 0..2219 panel pixels) needs all
 three files changed together; that draft is in
-`/tmp/opencode/touch/0146-donor-like.NOTES.md` and is gated on the hidtest
+`/tmp/opencode/touch/donor-like-geometry.NOTES.md` and is gated on the hidtest
 client count.
+
+**Same boot, the touch answer was inconclusive (2026-11-09).** The combined
+GPU+touch image also had `sweethidtest=5`, and the console shows
+`SWEET HID: key 0x40 down (0 clients)` / `key 0x40 up (0 clients)` — but those
+lines are at ~5 s uptime, long before SpringBoard/backboardd start. Worse, the
+test stops rescheduling after 60 events (`SweetHIDButtons::testFired`), i.e.
+after ~2.5 min, which can be entirely before backboardd exists on this device
+(the first DataMigration boot needed 20+ min; later boots are faster but
+unmeasured). So `0` here says nothing yet.
+
+`0146` (`xnu/patches/0146-jackpotlte-hid-client-report.patch`) makes the count
+readable regardless: it adds `UInt32 clientCount()` to `IOHIDEventService` and
+logs `SWEET HID: clients buttons=%u touch=%u` once per test tick, forever —
+the key presses still stop at 60, but the report does not. `sweetfb_noconsole=1`
+mutes the console only at the GUI's **first present**, so the last visible line
+of that report is the client count at the moment backboardd began presenting.
+`touch>0` there means the pipe works and the remaining fault is digitizer
+geometry (go to the donor-like geometry draft above); `touch=0` means backboardd never opened
+the digitizer and the fault is matching/open, not geometry.
+
+Note the persistent console log (`0047`) records **everything**, muted or not
+(`serial_console.c` calls `sweet_log_append()` before the mute check, and the
+A5XELTE guard is `SWEET || A5XELTE`), so the ring at the tail of `userdata`
+also has the late boot.  Reading it needs ADB in a recovery
+(`tools/sweet-log-pull.sh`); the only recovery here is the stock
+`~/recovery-public-v1.img`, whose ADB is not root-capable, so that route is
+not yet usable on this device.
 
 ### GPU 0144 is really in the shippable kernel
 
@@ -1915,3 +1942,45 @@ flashes it once when `52005b4aec8d15b1` next appears in fastboot;
 `a8-xnu-jt29-hidtest.img` watcher (pid 58899) was **stopped**: `jt29` predates
 the PMU-window fix, so that kernel carries the panicking `JT_PMU_WINDOW
 0x1000`.
+
+**RESULT on the phone: the panic is gone and the G71 is up (2026-11-09).**
+The combined image (sha256 `4436ac72...`) was flashed at 19:07:06
+(`/tmp/opencode/gpu/flash-probe-hidtest.log`) and its console, captured in
+`~/Downloads/Screenshot_20261109-190908.png`, printed:
+
+```
+JACKPOTLTE MALI: probe start (jtmaliprobe=1)
+JACKPOTLTE MALI: g3d_config=0xf status=0xf
+JACKPOTLTE MALI: pll_g3d_con0=0xa1570d11 enable=1 stable=1
+JACKPOTLTE MALI: GPU_ID=0x60000002 arch=0 rev=0
+JACKPOTLTE MALI: present: shaders=0x3 tiller=0x1 l2=0x1
+JACKPOTLTE MALI: reset rawstat=0x100 done=1
+JACKPOTLTE MALI: ready shaders=0x3 tiller=0x1 l2=0x1
+JACKPOTLTE MALI: M1 done, GPU up and reset
+```
+
+What that proves, each against a source:
+- `g3d_config` **and** `status` read `0xf` with no `jtmalipwr`, so **S-Boot
+  leaves `pd_g3d` powered**; the earlier translation fault is purely the old
+  `0x1000` PMU window, and the `0x10000` window fixes it.
+- `pll_g3d_con0=0xa1570d11`, bit31 (`PLL_ENABLE`) 1 and bit29 (`PLL_STABLE`) 1
+  (`cmucal-sfr.c:712`, `ra.h:37-40`) — PLL_G3D locked.
+- `GPU_ID=0x60000002`.  Linux panfrost splits this as `id = gpu_id >> 16`
+  = **0x6000** and `revision = gpu_id & 0xffff` = 0x0002
+  (`drivers/gpu/drm/panfrost/panfrost_gpu.c:316-327`), and its model table
+  maps `0x6000` to **Mali-G71** (`panfrost_gpu.c:222
+  GPU_MODEL(g71, 0x6000, ...)`), arch 6 = Bifrost v6 (`docs/jackpotlte-mali.md`
+  sec. 4).  The patch's own `arch=%u` was computed from bits 12-15 of the
+  *whole* value and printed 0; that is a log bug, fixed below, not a hardware
+  result.
+- `shaders=0x3` = **2 shader cores** (the A8's G71 is MP2), `tiller=0x1`,
+  `l2=0x1`; after the soft reset all three `_READY` masks read back equal, so
+  the cores really powered.
+- Net: **M0 and M1 are done on hardware**, with no panic and no power
+  sequence needed.  M2 (MMU + one no-op job) is next.
+
+**Log/decoding fixes applied after that boot:** `0144` now prints
+`id=`/`arch=`/`rev=`/`major=`/`minor=` decoded the panfrost way (new-file
+hunk `+1,309`, every hunk re-counted before pushing) and says
+`reset done, GPU up and cores powered` instead of "M1 done", because M1's
+power path was skipped when the domain was already up.

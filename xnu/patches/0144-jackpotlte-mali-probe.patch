@@ -1,6 +1,6 @@
 --- a/bsd/dev/jackpotlte_mali.c
 +++ b/bsd/dev/jackpotlte_mali.c
-@@ -0,0 +1,304 @@
+@@ -0,0 +1,309 @@
 +/*
 + * Galaxy A8 2018 (SM-A530F, jackpotlte, Exynos 7885) Mali GPU bring-up.
 + *
@@ -230,7 +230,7 @@
 +		printf("JACKPOTLTE MALI: shader cores did not all power up\n");
 +		return false;
 +	}
-+	printf("JACKPOTLTE MALI: M1 done, GPU up and reset\n");
++	printf("JACKPOTLTE MALI: reset done, GPU up and cores powered\n");
 +	return true;
 +}
 +
@@ -292,8 +292,13 @@
 +		return;
 +	}
 +	v = jt_rd(mali, JT_MALI_GPU_ID);
-+	printf("JACKPOTLTE MALI: GPU_ID=%#x arch=%u rev=%u\n", v,
-+	    (v >> 12) & 0xf, (v >> 4) & 0xff);
++	/* panfrost decodes GPU_ID as id = bits[31:16] and revision =
++	 * bits[15:0]; the model table matches id 0x6000 to Mali-G71 and the
++	 * arch is id >> 12 (Linux drivers/gpu/drm/panfrost/panfrost_gpu.c:
++	 * 316-327 and :222).  On the phone this read id=0x6000, arch 6. */
++	printf("JACKPOTLTE MALI: GPU_ID=%#x id=%#x arch=%u rev=%#x major=%u minor=%u\n",
++	    v, v >> 16, (v >> 28) & 0xf, v & 0xffff,
++	    ((v & 0xffff) >> 12) & 0xf, ((v & 0xffff) >> 4) & 0xff);
 +	(void)jt_mali_up(mali);
 +}
 +
