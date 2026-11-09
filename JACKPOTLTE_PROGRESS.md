@@ -1903,6 +1903,58 @@ also has the late boot.  Reading it needs ADB in a recovery
 `~/recovery-public-v1.img`, whose ADB is not root-capable, so that route is
 not yet usable on this device.
 
+### How the other ports do sec_ts touch (research, 2026-11-09)
+
+No public port of this exact SoC: the community list at hackiosx.dev has
+Exynos in only two entries, neither an Exynos 7885 / A8 2018.  Two Exynos
+ports on **our own A5XELTE base** do have sec_ts touch working, and both are
+direct references:
+
+- **Galaxy S7 `herolte` (Exynos 8890)** — `wardevsa/ios-a5xelte`, branch
+  `herolte`.  It reaches the iOS setup screen and then the home screen *with
+  touch*.  Touch series: `0211` (driver), `0212`/`0216` (rail via the APM M3),
+  `0217` (retries).  `HEROLTE_PROGRESS.md:214-227` states the working
+  condition: rails on → SDA/SCL high → **sec_ts in app mode (`0x20`),
+  id `ac a5 52`, tx=15 rx=26** → touches reach iOS; then `0217` adds up to
+  10 I2C retries because the IC NACKs (`int=0x400`) right after a finger
+  lands and movement events were lost.
+- **Galaxy S8 `dreamlte` (Exynos 8895)** — `Floppikrob/ios-galaxy-s8`.
+  Reaches the lock screen; touch works via the S6SY761 on `hsi2c_23`, "a
+  polled kernel driver feeds HID touch events; taps and swipes reach
+  SpringBoard".
+
+What that means for us, precisely:
+
+- Both use the **same `sweet_hid_touch()` HID layer** we use (the S8 even
+  builds as `ARM64_BOARD_CONFIG_A5XELTE`), and the S7 calls it from its own
+  polled driver exactly as `0131` does.  So the HID delivery path is proven;
+  `SWEET HID: touch 0 down at 323,1260` on jt29 is real.
+- Our A8's controller is a **different sec_ts generation**.  Ours (patch
+  `0130`/`0131`, "y661"): `READ_ONE_EVENT 0x60`, `READ_ALL_EVENT 0x61`,
+  `CLEAR_EVENT_STACK 0x62`, `SENSE_ON 0x10`, app mode `0x20`.  The S7
+  S6SY761: `READ_ONE_EVENT 0x71`, `SENSE_ON 0x40`, app mode `0x20`.  So the
+  S7's opcode *values* cannot be copied, only its structure.
+- The S7 refactored `SweetHIDTouch` to keep the native **panel** size
+  (`fPanelW/H`) separate from the **logical** display size (`fLogicalW/H`,
+  `fOffX/Y = (logical - panel)/2`) and to clamp against the panel
+  (`0211`).  For our A8, native is `1080x2220` (`0124`) with no offset, so
+  the normalised result is identical either way (both are `ry/4096`) — this
+  refactor cleans up the code but is **not** the reason touch is unseen.
+- The concrete difference that *is* visible on our device: the boot status
+  reads fail.  The jt31 video shows `status before power=0` and
+  `status read failed after power`, so `boot` never equals `APP_MODE` and
+  `SENSE_ON (0x10)` is never sent (the send is gated on app mode).  jt29
+  still delivered real coordinates, so the IC was scanning then, but a
+  reliable app-mode read + retry (as the S7 does) is the obvious hardening.
+
+Still the one number that decides the last mile: whether **backboardd opens
+the digitizer** (`SWEET HID: clients ... touch=N`) and whether the touch line
+reports `N>0` clients.  Because the console mutes at the GUI's first present,
+`/var/tmp/a8-xnu-jt32-gputouch-onscreen.img` (sha256 `13c88871...`) repacks
+the same verified jt31 kernel **without `sweetfb_noconsole=1`**, so the
+periodic client report and the `SWEET HID: touch ... (%u clients)` line keep
+drawing over the GUI; one boot + a tap on the lock screen answers it.
+
 ### GPU 0144 is really in the shippable kernel
 
 CI `42644071418` (main @ `9e2c729`, the GPU merge) completed **success**, and
