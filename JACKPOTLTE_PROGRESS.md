@@ -608,8 +608,8 @@ pre-renumber tree, so their patches were renumbered):
 | --- | --- | --- |
 | `0128` | USB dwc3 `@0x13600000` read-only probe | `a8-usb` (0131) |
 | `0129` | PMIC fuel gauge / charger read-only probe | `a8-pmic` (0131) |
-| `0130` | sec_ts I2C4 id probe + `tsp_ldo_en` power log | `a8-touch` (0131) |
-| `0131` | sec_ts read-only contact path (`a8touchlog`) | `a8-touch` (0132) |
+| `0130` | sec_ts I2C4 id probe + `tsp_ldo_en` power log; opt-in `a8touchpwr` power-up (LDO gpg3-0 + I2C4 QCH gate) | `a8-touch` (0131) |
+| `0131` | sec_ts contact path (`a8touchlog`); full raw+decoded event log, always-starts worker | `a8-touch` (0132) |
 | `0132` | gpa1 buttons poll | `a8-keys` (0131) |
 | `0133` | DSIM/panel bring-up, log-only by default | `a8-panel` (0131) |
 
@@ -1417,6 +1417,49 @@ index. Do not put the image back in `/var/tmp/iosroot`.
   ordinary transient lookup failures.
 - Do **not** run `fsck.ext4` on the mounted root.
 
+### Touch debug: power-up + full event log (`0130`/`0131` regenerated, 2026-11-09)
+
+Touch is the gate now that the lock screen is reached: the A8 panel shows the
+iOS lock screen but there is **no touch input**, so Settings can't be opened.
+
+Photo evidence (owner screenshot `Screenshot_20261109-135848.png`, 2026-11-09)
+from the `jt25-cpus8` boot shows the root cause:
+
+```
+A8 TOUCH: tsp_ldo_en gpg3-0 1800000 uV dat=0 -> NOT enabled by S-Boot
+A8 TOUCH: gpg3 con=0x10 dat=0x00 pud=0x111111 id(gpg3-6)=0; gpa0 dat=0x5a irq(gpa0-0)=0
+A8 TOUCH: i2c4@0x13870000 con=0x6 stat=0 add=0 lc=0 (read only)
+A8 TOUCH: product id read failed stat=0xf0 con=0x3e3
+```
+
+So S-Boot leaves the fixed 1.8 V touch rail `tsp_ldo_en` (gpg3-0,
+`regulator-fixed`/`enable-active-high`, DTS lines 611-619) **off**, the sec_ts
+chip (slave `0x48` on I2C4 `0x13870000`) is unpowered, and every I2C read NACKs
+(`stat=0xf0`). That read-only probe is the last touch result on the phone.
+
+The two touch patches were **regenerated in place** (no new patch number, so
+nothing downstream renumbers) to add a power bring-up and full event logging,
+both boot-arg gated so a normal boot is unchanged:
+
+- `0130` (unchanged probe + new opt-in `jackpotlte_touch_power_up()`): with
+  **`a8touchpwr=1`** it drives gpg3-0 high (`CON` func 1 + `DAT` bit0) and, if
+  the I2C4 block clock is gated, sets `QCH_CON_LBLK_PERIC_QCH_I2C4` (PERI CMU
+  `0x10010000 + 0x3028`, bit0 ENABLE | bit1 CLOCK_REQ; Eureka
+  `drivers/soc/samsung/cal-if/exynos7885/cmucal-sfr.c:978,3753-3755`). It writes
+  only that GPIO and that clock gate — no PMIC, no touch NVM. The read-only
+  probe still runs and logs the rail/gate before and after.
+- `0131` (contact path): with **`a8touchlog=1`** the worker now **always
+  starts** (it used to stop when the controller was not in app mode) and logs
+  every read raw and decoded — `A8 TOUCH: read <8 bytes> left=N`,
+  `A8 TOUCH: event ... eid/tid/act`, `A8 TOUCH: press/move/release id= raw= panel=`,
+  plus `gpa0-0` IRQ transitions and a ~32 s idle heartbeat. With `a8touchpwr=1`
+  it also re-checks boot status and product id after the power-up.
+
+Both patches still apply cleanly to the pristine donor `a5xelte_touch.c`
+(reproduce the intended file exactly) and `tools/validate-repo.py` passes
+(143 patches, contiguous). CI-built and flashed-vs-milestone split: **not yet
+built, not yet flashed** — the phone has not run this pair.
+
 ## Hardware facts (from Samsung's own 4.4 source and the mainline DT; NOT yet confirmed on the phone)
 
 Source now includes the **Eureka-Kernel** Samsung 4.4 tree for this device
@@ -1500,31 +1543,41 @@ Snapdragon A530W/U. The mainline `exynos7885*` values above therefore apply.
 
 ## Next concrete action
 
-Current state: stage 7 reached (`jt10`, iOS logo + progress bar; then `cpus=4`
-`jt12` reaches 50% promptly and at least the migration screen). `0137` (one
-logical cluster) and `0138`/`0139` (WiFi transport/glue, gated by `a8wifi=1`)
-are merged to `main`. The donor root tweaks were never applied to the flashed
-image (see "The flashed iOS root has none of the donor tweaks").
+Current state: **stage 8 reached** — `jt25-cpus8` (8 cores) boots past
+DataMigration to the **SpringBoard lock screen** (owner-observed 2026-11-09).
+The blocker is now **touch** (dead), so the next image brings the rail up and
+logs every event. `0137` (one logical cluster) and `0138`/`0139` (WiFi
+transport/glue, gated by `a8wifi=1`) are merged to `main`. The donor root
+tweaks were never applied to the flashed image (see "The flashed iOS root has
+none of the donor tweaks").
 
-1. **8 cores:** flash **`/var/tmp/a8-xnu-jt14-cpus8.img`** (sha256
+1. **Touch:** `0130`/`0131` were regenerated with `a8touchpwr=1` (touch rail
+   gpg3-0 + I2C4 clock gate) and `a8touchlog=1` (every event, raw + decoded).
+   Push → CI builds the kernel → pack the next image (default `cpus=8`) with
+   `... a8touchlog=1 a8touchpwr=1 ...` on the cmdline, flash to `BOOT`, and
+   watch for `A8 TOUCH PWR: ldo before/on ...`, a product id, then `press/move/
+   release`. If touch still dies, the next step is `SEC_TS_CMD_SENSE_ON` and
+   then firmware (`tsp_sec/y661_a5y18.fw`, verify it exists on the vendor
+   partition) before the controller reports coordinates.
+2. **8 cores:** flash **`/var/tmp/a8-xnu-jt14-cpus8.img`** (sha256
    `aeb3a979...e427a9`, kernel = `0137`) to `BOOT` and look for
    `requested=8 selected=8` with no ticket-lock panic. If it still panics, the
    `jt13` image on disk (`0136` kernel) is the control for the single-cluster
    change. BOOT-only flash; capture a **serial** log, not a photo, to see the
    MPIDRs attempted.
-2. **WiFi (compile green, never booted):** CI `42512239378` built
+3. **WiFi (compile green, never booted):** CI `42512239378` built
    `0138`+`0139` **success** (Build, stub and LSE gates passed). Boot that
    kernel **without** `a8wifi` and confirm only the
    `A5XELTE SCSC: PMU ...` identity lines appear; then try `a8wifi=1`.
    `/var/tmp/a8-xnu-jt15-cpus8.img` (sha256 `914edae8...c5991a`) is that
    kernel at `cpus=8`.
-3. **iOS root (DataMigration gate):** host side **done** — applied and
+4. **iOS root (DataMigration gate):** host side **done** — applied and
    verified in `/var/tmp/IOSRoot.img` (see "APPLIED to the host image").
    Remaining: `img2simg /var/tmp/IOSRoot.img /var/tmp/IOSRoot.sparse.img`,
    then `fastboot flash USERDATA` — destructive, needs the owner's
    confirmation. This is the host-side fix for the endless progress bar; no
    kernel change.
-4. **DRAM map (for "all 4 GB"):** `shim/fdt.c`'s `fdt_memory_all()` enumerates
+5. **DRAM map (for "all 4 GB"):** `shim/fdt.c`'s `fdt_memory_all()` enumerates
    every `/memory` node and `dt_probe()` prints each bank plus the total. Source
    banks (Eureka `exynos7885-jackpotlte_common.dtsi:28-41`): low
    `0x80000000+0x3DA00000` (986 MiB), mid `0xC0000000+0x40000000` (1024 MiB),
@@ -1532,12 +1585,12 @@ image (see "The flashed iOS root has none of the donor tweaks").
    contiguous window (`arm_init.c` → `gPhysBase`/`gPhysSize`; ADT
    `DRAM_BASE=0x880000000`/`DRAM_SIZE=0x20000000` today), so widening it to
    fill the largest contiguous bank is the follow-up.
-5. **Ports on the phone:** the five component ports are merged onto `main`
+6. **Ports on the phone:** the five component ports are merged onto `main`
    (`0128`–`0133`). Their drivers are log-only or read-only by default, so a
    boot should print the USB / PMIC / touch / buttons / panel state — the first
    device evidence for them.
-6. **GPU:** `docs/jackpotlte-mali.md` M0 is the read-only GPU probe (the single
+7. **GPU:** `docs/jackpotlte-mali.md` M0 is the read-only GPU probe (the single
    biggest unknown is whether S-Boot leaves G3D powered/clocked).
-7. Older housekeeping (still open): read the remaining board unknowns (ramoops
+8. Older housekeeping (still open): read the remaining board unknowns (ramoops
    `log_pstore` offset, gpa1 bank offset, eMMC CIU timings) from the live DT /
    Samsung source and fill `board.h`, then enable `JT_HAVE_RAMOOPS`.

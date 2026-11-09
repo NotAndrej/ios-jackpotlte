@@ -1,12 +1,12 @@
 --- a/bsd/dev/a5xelte_touch.c
 +++ b/bsd/dev/a5xelte_touch.c
-@@ -940,9 +940,289 @@
+@@ -940,9 +940,347 @@
  }
  #endif /* JACKPOTLTE */
  
 +#if defined(JACKPOTLTE)
 +/*
-+ * Galaxy A8 2018 (SM-A530F) touch bring-up: read-only I2C probe only.
++ * Galaxy A8 2018 (SM-A530F) touch bring-up: sec_ts I2C4 id probe.
 + *
 + * The touchscreen is a Samsung sec_ts ("y661") at slave 0x48 on the
 + * s3c2440 I2C4 controller at 0x13870000.  Eureka
@@ -221,6 +221,63 @@
 +	    gpa0_dat, gpa0_dat & 1u);
 +}
 +
++/*
++ * Optional touch power bring-up, debug only (boot-arg a8touchpwr=1, default
++ * off).  S-Boot can leave the touch rail cold: tsp_ldo_en (gpg3-0, DTS
++ * "regulator-fixed" 1.8 V, enable-active-high) reads low, so the sec_ts chip
++ * is unpowered and every I2C read NACKs.  This drives that pin high and, if
++ * the I2C4 block clock is gated, opens it (QCH_CON_LBLK_PERIC_QCH_I2C4 = PERI
++ * CMU 0x10010000 + 0x3028, bit0 ENABLE | bit1 CLOCK_REQ; Eureka
++ * drivers/soc/samsung/cal-if/exynos7885/cmucal-sfr.c:978,3753-3755).  It
++ * writes only that GPIO and that clock gate -- no PMIC and no touch NVM.
++ */
++#define JTTS_PERI_QCH_I2C4	0x10013028u
++
++static void
++jackpotlte_touch_power_up(void)
++{
++	vm_offset_t pinctrl3;
++	vm_offset_t peri;
++	uint32_t con;
++	uint32_t dat;
++	uint32_t qch;
++	int on = 0;
++
++	(void)PE_parse_boot_argn("a8touchpwr", &on, sizeof(on));
++	if (!on) {
++		return;
++	}
++	pinctrl3 = ml_io_map(JTTS_PINCTRL3, 0x1000);
++	if (!pinctrl3) {
++		printf("A8 TOUCH PWR: pinctrl3 mapping failed\n");
++		return;
++	}
++	con = a5touch_read(pinctrl3, JTTS_GPG3_OFF + JTTS_PIN_CON);
++	dat = a5touch_read(pinctrl3, JTTS_GPG3_OFF + JTTS_PIN_DAT);
++	printf("A8 TOUCH PWR: ldo before con=%#x dat=%#x\n", con, dat);
++	/* gpg3-0 -> output (func 1); leave the other pins' nibbles alone. */
++	a5touch_write(pinctrl3, JTTS_GPG3_OFF + JTTS_PIN_CON,
++	    (con & ~0xfu) | 0x1u);
++	a5touch_write(pinctrl3, JTTS_GPG3_OFF + JTTS_PIN_DAT, dat | 0x1u);
++	printf("A8 TOUCH PWR: ldo on con=%#x dat=%#x\n",
++	    a5touch_read(pinctrl3, JTTS_GPG3_OFF + JTTS_PIN_CON),
++	    a5touch_read(pinctrl3, JTTS_GPG3_OFF + JTTS_PIN_DAT));
++	peri = ml_io_map(JTTS_PERI_QCH_I2C4 & ~0xfffu, 0x1000);
++	if (!peri) {
++		printf("A8 TOUCH PWR: peri cmu mapping failed\n");
++		return;
++	}
++	qch = a5touch_read(peri, JTTS_PERI_QCH_I2C4 & 0xfffu);
++	if (qch & 0x1u) {
++		printf("A8 TOUCH PWR: i2c4 qch=%#x already enabled\n", qch);
++	} else {
++		a5touch_write(peri, JTTS_PERI_QCH_I2C4 & 0xfffu, qch | 0x3u);
++		printf("A8 TOUCH PWR: i2c4 qch %#x -> %#x\n", qch,
++		    a5touch_read(peri, JTTS_PERI_QCH_I2C4 & 0xfffu));
++	}
++	delay(70);	/* settle (sec_ts.c:2223 regulator_boot_on path) */
++}
++
 +static void
 +jackpotlte_touch_probe(void)
 +{
@@ -237,6 +294,7 @@
 +		return;
 +	}
 +	jackpotlte_touch_power_log();
++	jackpotlte_touch_power_up();
 +	jt_ts_bus = ml_io_map(JT_TS_I2C_PA, 0x1000);
 +	if (!jt_ts_bus) {
 +		printf("A8 TOUCH: i2c4@%#x mapping failed\n", (unsigned)JT_TS_I2C_PA);
