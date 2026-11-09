@@ -971,6 +971,30 @@ The `jackpotlte-gpu` worktree/branch can be retired once its build is no longer
 needed. Main now rebuilds with 0144 (run `42644071418`); GPU work continues on
 `main` from here.
 
+**M0 panic on the phone (2026-11-09).** The first device boot with
+`jtmaliprobe=1` (photo `IMG_20261109_164934683.jpg`) panicked inside the new
+probe: `pc 0xfffffff00747bf30` = `_jackpotlte_mali_probe+0x60`
+(`ldr w8,[x0,#0x40a0]`), `lr +0x50` = the `cbz x0` after
+`ml_io_map(0x11c80000, 0x1000)`, `esr 0x96000007` (data abort, translation
+fault level 3), `far = x0 + 0x40a0`. The map covered one 4 KiB page but the
+probe reads PMU `+0x40A0` (the fifth page), so the L3 PTE is absent. No
+`JACKPOTLTE MALI:` line printed, i.e. it died building the first one.
+The PMU syscon is a `0x10000` window (`exynos7885.dtsi:298-301`,
+`reg = <0x11c80000 0x10000>`; docs/research/exynos7885-mainline.md:127,293),
+the same size `0128`/`0135` map, so `JT_PMU_WINDOW` became `0x10000`
+(commit `1d038c0`, 0144).
+
+**That build failed, and the reason matters.** CI `42651805295` ended in
+`jackpotlte_mali.c:13:2: error: unterminated conditional directive`: the
+window fix added four comment lines to the new-file hunk but left
+`@@ -0,0 +1,300 @@`, while the file is now 304 lines. The build materialised
+only the first 300 lines, dropping the closing `#endif`. Fixed the header to
+`+1,304` and re-checked every hunk's `+`/`-` counts against its header
+(commit `7c3e2ab`); rebuild is run `42667447712`. This is the same class of
+trap as the silent-skip above: a green local `validate-repo.py` did not catch
+a hunk whose declared length disagreed with its body, so a patch's line
+counts must be verified before pushing.
+
 Note the host is Linux with no Apple SDK/KDK, so **kernel builds only come
 from the `macos-15` CI runner**; push triggers only `main`/`s8-dreamlte`, so the
 branch must be built with `gh workflow run xnu.yml --ref jackpotlte-gpu`.
@@ -1801,6 +1825,35 @@ it (`recovered ... sda=1 scl=1`) before the read succeeds. `stat=0x11` (NACK)
 also appears once and is absorbed by the retry. Cost is one ~20 ms backoff +
 recovery per stuck tap; the follow-up is to fix the STOP/bus-release in
 `jtts_stop`/`jtts_rx` or retry faster instead of the 20 ms wait.
+
+**iOS does not react to the delivered touches (open, 2026-11-09).** The owner
+reports the lock screen is up but touch "isn't seen" even though the kernel
+logs press/move/release. The drain/read path is proven above, so the question
+is what happens after `sweet_hid_touch()`. The A8 compiles the
+`ARM64_BOARD_CONFIG_A5XELTE` branch of `SweetHIDTouch` added for the A5 2017
+(`0118`): normalise by **1080x1920** with zero offset and advertise a
+**68x121 mm** surface. That matches the A5 2017 panel, not this one: the A8's
+`s6e3fa7` is **1080x2220** with `size = <67 138>` (`67.176 x 138.084` mm,
+`exynos7885-display-lcd.dtsi:173-177`), and `0124` leaves the A8 presenting the
+**native 1080x2220** size (`SWEET FB: AppleCLCD 1080x2220 ... presented as
+1080x2220`), not the donor's 1125x2436. The *normalised* coordinates are
+correct (`nx = rx/4096`, `ny = ry/4096`), so taps are not simply offset; the
+open suspects are (a) backboardd not opening the Sweet HID services at all and
+(b) the digitizer declaring a 16:9 surface on an 18.5:9 display, plus the
+missing `kIOHIDEventFieldDigitizerIsDisplayIntegrated` on the event (the
+service sets a `DisplayIntegrated` property only).
+
+Diagnostic queued without a rebuild (the jt29 kernel already has the logs):
+**`/var/tmp/a8-xnu-jt29-hidtest.img`**, 17,475,600 B, sha256
+`3816ca2c88b4be398ccf1afc568457b882db500b220b02a1211dea82074650e6`, same
+jt29 kernel (sha256 `5473605c...`) with `sweethidtest=5` added to the cmdline
+(verified: `... a8touchlog=1 a8touchpwr=1 sweethidtest=5 ...`, no GPU flags).
+It makes `SweetHIDButtons` emit a fake Home press every 5 s and log the client
+count: `SWEET HID: key 0x40 down (N clients)`. **`N = 0` means backboardd
+never opened either Sweet HID service (a delivery/matching problem);
+`N > 0` means the HID pipe works and the issue is digitizer-specific.** A
+watcher (`/tmp/opencode/touch/wait-hidtest.sh`) flashes it when the phone next
+appears in fastboot. Not flashed yet.
 
 ### GPU 0144 is really in the shippable kernel
 
