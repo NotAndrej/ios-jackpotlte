@@ -1154,6 +1154,12 @@ gets. Worth a photo to promote it, and worth re-running the same image with
 `cpus=6` vs `cpus=8` to confirm the A73 pair is actually scheduled rather than
 just tolerated.
 
+**Policy (owner, 2026-11-09): `cpus=8` is now the default for new kernel
+images.** The earlier owner guidance to run 6 cores for now is superseded. All
+subsequent images built here (the BT/audio/camera/mic merges and anything
+after) use the `cpus=8` cmdline unless the owner says otherwise; `jt24-cpus6`
+stays as the last 6-core reference.
+
 **Baseband feasibility (subagent "Beam", 2026-11-09, branch
 `jackpotlte-baseband`, local only; doc `docs/research/jackpotlte-baseband.md`).**
 Modem is an integrated **Shannon 327 ("S327AP")** in Exynos 7885, driven over
