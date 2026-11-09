@@ -1143,11 +1143,16 @@ the *current* main kernel (`e43ad49d`, so it carries `0140` A73 match plus
 from the binary that `SweetCPU` matches `('arm,cortex-a53','arm,cortex-a73')`.
 This supersedes `jt21-cpus8` (built from the older `930af8d2`, before
 `0141`-`0143`). **Flashed 2026-11-09 to `BOOT` (`fastboot flash BOOT`, RC=0,
-`Sending OKAY` / `Writing OKAY`) and rebooted.** Whether the A73 pair actually
-comes alive at `cpus=8` on this unit is still unproven -- `jt16-cpus8` panicked
-earlier, before `0140`/`0137`; this is the first `cpus=8` try that includes the
-A73 SweetCPU match and the quiet-AKS/flashlight/sensors work. Awaiting screen
-evidence from the owner.
+`Sending OKAY` / `Writing OKAY`) and rebooted.**
+
+**RESULT: `jt25-cpus8` does NOT panic with 8 CPUs -- owner statement, 2026-11-09**
+This is the first all-8-core boot on this
+unit; the `0140` A73 SweetCPU match fixed the earlier `cpus=8` panic that
+`jt12`/`jt14`/`jt16` hit. Evidence level: **owner report, no photo/log yet** --
+it establishes "no panic with the A73 pair enabled", not yet how far userland
+gets. Worth a photo to promote it, and worth re-running the same image with
+`cpus=6` vs `cpus=8` to confirm the A73 pair is actually scheduled rather than
+just tolerated.
 
 **Baseband feasibility (subagent "Beam", 2026-11-09, branch
 `jackpotlte-baseband`, local only; doc `docs/research/jackpotlte-baseband.md`).**
