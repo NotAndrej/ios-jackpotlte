@@ -2053,6 +2053,18 @@ but not this first probe read.
    lost_reads=...` even with zero touch — the worker's liveness is never
    ambiguous again.
 
+CI `42692421202` (main @ `10ebae2`) is **success** and the downloaded kernel
+(16,554,552 B, sha256 `e16eeb1b...8c866f73`) carries the new strings
+(`product id read failed ... recovering`, `no product id; starting the
+contact path anyway`) plus the `0147` ones.  Image
+`/var/tmp/a8-xnu-jt35-touchprobe.img` (17,475,600 B, sha256
+`2e7057b6286fffe72086d5b10693993735280ab96c54f26c076948e5fd71690b`) is
+packed without `sweetfb_noconsole=1`.  **Flashed to `BOOT` and rebooted at
+21:33:25** (`/tmp/opencode/touch/flash-jt35.log`).  Read on that boot: the
+unconditional `A8 TOUCH: moves=... i2c_retries=... lost_reads=...` line is
+the worker-liveness proof, and a swipe's effect on `moves`/`lost_reads`
+decides digitizer/iOS vs bus/IC.
+
 ### GPU 0144 is really in the shippable kernel
 
 CI `42644071418` (main @ `9e2c729`, the GPU merge) completed **success**, and
