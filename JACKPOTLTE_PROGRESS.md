@@ -1855,6 +1855,27 @@ never opened either Sweet HID service (a delivery/matching problem);
 watcher (`/tmp/opencode/touch/wait-hidtest.sh`) flashes it when the phone next
 appears in fastboot. Not flashed yet.
 
+**Candidate fix prepared, not pushed (2026-11-09).**
+`xnu/patches/0145-jackpotlte-touch-surface.patch` (commit `92cf41a`, local
+only) gives the A8 its real `67x138 mm` digitizer surface under `JACKPOTLTE`
+and appends the user-client count to the touch `IOLog`
+(`... at %d,%d%s (%u clients)`), so one boot measures both the surface change
+and whether backboardd opened the digitizer. Verified: applies to the
+post-0144 tree (`patch -p1 --dry-run`), the result's `#if`/`#endif` balance is
+0, and `validate-repo.py` reports 145 contiguous patches. It is **not pushed**
+because pushing `xnu/patches/**` cancels the in-flight GPU rebuild
+`42667447712`.
+
+Note on the geometry: the driver (`0131`) emits `y = ry*1920/4096` and
+`0118` divides by 1920, so `ny = ry/4096` and the full 0..1 range already
+reaches the whole display. **Do not** change `fLogicalH` to 2220 on its own --
+the driver still stops at 1919, so `ny = y/2220` would reach only the top 86%.
+An A5XELTE that mirrors the donor (present 1125x2436, digitizer over
+1125x2436 with `fOffY=108`, driver emitting 0..2219 panel pixels) needs all
+three files changed together; that draft is in
+`/tmp/opencode/touch/0146-donor-like.NOTES.md` and is gated on the hidtest
+client count.
+
 ### GPU 0144 is really in the shippable kernel
 
 CI `42644071418` (main @ `9e2c729`, the GPU merge) completed **success**, and
