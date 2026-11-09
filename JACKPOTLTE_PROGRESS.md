@@ -1136,6 +1136,31 @@ hall gpa0-...`, `A8SENSORS: grip i2c5@...`). From it:
 `7342f5a3634e61307f89e8ab990315301c52170cc24edf50cbff04559e90a9fb` -- 6 cores,
 quiet display + quiet AKS, flashlight + sensors probes present. Not flashed.
 
+**`/var/tmp/a8-xnu-jt25-cpus8.img`** -- the 8-core image built on request from
+the *current* main kernel (`e43ad49d`, so it carries `0140` A73 match plus
+`0141`-`0143`), cmdline `... cpus=8 ...`, sha256
+`d3444ad505abe55132f75b781118d16cac9ed735c96a58e96545d9acf6f385a5`. Confirmed
+from the binary that `SweetCPU` matches `('arm,cortex-a53','arm,cortex-a73')`.
+This supersedes `jt21-cpus8` (built from the older `930af8d2`, before
+`0141`-`0143`). Not flashed -- the owner wanted a proper 8-core build; whether
+the A73 pair actually comes alive at `cpus=8` is still unproven on this unit
+(`jt16-cpus8` panicked earlier, before `0140`/`0137`).
+
+**Baseband feasibility (subagent "Beam", 2026-11-09, branch
+`jackpotlte-baseband`, local only; doc `docs/research/jackpotlte-baseband.md`).**
+Modem is an integrated **Shannon 327 ("S327AP")** in Exynos 7885, driven over
+**shared memory / SIPC 5.0** (`LINKDEV_SHMEM`), not PCIe/HSIC/USB; CP buffer
+`0xF5400000 + 0x8800000` and CP RAM log `0xFDC00000 + 0x2000000` per the vendor
+`exynos7885-rmem.dtsi`, mailbox `mcu_ipc@0x12080000` (SPI 55). Firmware is
+Samsung-signed and verified in TrustZone/TIMA (`exynos_smc`, `0x82000700`), so
+only the stock blob loads. Tier verdict: **T0 read-only map/readback viable
+(days); T1 raw AP<->modem comms realistic (4-10 weeks); T2 iOS
+CommCenter/basebandd driving the Samsung modem effectively out of reach; T3
+real telephony + Apple activation not possible** (needs SEP/AKS Apple identity
+and a radio-certifiable IMEI). No Android-to-iOS port anywhere has shipped
+cellular. Cheapest first step is a read-only `a5basebandprobe` (GPT survey +
+PMU/mailbox/CP-log reads), which also needs the T0 boot.
+
 **Branch cleanup (owner instruction, 2026-11-09).** Deleted after verifying
 their content is on `main` (renumbered/re-anchored, so not git ancestors):
 `a8-keys` `aae20be`, `a8-panel` `84fdb71`, `a8-pmic` `79ff634`, `a8-touch`
