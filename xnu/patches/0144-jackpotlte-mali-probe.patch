@@ -1,6 +1,6 @@
 --- a/bsd/dev/jackpotlte_mali.c
 +++ b/bsd/dev/jackpotlte_mali.c
-@@ -0,0 +1,300 @@
+@@ -0,0 +1,304 @@
 +/*
 + * Galaxy A8 2018 (SM-A530F, jackpotlte, Exynos 7885) Mali GPU bring-up.
 + *
