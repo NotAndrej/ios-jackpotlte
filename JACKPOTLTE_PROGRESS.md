@@ -1734,3 +1734,50 @@ none of the donor tweaks").
 ### GPU track started (2026-11-09, branch jackpotlte-gpu)
 
 Branch `jackpotlte-gpu` from main @ 523beb5. First patch `0144-jackpotlte-mali-probe` is the M0 read-only Mali probe (PMU status + PLL_G3D con0 + GPU_ID if domain up), gated by `jtmaliprobe=1`. See `docs/gpu-bringup.md`. Not built/flashed yet.
+
+## jt28: touch works at the bus level, then panics in our worker (2026-11-09)
+
+Console photo `IMG_20261109_162807323.jpg` from `jt28`
+(`/var/tmp/a8-xnu-jt28-cpus8-i2cinit.img`) shows the whole touch chain up:
+`i2c4 init con=0xe3 stat=0 add=0x90 lc=0x7`, `before read gpp4 dat=0x3f sda=1
+scl=1`, `sec_ts product id b56661`, `id after power acb661`, `status after
+power=0x20 (app mode)`, then coordinates decoded and delivered —
+`A8 TOUCH: release id=1 raw=(1744,104x) panel=(467,490)` and matching
+press/move lines — through `sweet_hid_touch()` (patch `0058`). So the IC is
+initialised and real touches reach SweetHIDTouch.
+
+Immediately after, the console photo `IMG_20261109_163110878.jpg` shows a
+`Kernel data abort`: `pc 0xfffffff00747bdac`, `lr 0xfffffff00747be08`. Both
+symbolicate into **our own code**, `_jackpotlte_touch_thread` (+0x28c /
++0x2e8), at `ldurb w8,[x23,#-0x3]` — the head of the `for (i = 0; i <= left;
+i++) { ... buf[i*8] }` loop. (The separate `handshake structure not
+initialized` line is from the SCSC/WiFi patches `0138`/`0139`, not touch.)
+
+**Root cause.** `left = buf[7] & 0x3f` (the number of further events the IC
+still holds, `sec_ts.h:604`) was used unclamped as the loop bound. The 32-byte
+stack `buf` only holds the first event plus the two the drain read can fetch
+(one I2C read is capped at 16 bytes), but the loop ran to the raw `left`, so a
+burst of more than two events walked the index off `buf` and off the top of
+the kernel stack into unmapped memory.
+
+**Fix `jt29` (patch `0131` regenerated).** Mirrors the native
+`sec_ts_read_event()` (`sec_ts.c:937`): process only the events actually read
+(1–2 here); the rest stay queued and are read one per poll when the IRQ is
+next low, so none are lost. When `left > MAX_EVENT_COUNT-1` (the IC's own
+corruption guard, `sec_ts.c:995`) send `CLEAR_EVENT_STACK` (`0x62`) and skip.
+Adds `jtts_write_cmd()` — the controller twin of
+`sec_ts_i2c_write(ts, cmd, NULL, 0)` — and sends `SENSE_ON` (`0x10`) once at
+startup when the IC reports app mode and again on the watchdog status event
+(`stype=INFO`, `status_id=0x00`, `data1=0x20`), releasing every finger first.
+Committed to `main` as `d2ef8d5`; `tools/validate-repo.py` passes and the new
+`0131` reproduces the edited tree exactly under `git apply`.
+
+### GPU 0144 is really in the shippable kernel
+
+CI `42644071418` (main @ `9e2c729`, the GPU merge) completed **success**, and
+the downloaded `xnu-kernel` artifact contains the Mali strings
+(`JACKPOTLTE MALI: probe start`, `g3d_config=`, `power request -> status=`,
+`pll_con0 before=`, `GPU_ID=`), so `0144` applied — CI-green is not being
+trusted on its own again. Both images are packed in `/var/tmp/`:
+`a8-xnu-gpu-probe.img` (`jtmaliprobe=1`) and `a8-xnu-gpu-pwr.img`
+(`jtmaliprobe=1 jtmalipwr=1`), on the `jt28`-style base cmdline.
