@@ -172,7 +172,37 @@ jobs:
           # appended to MACHINE_FLAGS_ARM64_<config> by patch 0085; the job-level
           # env supplies -DJACKPOTLTE=1 when no dispatch input was given
           EXTRA_MACHINE_FLAGS: ${{ env.EXTRA_MACHINE_FLAGS }}
-        run: bash build.sh
+        run: |
+          set -o pipefail
+          bash build.sh 2>&1 | tee build.log
+
+      - name: Require every project patch to apply
+        if: always()
+        run: |
+          # blacktop's own patches may legitimately be "already upstream"; ours
+          # may not.  A silently skipped patch once shipped a kernel without the
+          # Mali driver while the run stayed green (run 42640666505), so fail
+          # loudly if any patch under xnu/patches/ was skipped.
+          log=dxb/build.log
+          if [ ! -f "$log" ]; then
+            echo "::error::no build log at $log"
+            exit 1
+          fi
+          grep -E 'Skipping patch' "$log" | grep -oE '[^ /]+\.patch' | sort -u > skipped.txt || true
+          bad=0
+          for f in xnu/patches/*.patch; do
+            b=$(basename "$f")
+            if grep -qx "$b" skipped.txt; then
+              echo "::error::required patch was skipped: $b"
+              bad=1
+            fi
+          done
+          if [ "$bad" != 0 ]; then
+            echo "--- skipped patches seen ---"
+            cat skipped.txt
+            exit 1
+          fi
+          echo "all $(ls xnu/patches/*.patch | wc -l | tr -d ' ') project patches applied"
 
       - name: Package build tree for local compiles
         if: always()
