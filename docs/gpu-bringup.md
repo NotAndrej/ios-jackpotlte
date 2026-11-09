@@ -9,7 +9,7 @@ plug-in with Bifrost **v6** enabled (our G71 is v6; the HakiOS reference is v7).
 
 ## Status
 
-### M0 + M1 in patch `0144` (code complete, not yet on the phone)
+### M0 + M1 in patch `0144` (confirmed on the phone 2026-11-09)
 
 > **Verify before flashing:** a green CI run is not proof the driver is in the
 > kernel. The first "green" build of this patch silently skipped it — blacktop's
@@ -47,6 +47,23 @@ patch logs `PLL_CON0/1/2` before enabling so the next run can see whether the
 dividers survived the domain being off before anything is reprogrammed.
 
 Nothing from this branch has been flashed, so M0/M1 have **no device result**.
+(Update 2026-11-09: the `0144` merged into `main` was booted; its console
+printed `g3d_config=0xf status=0xf`, `pll_g3d_con0=0xa1570d11 enable=1
+stable=1`, `GPU_ID=0x60000002 id=0x6000 arch=6 rev=0x2`, and `reset done,
+GPU up and cores powered` with `shaders=0x3 tiller=0x1 l2=0x1`, so **M0 and
+M1 are done on hardware**. See `JACKPOTLTE_PROGRESS.md` on `main`.)
+
+### M2 in patch `0149` (green build, not yet on the phone)
+
+CI `42687783443` (branch `jackpotlte-gpu`) is **success**, and the downloaded
+`xnu-kernel` (16,554,720 B, sha256 `482b9145...d495e8`) carries
+`JACKPOTLTE MALI: mmu_features=...`, `job 1, identity mode`, `job 2, GPU page
+tables`, `JACKPOTLTE MALI: M2 done as0_status=... fault=...` and
+`-- the GPU ran it`, so `0149` applied.  Image packed:
+`/var/tmp/a8-xnu-jt34-gpum2.img` (sha256 `9e0b18b1...15b5b3f0`), base cmdline
+plus `jtmaliprobe=1 jtmalipwr=1 jtmalijob=1`.  M2 is done only when the phone
+prints `word=0xc0ffee01` for **both** jobs; nothing has been flashed from
+this branch yet.
 
 ## Next
 
@@ -57,9 +74,16 @@ Nothing from this branch has been flashed, so M0/M1 have **no device result**.
 3. Then pack with `jtmalipwr=1`, flash, and read the power/QCH/PLL/gate lines
    plus `GPU_ID`. A Bifrost GPU_ID (arch nibble 6) with `M1 done, GPU up and
    reset` and the `*_READY` bits set is M1 done.
-4. M2: MMU + one job (recipe below).
+4. M2: MMU + one job (`0149`, written; recipe below).
+5. Boot `0149` with `jtmalijob=1` (after `jtmalipwr=1`) and read the two
+   `job ... -- the GPU ran it` lines. M2 is done when job 1 (identity) and
+   job 2 (GPU page tables) both print `word=0xc0ffee01`.
 
-## M2 recipe (from the reference, not yet written)
+## M2 recipe (from the reference, written as `0149`)
+
+`xnu/patches/0149-jackpotlte-mali-mmu-job.patch` extends
+`jackpotlte_mali.c`; gate on `jtmalijob=1` and only run after `jt_mali_up()`
+returns true.
 
 Port from `hakios-xnu xnu/files/bsd/dev/redwood_mali.c`; the same Linux
 panfrost register map applies to a Bifrost G71. Gate on `jtmalijob=1` and only
