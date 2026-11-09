@@ -133,21 +133,19 @@
 diff --git a/bsd/conf/files b/bsd/conf/files
 --- a/bsd/conf/files
 +++ b/bsd/conf/files
-@@ -109,2 +109,3 @@ bsd/dev/a5xelte_flashlight.c		standard
- bsd/dev/a5xelte_flashlight.c		standard
+@@ -109,2 +109,3 @@
+ bsd/dev/a5xelte_touch.c			standard
 +bsd/dev/jackpotlte_mali.c		standard
- bsd/dev/jackpotlte_pmic.c		standard
+ bsd/dev/a5xelte_usb.c			standard
 diff --git a/iokit/bsddev/IOKitBSDInit.cpp b/iokit/bsddev/IOKitBSDInit.cpp
 --- a/iokit/bsddev/IOKitBSDInit.cpp
 +++ b/iokit/bsddev/IOKitBSDInit.cpp
-@@ -77,4 +77,5 @@ extern void a5xelte_flashlight_probe(void);
- extern void a5xelte_flashlight_probe(void);
+@@ -74,2 +74,3 @@
+ extern void a5xelte_touch_probe(void);
 +extern void jackpotlte_mali_probe(void);
- #if defined(JACKPOTLTE)
-  extern void jackpotlte_pmic_probe(void);
- #endif
-@@ -799,2 +800,4 @@ IOFindBSDRoot( char * rootName, unsigned int rootNameSize,
- 	a5xelte_flashlight_probe();
+ extern void a5xelte_usb_probe(void);
+@@ -778,2 +779,4 @@
+ 	a5xelte_touch_probe();
 +	/* Galaxy A8 2018: Mali GPU read-only probe (M0), gated by jtmaliprobe. */
 +	jackpotlte_mali_probe();
- #endif
+ 	{
