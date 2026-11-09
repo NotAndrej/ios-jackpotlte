@@ -1142,9 +1142,12 @@ the *current* main kernel (`e43ad49d`, so it carries `0140` A73 match plus
 `d3444ad505abe55132f75b781118d16cac9ed735c96a58e96545d9acf6f385a5`. Confirmed
 from the binary that `SweetCPU` matches `('arm,cortex-a53','arm,cortex-a73')`.
 This supersedes `jt21-cpus8` (built from the older `930af8d2`, before
-`0141`-`0143`). Not flashed -- the owner wanted a proper 8-core build; whether
-the A73 pair actually comes alive at `cpus=8` is still unproven on this unit
-(`jt16-cpus8` panicked earlier, before `0140`/`0137`).
+`0141`-`0143`). **Flashed 2026-11-09 to `BOOT` (`fastboot flash BOOT`, RC=0,
+`Sending OKAY` / `Writing OKAY`) and rebooted.** Whether the A73 pair actually
+comes alive at `cpus=8` on this unit is still unproven -- `jt16-cpus8` panicked
+earlier, before `0140`/`0137`; this is the first `cpus=8` try that includes the
+A73 SweetCPU match and the quiet-AKS/flashlight/sensors work. Awaiting screen
+evidence from the owner.
 
 **Baseband feasibility (subagent "Beam", 2026-11-09, branch
 `jackpotlte-baseband`, local only; doc `docs/research/jackpotlte-baseband.md`).**
