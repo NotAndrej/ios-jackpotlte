@@ -1,29 +1,15 @@
 --- a/bsd/dev/jackpotlte_mali.c
 +++ b/bsd/dev/jackpotlte_mali.c
-@@ -0,0 +1,129 @@
+@@ -0,0 +1,114 @@
 +/*
 + * Galaxy A8 2018 (SM-A530F, jackpotlte, Exynos 7885) Mali GPU probe (M0).
 + *
-+ * READ-ONLY.  Prints whether the G3D power domain is up and, only if it is, the
-+ * Mali identity registers.  It programs nothing: no PMU, CMU, PLL, GPU, MMU, job,
-+ * interrupt unmask, clock or rail enable.  GPU registers are read only if the
-+ * always-on PMU status register says the G3D domain is already up.
++ * Probe: map the always-on PMU and CMU_G3D windows, read g3d_pmu_status
++ * (0x11c840a4) and PLL_G3D con0 (0x11400120). If the domain is up, read
++ * the Mali identity and presence registers at 0x11500000. If it is off, skip
++ * the GPU reads. Gated by boot arg jtmaliprobe=1.
 + *
-+ * Gate: boot arg "jtmaliprobe=1" (default off).  A normal boot is unchanged.
-+ *
-+ * Sources (Eureka Samsung 4.4.302 unless noted):
-+ *   mali@0x11500000 size 0x5000, compatible "arm,mali"
-+ *       arch/arm64/boot/dts/exynos/dtb/exynos7885-mali_common.dtsi:15-17
-+ *   G3D power status 0x11C80000+0x40A4, live mask 0xF
-+ *       .../exynos7885-mali_common.dtsi:30-31
-+ *       drivers/soc/samsung/cal-if/exynos7885/pmucal_local_exynos7885.h:275
-+ *   G3D CMU block base 0x11400000, size 0x8000
-+ *       drivers/soc/samsung/cal-if/exynos7885/cmucal-sfr.c:17
-+ *   PLL_G3D con0 = 0x11400000+0x120 (enable bit31, lock bit29)
-+ *       .../cmucal-sfr.c:712 ; .../pmucal_local_exynos7885.h:288-290
-+ *   Mali registers GPU_ID 0x000, SHADER_PRESENT 0x100, TILER_PRESENT 0x110,
-+ *   L2_PRESENT 0x120 (Linux panfrost register map)
-+ *       hakios-xnu-kernel bsd/dev/redwood_mali.c:304-311
++ * Source addresses: docs/jackpotlte-mali.md sec. 3 (Samsung Eureka tree).
 + */
 +#if defined(ARM64_BOARD_CONFIG_A5XELTE) && defined(JACKPOTLTE)
 +
@@ -103,8 +89,7 @@
 +	    pll0, (pll0 >> 31) & 1u, (pll0 >> 29) & 1u);
 +
 +	if (status != JT_PMU_G3D_MASK) {
-+		printf("JACKPOTLTE MALI: G3D domain is OFF; GPU registers not read "
-+		    "(power-on is M1, not this probe)\n");
++		printf("JACKPOTLTE MALI: G3D domain is OFF; GPU registers not read\n");
 +		return;
 +	}
 +
@@ -146,6 +131,6 @@ diff --git a/iokit/bsddev/IOKitBSDInit.cpp b/iokit/bsddev/IOKitBSDInit.cpp
  extern void a5xelte_usb_probe(void);
 @@ -778,2 +779,4 @@
  	a5xelte_touch_probe();
-+	/* Galaxy A8 2018: Mali GPU read-only probe (M0), gated by jtmaliprobe. */
++	/* Galaxy A8 2018: Mali GPU probe (M0), gated by jtmaliprobe. */
 +	jackpotlte_mali_probe();
  	{
