@@ -1067,16 +1067,24 @@ Subsystem track numbering, for whoever merges them next:
 | track | branch | patch on branch | merged as |
 | --- | --- | --- | --- |
 | flashlight | `jackpotlte-flashlight` `702718d` | 0144 | **0142 (merged `052a4b9`)** |
-| BT | `jackpotlte-bt` `abd8999` | 0140 | 0143 |
-| audio | `jackpotlte-audio` `52e8c61` | 0141 | 0144 |
-| camera | `jackpotlte-camera` `77704d1` | 0142 | 0145 |
-| sensors | `jackpotlte-sensors` `0fed091` | 0143 | 0146 |
+| sensors | `jackpotlte-sensors` `0fed091` | 0143 | **0143 (merged)** |
+| BT | `jackpotlte-bt` `abd8999` | 0140 | 0144 |
+| audio | `jackpotlte-audio` `52e8c61` | 0141 | 0145 |
+| camera | `jackpotlte-camera` `77704d1` | 0142 | 0146 |
 | mic | `jackpotlte-mic` `6b4e5bb` | 0145 | 0147 |
 
 Flashlight was merged first (owner instruction) because it is the smallest and
 most isolated of the six: one new file plus the two shared wiring files. Its
 patch needed no regeneration, only renumbering, because nothing on main since
 0139 touches `bsd/conf/files` or `iokit/bsddev/IOKitBSDInit.cpp`.
+
+Sensors merged next as `0143` (its own branch number: main was at 0142). Unlike
+flashlight it *did* need its three wiring hunks re-anchored, because `0142` put
+the flashlight entry between the anchors sensors was cut against (`wifi` was no
+longer adjacent to `pmic` / `#endif`). The new-file hunk was untouched; the
+probe still sits between `scsc` and `wifi`, and the flashlight lines survive.
+Verified clean (`patch --dry-run` and `git apply --check`) against a tree
+reconstructed to the exact post-0142 state.
 
 Each track's own `loader` CI red is only the gap error
 (`expected 0140, found 014N`); it clears once they land in order on the new
