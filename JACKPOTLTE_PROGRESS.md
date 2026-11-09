@@ -1724,3 +1724,7 @@ none of the donor tweaks").
 8. Older housekeeping (still open): read the remaining board unknowns (ramoops
    `log_pstore` offset, gpa1 bank offset, eMMC CIU timings) from the live DT /
    Samsung source and fill `board.h`, then enable `JT_HAVE_RAMOOPS`.
+
+### GPU track started (2026-11-09, branch jackpotlte-gpu)
+
+Branch `jackpotlte-gpu` from main @ 523beb5. First patch `0144-jackpotlte-mali-probe` is the M0 read-only Mali probe (PMU status + PLL_G3D con0 + GPU_ID if domain up), gated by `jtmaliprobe=1`. See `docs/gpu-bringup.md`. Not built/flashed yet.
