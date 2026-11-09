@@ -1706,19 +1706,14 @@ transport/glue, gated by `a8wifi=1`) are merged to `main`. The donor root
 tweaks were never applied to the flashed image (see "The flashed iOS root has
 none of the donor tweaks").
 
-1. **Touch:** `0130`/`0131` were regenerated with `a8touchpwr=1` (touch rail
-   gpg3-0 + I2C4 clock gate) and `a8touchlog=1` (every event, raw + decoded).
-   CI `42624666857` built the kernel, **`/var/tmp/a8-xnu-jt26-cpus8-touch.img`**
-   (`cpus=8` + both flags) is **flashed to `BOOT`** and booting (2026-11-09).
-   **`jt26` result:** rail and clock gate come up (`ldo dat 0x00->0x01`,
-   `i2c4 qch 0x300082->0x300083`) but I2C4 still NACKs (`stat=0xf0`), because
-   the I2C4 bus pads (`gpp4-0/1`) were never muxed. `0130` now also muxes
-   them to function 2 + pull-up inside the `a8touchpwr` path. Next image
-   (`jt27`) must be built after that change lands, then watch for
-   `A8 TOUCH PWR: gpp4 i2c4 pads con ...` and a product id, then
-   `press/move/release`. If it still dies after the mux, the next step is
-   `SEC_TS_CMD_SENSE_ON` and then firmware (`tsp_sec/y661_a5y18.fw`, verify it
-   exists on the vendor partition) before the controller reports coordinates.
+1. **Touch (current blocker):** the IC answers (`id after power acb661`) but
+   the boot-status read is flaky, so the driver was sending no
+   `SET_TOUCHFUNCTION`/`SENSE_ON` and could drop movement events. `0147` adds
+   the S8's sequence (sent whenever the IC answers) and 10x read retries, and
+   logs `A8 TOUCH: moves=%u i2c_retries=%u lost_reads=%u`. The build after
+   `0147` lands must be packed **without `sweetfb_noconsole=1`**; boot it,
+   swipe up from the bottom of the lock screen, and read the counters (see
+   the "`0147` — the A8 IC init" section above).
 2. **8 cores:** flash **`/var/tmp/a8-xnu-jt14-cpus8.img`** (sha256
    `aeb3a979...e427a9`, kernel = `0137`) to `BOOT` and look for
    `requested=8 selected=8` with no ticket-lock panic. If it still panics, the
@@ -1929,11 +1924,18 @@ What that means for us, precisely:
   builds as `ARM64_BOARD_CONFIG_A5XELTE`), and the S7 calls it from its own
   polled driver exactly as `0131` does.  So the HID delivery path is proven;
   `SWEET HID: touch 0 down at 323,1260` on jt29 is real.
-- Our A8's controller is a **different sec_ts generation**.  Ours (patch
-  `0130`/`0131`, "y661"): `READ_ONE_EVENT 0x60`, `READ_ALL_EVENT 0x61`,
-  `CLEAR_EVENT_STACK 0x62`, `SENSE_ON 0x10`, app mode `0x20`.  The S7
-  S6SY761: `READ_ONE_EVENT 0x71`, `SENSE_ON 0x40`, app mode `0x20`.  So the
-  S7's opcode *values* cannot be copied, only its structure.
+- Our A8's controller is a **different sec_ts generation** than the S7's.
+  Ours (patch `0130`/`0131`, "y661"): `READ_ONE_EVENT 0x60`,
+  `READ_ALL_EVENT 0x61`, `CLEAR_EVENT_STACK 0x62`, `SENSE_ON 0x10`,
+  app mode `0x20`.  The S7 S6SY761: `READ_ONE_EVENT 0x71`, `SENSE_ON 0x40`,
+  app mode `0x20`.  So the S7's opcode *values* cannot be copied, only its
+  structure.  **The S8 is the opposite case, and that makes it the primary
+  reference:** its `0124` driver uses the *same opcode generation as ours* —
+  `READ_ONE_EVENT 0x60`, `READ_ALL_EVENT 0x61`, `READ_BOOT_STATUS 0x55`,
+  `READ_ID 0x52`, `SENSE_ON 0x10`, app mode `0x20` — plus the same
+  `SET_TOUCHFUNCTION {0x30,0x01,0x00}` command (`sec_ts.h`), so the S8's
+  working enable sequence is the one to copy, not the S7's.  The S8's copy of
+  `SweetHIDTouch` (`0118`) is byte-identical to ours.
 - The S7 refactored `SweetHIDTouch` to keep the native **panel** size
   (`fPanelW/H`) separate from the **logical** display size (`fLogicalW/H`,
   `fOffX/Y = (logical - panel)/2`) and to clamp against the panel
@@ -1947,17 +1949,54 @@ What that means for us, precisely:
   still delivered real coordinates, so the IC was scanning then, but a
   reliable app-mode read + retry (as the S7 does) is the obvious hardening.
 
-Still the one number that decides the last mile: whether **backboardd opens
-the digitizer** (`SWEET HID: clients ... touch=N`) and whether the touch line
-reports `N>0` clients.  Because the console mutes at the GUI's first present,
-`/var/tmp/a8-xnu-jt32-gputouch-onscreen.img` (sha256 `13c88871...`) repacks
-the same verified jt31 kernel **without `sweetfb_noconsole=1`**, so the
-periodic client report and the `SWEET HID: touch ... (%u clients)` line keep
-drawing over the GUI; one boot + a tap on the lock screen answers it.
-**Flashed to BOOT and rebooted at 20:11:52** (`/tmp/opencode/gpu/flash-jt32.log`);
-the console now keeps drawing over the GUI, so the latest
-`SWEET HID: clients buttons=N touch=N` and any `SWEET HID: touch ... (N clients)`
-line are visible on the lock screen.
+**Where the jt31 video leaves it.** Its last frame is still kernel init
+(`A8 TOUCH: contact worker started`, then the panel and `JACKPOTLTE MALI:`
+probe); backboardd has not run yet, so the `SWEET HID: clients buttons=0
+touch=0` lines in that video are expected and do **not** answer the
+matching/open question.  That boot does sharpen the diagnosis: `A8 TOUCH:
+status before power=0`, `status read failed after power`, but `id after power
+acb661` — the boot-status read is what is flaky, and `SENSE_ON` (`0x10`) plus
+`SET_TOUCHFUNCTION` are skipped whenever it fails.
+
+**The client count (on-screen jt32).** `/var/tmp/a8-xnu-jt32-gputouch-onscreen.img`
+(sha256 `13c88871...`) repacks the same verified jt31 kernel **without
+`sweetfb_noconsole=1`**, so the periodic client report and the `SWEET HID:
+touch ... (%u clients)` line keep drawing over the GUI.  Flashed to `BOOT`
+and rebooted at 20:11:52 (`/tmp/opencode/gpu/flash-jt32.log`).  Reading on
+that boot: `SWEET HID: clients buttons=1 touch=1` — backboardd opened **both**
+Sweet HID services, so matching/open is proven and the remaining fault is the
+digitizer event stream, not the service wiring.  (Owner-read; a photo is still
+wanted, and the next image keeps the same on-screen logging so it is
+re-confirmed.)
+
+### `0147` — the A8 IC init, from the S8's sequence
+
+The gap the jt31/jt32 boots expose: the boot-status read fails, so
+`boot != APP_MODE` and the driver sends **nothing** to the IC (no
+`SET_TOUCHFUNCTION`, no `SENSE_ON`) — the same class of miss the S7 fixed in
+`0217`.  `0147` (`xnu/patches/0147-jackpotlte-touch-ic-enable-retries.patch`,
+`bsd/dev/a5xelte_touch.c` only) does the two things the working references do
+and our driver does not:
+
+1. **Send `SET_TOUCHFUNCTION {0x30,0x01,0x00}` then `SENSE_ON {0x10}`** —
+   the S8's sequence (`0124`) — and send them **whenever the IC answers**
+   (`boot == APP_MODE || have_id`), not only on a clean app-mode read, since
+   the id read (`acb661`) succeeds even when the boot-status read is lost.
+   The boot-status read itself is retried 10x first.
+2. **Retry a NACKing register read up to 10x** (`jtts_read_retry`, 200 us
+   apart), as `sec_ts_i2c_read()` does and the S7 copied in `0217`, so a
+   dropped `READ_ONE_EVENT` during a swipe does not lose finger movement.
+
+It adds counters `moves` / `i2c_retries` / `lost_reads`, logged every ~16 s
+that there is activity as `A8 TOUCH: moves=%u i2c_retries=%u lost_reads=%u`,
+so one boot reports whether reads are being lost without the raw event spam;
+the watchdog re-sense path sends `SET_TOUCHFUNCTION` too.  Build is `0147` on
+top of the now-147-patch tree; the next image packs that kernel **without
+`sweetfb_noconsole=1`** so the counters draw over the GUI.  Plan: boot it,
+swipe up from the bottom of the lock screen, and read the counters — many
+`moves` with low `lost_reads` and iOS still ignoring it moves the hunt to the
+digitizer event/backboardd side; a failed enable write or repeated
+`bus recover`/`lost_reads` points back at the bus/IC.
 
 ### GPU 0144 is really in the shippable kernel
 
