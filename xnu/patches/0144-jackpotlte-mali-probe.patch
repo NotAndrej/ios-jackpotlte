@@ -1,0 +1,153 @@
+--- a/bsd/dev/jackpotlte_mali.c
++++ b/bsd/dev/jackpotlte_mali.c
+@@ -0,0 +1,129 @@
++/*
++ * Galaxy A8 2018 (SM-A530F, jackpotlte, Exynos 7885) Mali GPU probe (M0).
++ *
++ * READ-ONLY.  Prints whether the G3D power domain is up and, only if it is, the
++ * Mali identity registers.  It programs nothing: no PMU, CMU, PLL, GPU, MMU, job,
++ * interrupt unmask, clock or rail enable.  GPU registers are read only if the
++ * always-on PMU status register says the G3D domain is already up.
++ *
++ * Gate: boot arg "jtmaliprobe=1" (default off).  A normal boot is unchanged.
++ *
++ * Sources (Eureka Samsung 4.4.302 unless noted):
++ *   mali@0x11500000 size 0x5000, compatible "arm,mali"
++ *       arch/arm64/boot/dts/exynos/dtb/exynos7885-mali_common.dtsi:15-17
++ *   G3D power status 0x11C80000+0x40A4, live mask 0xF
++ *       .../exynos7885-mali_common.dtsi:30-31
++ *       drivers/soc/samsung/cal-if/exynos7885/pmucal_local_exynos7885.h:275
++ *   G3D CMU block base 0x11400000, size 0x8000
++ *       drivers/soc/samsung/cal-if/exynos7885/cmucal-sfr.c:17
++ *   PLL_G3D con0 = 0x11400000+0x120 (enable bit31, lock bit29)
++ *       .../cmucal-sfr.c:712 ; .../pmucal_local_exynos7885.h:288-290
++ *   Mali registers GPU_ID 0x000, SHADER_PRESENT 0x100, TILER_PRESENT 0x110,
++ *   L2_PRESENT 0x120 (Linux panfrost register map)
++ *       hakios-xnu-kernel bsd/dev/redwood_mali.c:304-311
++ */
++#if defined(ARM64_BOARD_CONFIG_A5XELTE) && defined(JACKPOTLTE)
++
++#include <sys/param.h>
++#include <sys/systm.h>
++#include <kern/clock.h>
++#include <machine/machine_routines.h>
++#include <pexpert/pexpert.h>
++
++extern vm_offset_t ml_io_map(vm_offset_t, vm_size_t);
++
++void jackpotlte_mali_probe(void);
++
++/* ---- windows ---- */
++#define JT_MALI_PA		0x11500000u
++#define JT_MALI_WINDOW		0x5000u
++#define JT_CMU_G3D_PA		0x11400000u
++#define JT_CMU_G3D_WINDOW	0x8000u
++#define JT_PMU_PA		0x11c80000u
++#define JT_PMU_WINDOW		0x1000u
++
++/* ---- always-on registers (safe to read unconditionally) ---- */
++#define JT_PMU_G3D_STATUS	0x40a4u		/* PMU + 0x40A4, mask 0xF */
++#define JT_PMU_G3D_MASK		0xfu
++#define JT_CMU_PLL_G3D_CON0	0x0120u		/* CMU_G3D + 0x120 */
++
++/* ---- Mali registers (read only if the domain is up) ---- */
++#define JT_MALI_GPU_ID		0x000u
++#define JT_MALI_SHADER_PRESENT	0x100u
++#define JT_MALI_TILER_PRESENT	0x110u
++#define JT_MALI_L2_PRESENT	0x120u
++
++static volatile uint32_t *
++jt_map(uint32_t pa, uint32_t size)
++{
++	return (volatile uint32_t *)ml_io_map(pa, size);
++}
++
++static uint32_t
++jt_rd(volatile uint32_t *base, uint32_t off)
++{
++	if (base == NULL) {
++		return 0;
++	}
++	return base[off >> 2];
++}
++
++void
++jackpotlte_mali_probe(void)
++{
++	int enabled = 0;
++	uint32_t status, pll0, gpu_id;
++	volatile uint32_t *pmu = NULL;
++	volatile uint32_t *cmu = NULL;
++	volatile uint32_t *mali = NULL;
++
++	(void)PE_parse_boot_argn("jtmaliprobe", &enabled, sizeof(enabled));
++	if (!enabled) {
++		return;
++	}
++
++	printf("JACKPOTLTE MALI: probe start (jtmaliprobe=1)\n");
++
++	/* The PMU and CMU blocks are always-on: read them first and alone. */
++	pmu = jt_map(JT_PMU_PA, JT_PMU_WINDOW);
++	cmu = jt_map(JT_CMU_G3D_PA, JT_CMU_G3D_WINDOW);
++	if (pmu == NULL || cmu == NULL) {
++		printf("JACKPOTLTE MALI: PMU/CMU map failed\n");
++		return;
++	}
++
++	status = jt_rd(pmu, JT_PMU_G3D_STATUS) & JT_PMU_G3D_MASK;
++	pll0   = jt_rd(cmu, JT_CMU_PLL_G3D_CON0);
++	printf("JACKPOTLTE MALI: g3d_pmu_status=%#x (up=%u) pll_g3d_con0=%#x "
++	    "(enable=%u lock=%u)\n",
++	    status, status == JT_PMU_G3D_MASK,
++	    pll0, (pll0 >> 31) & 1u, (pll0 >> 29) & 1u);
++
++	if (status != JT_PMU_G3D_MASK) {
++		printf("JACKPOTLTE MALI: G3D domain is OFF; GPU registers not read "
++		    "(power-on is M1, not this probe)\n");
++		return;
++	}
++
++	mali = jt_map(JT_MALI_PA, JT_MALI_WINDOW);
++	if (mali == NULL) {
++		printf("JACKPOTLTE MALI: GPU map failed\n");
++		return;
++	}
++
++	gpu_id = jt_rd(mali, JT_MALI_GPU_ID);
++	printf("JACKPOTLTE MALI: GPU_ID=%#x (arch=%u) shaders=%#x tiler=%#x l2=%#x\n",
++	    gpu_id, (gpu_id >> 12) & 0xf,
++	    jt_rd(mali, JT_MALI_SHADER_PRESENT),
++	    jt_rd(mali, JT_MALI_TILER_PRESENT),
++	    jt_rd(mali, JT_MALI_L2_PRESENT));
++}
++
++#else   /* ARM64_BOARD_CONFIG_A5XELTE && JACKPOTLTE */
++
++void
++jackpotlte_mali_probe(void)
++{
++}
++
++#endif  /* ARM64_BOARD_CONFIG_A5XELTE && JACKPOTLTE */
+diff --git a/bsd/conf/files b/bsd/conf/files
+--- a/bsd/conf/files
++++ b/bsd/conf/files
+@@ -109,2 +109,3 @@ bsd/dev/a5xelte_flashlight.c		standard
+ bsd/dev/a5xelte_flashlight.c		standard
++bsd/dev/jackpotlte_mali.c		standard
+ bsd/dev/jackpotlte_pmic.c		standard
+diff --git a/iokit/bsddev/IOKitBSDInit.cpp b/iokit/bsddev/IOKitBSDInit.cpp
+--- a/iokit/bsddev/IOKitBSDInit.cpp
++++ b/iokit/bsddev/IOKitBSDInit.cpp
+@@ -77,4 +77,5 @@ extern void a5xelte_flashlight_probe(void);
+ extern void a5xelte_flashlight_probe(void);
++extern void jackpotlte_mali_probe(void);
+ #if defined(JACKPOTLTE)
+  extern void jackpotlte_pmic_probe(void);
+ #endif
+@@ -799,2 +800,4 @@ IOFindBSDRoot( char * rootName, unsigned int rootNameSize,
+ 	a5xelte_flashlight_probe();
++	/* Galaxy A8 2018: Mali GPU read-only probe (M0), gated by jtmaliprobe. */
++	jackpotlte_mali_probe();
+ #endif
