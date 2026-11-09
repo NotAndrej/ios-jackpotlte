@@ -1784,6 +1784,24 @@ Mali strings are still there too. Packed to
 the `jt28` base (cpus=8, `a8touchlog=1 a8touchpwr=1`, no GPU flags).
 **Not flashed yet**, so the jt28 panic has not been re-run on the phone.
 
+**RESULT: the panic is gone.** `jt29` was flashed to `BOOT`
+(sha256 `2c3a70f8...`) and its console (photo
+`IMG_20261109_165700853.jpg`) shows press/move decoded and delivered —
+`A8 TOUCH: press id=0 raw=(1227,2689) panel=(323,1260)` then
+`SWEET HID: touch 0 down at 323,1260` — with no `Kernel data abort`.
+The decisive proof the drain fix works: the queue reports `left=7` and the
+worker then reads `left=6,5,4,3,2,1`, one event per poll. The old code raised
+the loop bound to `left` and would have walked off `buf` at `left=7`; now it
+processes one event and leaves the rest queued.
+
+Remaining touch noise (not fatal): occasionally `event read failed (1)
+stat=0x30` on a tap with `gpp4 dat ... sda=0 scl=1` — the SDA line is held
+low between transfers, and the existing `jtts_bus_recover()` bit-bang clears
+it (`recovered ... sda=1 scl=1`) before the read succeeds. `stat=0x11` (NACK)
+also appears once and is absorbed by the retry. Cost is one ~20 ms backoff +
+recovery per stuck tap; the follow-up is to fix the STOP/bus-release in
+`jtts_stop`/`jtts_rx` or retry faster instead of the 20 ms wait.
+
 ### GPU 0144 is really in the shippable kernel
 
 CI `42644071418` (main @ `9e2c729`, the GPU merge) completed **success**, and
