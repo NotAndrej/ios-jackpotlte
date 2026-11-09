@@ -8,6 +8,19 @@ Observation is kept strictly apart from plan, and build success is never a boot
 claim. **A boot stage counts as reached only with a photo, serial log or screen
 output from the phone.**
 
+### History rewrite (2026-11-09)
+
+At the owner's request not to be quoted in a public repository, the public
+history was rewritten with `git filter-repo` to remove every verbatim owner
+quote from `JACKPOTLTE_PROGRESS.md`, `NOTES.md` and from commit messages. Only
+those quoted phrases changed (replaced with neutral attribution such as "the
+owner approved/asked"); no technical fact, image hash, patch or file was
+altered. Because this rewrites every commit from the first affected one on,
+**all SHAs after that point are new** and `main` was force-pushed (new tip
+`1ed6265`, old tip `29c50b6`); `jackpotlte-{bt,audio,camera,mic}` were
+force-pushed too. Short SHAs referenced elsewhere in this document are
+pre-rewrite and no longer resolve; any existing clone or fork must re-clone.
+
 ## Stage status
 
 | Stage | Description | Status |
