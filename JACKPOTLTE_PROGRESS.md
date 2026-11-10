@@ -2419,6 +2419,55 @@ apps. `docs/research/data-migration-prior-art.md` records that
 UniXNU-droidvm presents staged apps through a union over `/Applications`
 (`owner-staged-apps=1`), the same idea.
 
+### Why the status bar reads `😳 rdar:45025538` (2026-11-10)
+
+UIKit draws that red bar, not our root and not any app. When
+`+[_UIStatusBarVisualProvider_iOS visualProviderSubclassForScreen:]` returns
+nil — no status-bar layout is known for the screen's size — `_UIStatusBar`
+falls back to a debug bar whose text is the literal radar number; the glyph is
+the 😳 emoji inside that string. The same artifact is reported for iPhone XR/11
+in VisibleIsland's known issues and fixed in Nugget by its "Rdar fix", which is
+nothing but a resolution change (`canvas_width`/`canvas_height`). We had it
+before on this port: `NOTES.md` records the red bar at 1080x2400 and it going
+away once AppleCLCD presented 1125x2436.
+
+Ours is back for the same reason. The panel is 1080x2220 and the ADT's
+`display-scale` is 3, so `UIScreen` is 360x740 points, and no iPhone is 360x740
+(X is 375x812, 8 Plus 414x736, 8/SE 375x667, 12 390x844). The log line
+`SWEET FB: AppleCLCD 1080x2220 ... presented as 1080x2220` is that: `0124`
+leaves `fLogicalW/H` at `fWidth/fHeight` for A5XELTE, so selector 8 answers
+1080x2220. The donor's path is compiled out for this board. Nothing in the
+root, the ADT identity or localisation produces the string; `grep -r 45025538`
+only hits `NOTES.md` and a kernel patch comment.
+
+The fix has to be "present a real iPhone mode", and there is a wrinkle the
+earlier note did not state: **our panel is 18.5:9 (1080x2220) and every notched
+iPhone mode is 19.5:9 (~1125x2436, 1080x2340, 1170x2532, 1242x2688 — all
+0.462 ± 0.001, ours 0.4865)**. So a full-bleed fit cannot be exact, and the
+options differ in what they cost:
+
+1. **Donor mirror, no scaling** (what `0061` does on the donor): present
+   1125x2436 and show its centred 1080x2220, i.e. crop 22 px each side and
+   **108 px (36 pt) off the top and bottom**. On the donor's 1080x2400 panel
+   that is 18 px and invisible; here 36 pt of a 44 pt status bar disappears, so
+   it trades the red bar for a chopped status bar. `fOffY = 0` (crop the bottom
+   only) keeps the status bar but loses 72 pt at the bottom.
+2. **Present 1080x2340 (iPhone 12 mini, 375x812 pt at scale 2.88) and
+   downscale height only** (2340 -> 2220, a per-row index change, so the
+   `memcpy` per row stays): full panel, no crop, width untouched, but the
+   picture is squeezed 5.1% vertically and the ADT scale must become 2.88.
+3. **Scale both axes** (1125x2436 -> 1080x2220, or a uniform 0.911 with 27 px
+   bars): exact geometry, no crop, but per-pixel work on a machine whose
+   compositing is already the CPU. Only sensible after M4.
+
+Until a mode is presented, everything is visible and only the bar is wrong, so
+this is not urgent against the GPU work. Whichever is chosen, three files move
+together — the framebuffer logical size (`0124`), the ADT canvas
+(`mkadt_jackpotlte.py`), and `SweetHID`'s `fLogicalW/H` and `fOffY` (`0118`,
+today hard-coded 1080x1920) — or touch and the reported screen disagree. Verify
+on the phone by the red strip being gone from the lock screen and by
+`presented as 1125x2436` (or the chosen mode) in the console line.
+
 ### M4 userspace starts: `userspace/jackpotlte-maliprobe` (2026-11-10)
 
 The GPU kernel side is at parity with the reference: a Bifrost Mali needs no

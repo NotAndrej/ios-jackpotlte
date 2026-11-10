@@ -19,6 +19,17 @@ only for approved destructive steps, never bootloaders / EFS (p3) / recovery
       low). Recovery works, but the stall itself is still unexplained. Only
       chase if a fast flick still drops events.
 
+## Status bar
+
+- [ ] The red `😳 rdar:45025538` strip is UIKit's fallback bar for a screen it
+      has no status-bar provider for; we hand it 360x740 pt (1080x2220 at the
+      ADT's scale 3) and no iPhone is that. Diagnosed in
+      `JACKPOTLTE_PROGRESS.md` ("Why the status bar reads"). Needs a real
+      iPhone mode presented, and because our panel is 18.5:9 while every
+      notched mode is 19.5:9 the three ways to do it trade a chopped status
+      bar / a 5% vertical squeeze / per-pixel scaling. Owner's call; three
+      files move together (framebuffer logical size, ADT canvas, `SweetHID`).
+
 ## Home screen shows only ~6 apps
 
 - [ ] Move the 32 bundles in `/private/var/staged_system_apps` (Maps, Music,
