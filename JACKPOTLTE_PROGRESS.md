@@ -2120,8 +2120,10 @@ counters line and `a8touchverbose`, so `0149` applied.  Image
 `/var/tmp/a8-xnu-jt36-touchdrain.img` (17,475,600 B, sha256
 `b38d91d43b95985e9fecd6a9bcf465f5f98f977bb60ed52bce74e95bead3a69a`) is
 packed on the base cmdline (`a8touchlog=1 a8touchpwr=1 sweethidtest=5`, no
-`a8touchverbose`, no `sweetfb_noconsole=1`) and **not yet flashed** — the
-phone was not in fastboot when it was packed.
+`a8touchverbose`, no `sweetfb_noconsole=1`) and **flashed to `BOOT`** and
+rebooted at 17:16:12 (`/tmp/opencode/touch/flash-jt36.log`).  The swipe test:
+`press` then a rising `moves=` with no overflow, then `release` — the last
+line is the one iOS needs and the one jt35 never produced.
 
 ### GPU 0144 is really in the shippable kernel
 
