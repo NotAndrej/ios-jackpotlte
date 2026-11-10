@@ -40,17 +40,19 @@ jobs:
         run: |
           set -e
           userspace/out/maliprobe.host --abi | tee abi.txt
-          # The requests 0154 answers.
-          grep -q 'drm_gem_close=0x9 '            abi.txt
-          grep -q 'panfrost_submit=0x40 '         abi.txt
-          grep -q 'wait_bo=0x41 '                 abi.txt
-          grep -q 'create_bo=0x42 '               abi.txt
-          grep -q 'mmap_bo=0x43 '                 abi.txt
-          grep -q 'get_param=0x44 '               abi.txt
-          grep -q 'get_bo_offset=0x45 '           abi.txt
-          grep -q 'madvise=0x48 '                 abi.txt
-          grep -q 'wait=0x7d '                    abi.txt
-          grep -q 'surface=0x7e '                 abi.txt
+          # The requests 0154 answers.  No trailing space in a pattern: the
+          # last field of a line has none (BSD grep takes it literally, which
+          # is what made the first version of this step fail).
+          grep -q 'drm_gem_close=0x9'             abi.txt
+          grep -q 'panfrost_submit=0x40'          abi.txt
+          grep -q 'wait_bo=0x41'                  abi.txt
+          grep -q 'create_bo=0x42'                abi.txt
+          grep -q 'mmap_bo=0x43'                  abi.txt
+          grep -q 'get_param=0x44'                abi.txt
+          grep -q 'get_bo_offset=0x45'            abi.txt
+          grep -q 'madvise=0x48'                  abi.txt
+          grep -q 'wait=0x7d'                     abi.txt
+          grep -q 'surface=0x7e'                  abi.txt
           grep -q 'describe=0xffffffff'           abi.txt
           # The structures the kernel memcpy()s in and out.
           grep -q 'sizeof(drm_gem_close)=8'                 abi.txt
