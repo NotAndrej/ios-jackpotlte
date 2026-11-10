@@ -1027,6 +1027,17 @@ failures: this kernel builds with `-Weverything` but **no** `-Werror` (a green
 run's log holds 553,341 warnings), so only a patch that will not apply or a
 compile/link error turns a run red.  Rebuild: run `42871632907`.
 
+Checked here while that build ran, without CI or a device: against a green
+run's `xnu-buildtree` artifact (which holds the real post-`0152` `xnu/` tree),
+`git apply --check` accepts both patches (one one-line offset in
+`IOKitBSDInit.cpp`), and `tools/xnu-cc.py` compiles both sources with that
+run's own compile commands — `0 of 2 files failed`.  With `XNU_CC_OBJDIR`
+set, `llvm-nm` on the emitted arm64 objects shows the user client's only
+non-Apple undefined symbols are the `jackpotlte_mali_*` ones (all defined in
+the driver object) and `sweet_surface_copy`, and that
+`jackpotlte_mali_service_start` is exported unmangled.  So M3's remaining
+unknowns are runtime ones, not build ones.  Recipe in `docs/gpu-bringup.md`.
+
 ### All eight cores in one logical cluster (`0137`) + the iOS-root gap (2026-11-08)
 
 `0137-jackpotlte-single-logical-cluster.patch` (31 insertions, 2 hunks) takes
