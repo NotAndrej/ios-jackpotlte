@@ -163,6 +163,41 @@ no `sweethidtest`; the cmdline was read back out of the image to check).
 3. M4: build the `redwood_drm`-shaped shim and Mesa with Bifrost **v6**
    enabled, then publish `IOAcceleratorES` properties under a boot arg.
 
+## M4 groundwork: what the reference's userland needs from us
+
+Reconnaissance on the reference's shim (`redwood_drm.c`, the HakiOS tree cited
+in `docs/jackpotlte-mali.md` §Sources), so M4 starts from facts.  None of this
+is built or run yet.
+
+- Every request is `IOConnectCallStructMethod(connection, number, data, size,
+  data, &returned)` — the same structure in and out, which is exactly what
+  `JackpotlteMaliUserClient::externalMethod` implements, so the shim's `call()`
+  needs no change but the service name (`RedwoodMali` -> `JackpotlteMali`).
+- Numbers: Linux's `0x40`-`0x48` as they are, `0x7d` for "wait for job N" and
+  `0x7e` for "a surface as a buffer" — the ones `0154` already answers, and
+  `0xffffffff` in `handle` meaning "describe only".
+- `mmap()` is `IOConnectMapMemory64(connection, handle, ...)`; our
+  `clientMemoryForType(handle)` returns that buffer's memory, so a buffer's
+  handle is its map type, unchanged.
+- The surface request is field-for-field the reference's `struct
+  redwood_surface` (checked against its `RedwoodMali.cpp`), so the ABI needs no
+  work.  The one real difference is the state page: a MiniIOSurface has one at
+  the front of its memory, a `SweetSurface` keeps `state` outside `memory`, so
+  `0154` maps from the pixels' `offset` and reports that `offset` and the size
+  from it back to the shim.
+- Fences are job numbers, so the reference's `syncobj`/`syncfile` bookkeeping
+  carries over; its `drmPrime*` return `ENOSYS` and would here too.
+- Mesa still has to be built with Bifrost **v6** on: our G71 is arch 6 and the
+  reference's G52 is v7, so the arch gate (`pan_screen.c`'s dispatch, and the
+  version checks in `pan_props.c`/`bifrost_compile.c`) must accept 6 or the
+  driver rejects the GPU — see `docs/jackpotlte-mali.md` §4.
+- Missing on our side and harmless until something needs them: a separate
+  address space per client (everyone shares AS0), interrupts (submission polls
+  `JOB_INT_RAWSTAT`), and buffers shared between programs.
+- Open: where the shim belongs in this repo.  It is userspace for the iOS root
+  and this repo has no userspace tree yet (`shim/` is the boot shim); the
+  reference keeps it under `tools/mesa/redwood-drm/`.
+
 ## M2 recipe (from the reference, written as `0152`)
 
 `xnu/patches/0152-jackpotlte-mali-mmu-job.patch` extends
