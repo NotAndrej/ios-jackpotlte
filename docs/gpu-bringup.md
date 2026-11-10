@@ -99,6 +99,23 @@ cmdline plus `jtmaliprobe=1 jtmalipwr=1 jtmalijob=1` (`cpus=8`, no
 Success for M3 on the phone: `JACKPOTLTE MALI: engine up, addresses from
 0x1000000` and `JackpotlteMali: the GPU is there for programs to draw with`.
 
+> **Checked here, without CI or a device** (this host has no Apple SDK, but it
+> can still do a lot).  Download a green run's `xnu-buildtree` artifact (it
+> holds `xnu/` — the real post-`0152` sources — plus `sdk-kernel-platform/`
+> and `build/xnu.obj/`), unpack it, then
+> `git apply --check xnu/patches/0153*.patch xnu/patches/0154*.patch` from its
+> `xnu/` dir: both apply (the only offset is one line in `IOKitBSDInit.cpp`).
+> `tools/xnu-cc.py` re-runs the CI compile commands locally
+> (`python3 tools/xnu-cc.py LOG BT bsd/dev/jackpotlte_mali.c
+> iokit/Kernel/arm/JackpotlteMali.cpp --per-file` after pointing `CI_DXB` at
+> this repo's runner path and `CLANG` at the system clang); both files pass.
+> With `XNU_CC_OBJDIR` set it emits real arm64 objects, and `llvm-nm` then
+> shows `JackpotlteMali.o`'s only non-Apple undefined symbols are the
+> `jackpotlte_mali_*` ones, all defined in `jackpotlte_mali.o`, plus
+> `sweet_surface_copy`, and that `jackpotlte_mali_service_start` comes out
+> unmangled as `_jackpotlte_mali_service_start`, which is what
+> `IOKitBSDInit.cpp` calls.
+
 > The first build of the pair (run `42869660692`) was superseded before it
 > finished, for three warnings only: `0153`'s new non-static functions had no
 > prototypes (`-Wmissing-prototypes`); `0154`'s `externalMethod` does not use
