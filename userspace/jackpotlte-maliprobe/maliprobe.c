@@ -57,6 +57,9 @@ extern kern_return_t IOConnectCallStructMethod(io_connect_t connection, uint32_t
     const void *input, size_t inputSize, void *output, size_t *outputSize);
 extern kern_return_t IOConnectMapMemory64(io_connect_t connection, uint32_t type,
     mach_port_t task, uint64_t *address, uint64_t *size, uint32_t options);
+/* libSystem's, for kern.bootargs (no <sys/sysctl.h>: see the note above). */
+extern int sysctlbyname(const char *name, void *oldp, size_t *oldlenp,
+    void *newp, size_t newlen);
 
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
  * The ABI.  Every number and every field here mirrors 0154 exactly; the
@@ -232,6 +235,23 @@ abi(void)
 	return 0;
 }
 
+/* The daemon runs on every boot; the report is only wanted on a GPU boot
+ * (the user client answers kIOReturnNotReady otherwise, and a line on the
+ * panel on every ordinary boot is noise).  kern.bootargs says which boot this
+ * is, so a normal boot stays quiet. */
+static bool
+gpu_boot(void)
+{
+	char args[1024];
+	size_t size = sizeof(args) - 1;
+
+	if (sysctlbyname("kern.bootargs", args, &size, NULL, 0) != 0) {
+		return false;
+	}
+	args[size] = '\0';
+	return strstr(args, "jtmalimetal") != NULL || strstr(args, "jtmalipwr") != NULL;
+}
+
 static int
 probe(void)
 {
@@ -246,6 +266,11 @@ probe(void)
 	volatile uint32_t *pixels;
 	int failures = 0;
 
+	if (!gpu_boot()) {
+		printf(PREFIX "not a GPU boot (no jtmalimetal/jtmalipwr "
+		    "in kern.bootargs); nothing to probe\n");
+		return 0;
+	}
 	say(PREFIX "probe start\n");
 
 	service = IOServiceGetMatchingService(kIOMainPortDefault,

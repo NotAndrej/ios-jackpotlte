@@ -78,6 +78,14 @@ For `maliprobe` that is:
 /System/Library/LaunchDaemons/com.jackpotlte.maliprobe.plist
 ```
 
-Neither is applied yet: the binary comes out of CI, and the image only changes
-at the next USERDATA flash (destructive; the owner's call). Once it is in, one
-boot with the engine args puts the probe's report on the panel.
+and `tools/jackpotlte/apply-root-tweaks.sh` does both, in the mount it already
+does, from `userspace/out/` (override with `MALIPROBE_OUT`). It skips them with
+a note when the built copy is absent, which is the normal case on a host without
+the iPhoneOS SDK.
+
+The probe is quiet on an ordinary boot: it reads `kern.bootargs` first and
+exits without touching the panel unless the boot carries the GPU arguments
+(`jtmalimetal`/`jtmalipwr`), because the user client answers
+`kIOReturnNotReady` otherwise and a line on the panel at every boot is noise.
+On a GPU boot it prints its report to the console *before* iOS draws its first
+frame, so a photo of the panel is the readback.

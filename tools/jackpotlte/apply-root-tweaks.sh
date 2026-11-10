@@ -36,6 +36,12 @@
 #   (then, by this script, after the Python step)
 #   /Applications              the 32 bundles from
 #                              /private/var/staged_system_apps moved in
+#   /usr/local/bin/maliprobe   the userspace GPU probe, and
+#   /System/Library/LaunchDaemons/com.jackpotlte.maliprobe.plist
+#                              to run it once at boot (userspace/README.md).
+#                              Skipped when the built copy is absent: it is
+#                              arm64 iOS, so it comes from the userspace CI
+#                              job, not from this host.
 #
 # Why the app move: SpringBoard showed only ~7 icons because iOS 16 ships the
 # 32 user apps (Maps, Music, Weather, Clock, Calculator, Files, Books, Notes,
@@ -139,6 +145,20 @@ if [ -d "$mnt/private/var/staged_system_apps" ]; then
 	echo "promoted $promoted staged system apps into /Applications"
 else
 	echo "warning: no /private/var/staged_system_apps in $imgabs" >&2
+fi
+
+# The phone's userspace tool: the probe and the LaunchDaemon that runs it once
+# at boot.  It reports to /dev/console only on a GPU boot, so it is quiet on an
+# ordinary one (see userspace/README.md).
+probe=${MALIPROBE_OUT:-$repo/userspace/out}
+if [ -f "$probe/maliprobe" ]; then
+	install -d -m 0755 "$mnt/usr/local/bin"
+	install -m 0755 "$probe/maliprobe" "$mnt/usr/local/bin/maliprobe"
+	install -m 0644 "$repo/userspace/jackpotlte-maliprobe/com.jackpotlte.maliprobe.plist" \
+	    "$mnt/System/Library/LaunchDaemons/com.jackpotlte.maliprobe.plist"
+	echo "installed maliprobe + its LaunchDaemon"
+else
+	echo "note: no $probe/maliprobe (the userspace CI job builds it); skipping the probe"
 fi
 
 umount "$mnt"
