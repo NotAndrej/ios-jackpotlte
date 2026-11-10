@@ -2125,6 +2125,54 @@ rebooted at 17:16:12 (`/tmp/opencode/touch/flash-jt36.log`).  The swipe test:
 `press` then a rising `moves=` with no overflow, then `release` — the last
 line is the one iOS needs and the one jt35 never produced.
 
+### jt36 result — touch works, dragging does not (`0150`)
+
+On the phone (photos `IMG_20261110_173452181.jpg`, `IMG_20261110_173552290.jpg`)
+**touch is alive**: taps register and the owner navigated all the way to
+iOS's "Add New Wallpaper" screen.  That is the first time iOS has reacted to
+this digitizer at all, and it confirms the whole chain below it — IC init,
+event decode, `sweet_hid_touch`, `dispatchEvent`, a HID client.
+
+Dragging still fails, and the log says why:
+
+```
+A8 TOUCH: press id=0 raw=(1481,2899) panel=(390,1358)
+SWEET HID: touch 0 down at 390,1358 (1 clients)
+... 8 irq low/high pairs (moves, counted not printed) ...
+A8 TOUCH: bus busy stat=0x30, recovering        (x3, sda=0)
+A8 TOUCH: event queue overflow left=38, release all
+SWEET HID: touch 0 up at 387,1357 (1 clients)
+A8 TOUCH: event queue overflow left=50, release all
+A8 TOUCH: moves=340 i2c_retries=123 lost_reads=0
+```
+
+The moves *are* decoded (`moves=340`), but the drag ends ~3 px from where it
+started because the `0149` overflow branch **forcibly releases the finger**
+the moment the IC's `left_event` count saturates past the 32-deep FIFO.  iOS
+then sees press + a few moves + release in place: a tap or a long press, not
+a drag.  That is exactly the reported symptom (a long-press menu instead of
+a scroll).  The saturation happens while the worker is stalled in the I2C
+bus recoveries during userland spawn (`exec userlandmanagerd`, `FairPlayd`).
+
+`0150` (`xnu/patches/0150-jackpotlte-touch-drain-backlog.patch`,
+`bsd/dev/a5xelte_touch.c` only) stops throwing the drag away:
+
+1. A saturated `left` (>= 32) no longer clears the queue and no longer
+   releases.  It **clamps to the FIFO depth** (`left = 31`) and drains those
+   events; the rest stay queued for the next poll.  The release event we
+   need is normally *in* that backlog, which is exactly what the old branch
+   deleted.
+2. Added a lift watchdog: if a finger is down and **no** coordinate event
+   has arrived for `JTTS_LIFT_POLLS` = 50 polls (~400 ms), release it.  A
+   dropped release can no longer leave iOS holding a phantom finger, which
+   was the jt35 bug.
+3. The counters line gains `backlog=` (`jt_ts_overflows`) so a bad drain is
+   visible at a glance: `A8 TOUCH: moves=%u i2c_retries=%u lost_reads=%u
+   backlog=%u`.
+
+The IC's own `ERR_EVENT_QUEUE_FULL` status event still releases, because
+there the IC is explicitly saying it dropped data.
+
 ### GPU 0144 is really in the shippable kernel
 
 CI `42644071418` (main @ `9e2c729`, the GPU merge) completed **success**, and
