@@ -2418,3 +2418,13 @@ USERDATA reflash (destructive; needs the owner's go-ahead) should show the 32
 apps. `docs/research/data-migration-prior-art.md` records that
 UniXNU-droidvm presents staged apps through a union over `/Applications`
 (`owner-staged-apps=1`), the same idea.
+
+### M4 step 1 verified in the built kernel (`0155`, CI 42884335048, 2026-11-10)
+
+CI `42884335048` (`main` @ `d074908`) finished **success**. The downloaded
+`kernel.development.a5xelte` (16,601,960 B, sha256
+`014d6ce31a27386fd38ce7b8aa3207ebd7b2c48e4273e909a8a73fbaf0001855`) carries
+`SWEET FB: jtmetal=1: the accelerator names JackpotlteMetal as its Metal
+plug-in` plus `IOAcceleratorES`, `JackpotlteMetal` and `JackpotlteMetalDevice`
+symbols, so `0155` really compiled and linked into the shippable kernel (green
+alone is not trusted). It is not yet flashed; `jtmetal=1` is the gate.
