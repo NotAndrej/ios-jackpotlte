@@ -2065,6 +2065,54 @@ unconditional `A8 TOUCH: moves=... i2c_retries=... lost_reads=...` line is
 the worker-liveness proof, and a swipe's effect on `moves`/`lost_reads`
 decides digitizer/iOS vs bus/IC.
 
+### `0149` — the swipe never finishes: drain the whole queue
+
+The jt35 boot did what `0148` promised: the counters print and touches reach
+the HID layer.  The photo (`IMG_20261110_063951754.jpg`) shows the whole
+chain up to iOS:
+
+```
+A8 TOUCH: press id=0 raw=(1893,4086) panel=(499,1915)
+SWEET HID: touch 0 down at 499,1915 edge (1 clients)
+A8 TOUCH: move id=0 raw=(1898,4084) panel=(500,1914)
+A8 TOUCH: move id=0 raw=(1907,4078) panel=(502,1911)
+A8 TOUCH: bus busy stat=0x30, recovering          (repeated)
+A8 TOUCH: read 84 77 fe d7 09 09 1e 23 left=35
+A8 TOUCH: event queue overflow left=35
+A8 TOUCH: irq gpa0-0 -> high
+```
+
+Press and move decode correctly (`panel` matches the raw 12-bit value scaled),
+and `sweet_hid_touch` receives them with `1 clients`.  **No `release` ever
+appears**, so iOS sees a finger that never lifts and ignores the swipe.
+
+The cause is the drain: the worker read **one** event per poll and only asked
+for the rest when `1 <= left <= 2`, because `jtts_read_reg` rejected any
+transfer over 16 bytes (two events).  A moving finger produces events faster
+than that, the queue filled to `left=35` (past the IC's 32-deep queue, so the
+count is garbage), and the overflow branch cleared the stack and **never
+released** the finger — `jt_ts_down[0]` stayed true forever.  The two
+`printf` per event to the framebuffer console added to the drain being too
+slow.
+
+`0149` (`xnu/patches/0149-jackpotlte-touch-drain-queue.patch`,
+`bsd/dev/a5xelte_touch.c` only) makes the drain match the working S8 driver
+(patch `0124`, `buf[8*32]` + one `READ_ALL_EVENT`):
+
+1. `jtts_read_reg` accepts a full `JTTS_MAX_READ_BYTES` = `8*32` = 256-byte
+   transfer, so the whole queue can come back in one read.
+2. The worker's buffer grows to `buf[8*32]` and it reads **all** `left*8`
+   further bytes in a single `READ_ALL_EVENT`, exactly like the S8, instead
+   of one event per poll.
+3. The overflow branch (`left >= 32`) calls
+   `jackpotlte_touch_release_all()` before clearing the stack, so a lost
+   stream can no longer leave iOS stuck on a phantom press; the IC's own
+   `QUEUE_FULL` status event releases too.
+4. Logging is cut to the two lines a swipe hinges on — `press` and
+   `release` (`move` is counted in the `moves=` counter, not printed).  The
+   raw per-event dump and the per-poll `read ... left=` line are behind
+   `a8touchverbose=1`, off by default.
+
 ### GPU 0144 is really in the shippable kernel
 
 CI `42644071418` (main @ `9e2c729`, the GPU merge) completed **success**, and
