@@ -1,0 +1,76 @@
+name: userspace
+
+# Builds the phone's userspace in CI, because it is arm64 iOS (the iPhoneOS
+# SDK) and this project keeps no Mac.  Today that is jackpotlte-maliprobe; the
+# M4 shim, the Metal plug-in and Mesa will come through the same job.
+#
+# The ABI step is the point: the tool's structures and selectors are checked
+# against xnu/patches/0154, so a change on either side that they no longer
+# agree on goes red here instead of on the phone (see JACKPOTLTE_PROGRESS.md,
+# "green is not a patch that applied").
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, s8-dreamlte]
+    paths:
+      - "userspace/**"
+      - ".github/workflows/userspace.yml"
+
+concurrency:
+  group: userspace-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build (host copy and arm64 iOS copy)
+        run: userspace/build.sh
+
+      - name: The phone's copy is arm64
+        run: |
+          file userspace/out/maliprobe
+          lipo -info userspace/out/maliprobe | grep -q arm64
+
+      - name: The ABI agrees with the kernel patch
+        run: |
+          set -e
+          userspace/out/maliprobe.host --abi | tee abi.txt
+          # The requests 0154 answers.
+          grep -q 'drm_gem_close=0x9 '            abi.txt
+          grep -q 'panfrost_submit=0x40 '         abi.txt
+          grep -q 'wait_bo=0x41 '                 abi.txt
+          grep -q 'create_bo=0x42 '               abi.txt
+          grep -q 'mmap_bo=0x43 '                 abi.txt
+          grep -q 'get_param=0x44 '               abi.txt
+          grep -q 'get_bo_offset=0x45 '           abi.txt
+          grep -q 'madvise=0x48 '                 abi.txt
+          grep -q 'wait=0x7d '                    abi.txt
+          grep -q 'surface=0x7e '                 abi.txt
+          grep -q 'describe=0xffffffff'           abi.txt
+          # The structures the kernel memcpy()s in and out.
+          grep -q 'sizeof(drm_gem_close)=8'                 abi.txt
+          grep -q 'sizeof(drm_panfrost_submit)=40'          abi.txt
+          grep -q 'sizeof(drm_panfrost_wait_bo)=16'         abi.txt
+          grep -q 'sizeof(drm_panfrost_create_bo)=24 offsetof(offset)=16' abi.txt
+          grep -q 'sizeof(drm_panfrost_mmap_bo)=16'         abi.txt
+          grep -q 'sizeof(drm_panfrost_get_param)=16'       abi.txt
+          grep -q 'sizeof(drm_panfrost_get_bo_offset)=16'   abi.txt
+          grep -q 'sizeof(drm_panfrost_madvise)=12'         abi.txt
+          grep -q 'sizeof(jackpotlte_surface)=40 offsetof(handle)=4 offsetof(size)=8' abi.txt
+          grep -q 'sizeof(jackpotlte_wait)=16'              abi.txt
+
+      - name: The host copy runs
+        run: userspace/out/maliprobe.host --help
+
+      # The arm64 copy is the artifact that goes into the iOS root
+      # (/usr/local/bin/maliprobe); this project keeps no Mac, so a run's
+      # artifact is how it gets off the runner.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: maliprobe
+          path: userspace/out/

@@ -2419,6 +2419,40 @@ apps. `docs/research/data-migration-prior-art.md` records that
 UniXNU-droidvm presents staged apps through a union over `/Applications`
 (`owner-staged-apps=1`), the same idea.
 
+### M4 userspace starts: `userspace/jackpotlte-maliprobe` (2026-11-10)
+
+The GPU kernel side is at parity with the reference: a Bifrost Mali needs no
+firmware (the reference says so at `redwood_mali.c:6`) and the reference also
+runs one AS0 and one job at a time, which is what `0152`-`0154` do. So the
+remaining distance to a fast home screen is userspace, and this is its first
+artifact.
+
+`userspace/jackpotlte-maliprobe/maliprobe.c` is an arm64 iOS tool that speaks
+the `0154` ABI as a Darwin client: it finds the `JackpotlteMali` service, opens
+it, makes a 16 KB buffer, maps it with `IOConnectMapMemory64(handle)`, checks
+the words read back, asks `get_param` for the GPU id / present+ready masks /
+`nr_core_groups` / `thread_tls_alloc` / `afbc_features`, and closes the buffer.
+Since there is no shell on the phone, it prints to stdout *and* to
+`/dev/console` so a photo can read the result; `com.jackpotlte.maliprobe.plist`
+is the LaunchDaemon that would run it once at boot.
+
+It cannot be compiled or run on this host: it is Mach-O arm64 against the
+iPhoneOS SDK. `.github/workflows/userspace.yml` builds it on `macos-15` and
+uploads `userspace/out/` as an artifact. Its `--abi` mode prints the selectors,
+structure sizes and offsets and touches no IOKit, so the same job runs it on the
+runner and greps the values against `xnu/patches/0154` — the same "green is not
+a patch that applied" rule the kernel work uses, applied to the ABI: a structure
+or selector that drifts on either side turns the build red instead of failing on
+the phone. The structures were read back field by field against `0154` by hand
+before this was written (they match exactly), and the file also compiles
+clean under `clang -Wall -Wextra -Werror -fsyntax-only` here.
+
+Nothing about this is in the root image yet: the binary has to come out of a CI
+run first, and the image only changes at the next USERDATA flash. What comes
+after the probe is the shim (`redwood_drm.c` retargeted from `RedwoodMali` to
+`JackpotlteMali`), Mesa with Bifrost **v6**, and then the `JackpotlteMetal`
+bundle that `0155` already publishes the service for.
+
 ### M4 step 1 verified in the built kernel (`0155`, CI 42884335048, 2026-11-10)
 
 CI `42884335048` (`main` @ `d074908`) finished **success**. The downloaded

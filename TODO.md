@@ -89,3 +89,16 @@ deleted on 2026-11-10); build results and the image details live in
       built with Bifrost **v6**.  Its first step is written: `0155` publishes
       the `IOAcceleratorES` service and, under boot-arg `jtmetal=1`, the two
       properties that name the plug-in (`docs/gpu-bringup.md`).
+- [ ] M4 userspace, started: `userspace/jackpotlte-maliprobe` is the first tool
+      that speaks the `0154` ABI from a Darwin client (`userspace/README.md`,
+      built in CI by `.github/workflows/userspace.yml`, whose `--abi` step
+      checks the structures and selectors against `xnu/patches/0154`).
+      Not in the root image yet: the arm64 binary comes out of a CI run, and
+      putting it at `/usr/local/bin/maliprobe` +
+      `/System/Library/LaunchDaemons/com.jackpotlte.maliprobe.plist` belongs in
+      `tools/jackpotlte/apply-root-tweaks.sh` so the root keeps one mount pass.
+      Next after that: the `redwood_drm`-shaped shim (`RedwoodMali` ->
+      `JackpotlteMali`), then Mesa panfrost v6, then the Metal plug-in.
+- [ ] Open question for the owner: the reference userspace (shim + Metal
+      plug-in + AIR frontend + Mesa patches) is a ~6k-line import whose licence
+      the reference itself marks "to verify".  Import it or write ours?
