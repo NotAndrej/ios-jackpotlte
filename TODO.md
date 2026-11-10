@@ -65,9 +65,11 @@ deleted on 2026-11-10); build results and the image details live in
       `jtmaliprobe=1 jtmalipwr=1 jtmalijob=1`) and read `word=0xc0ffee01` for
       both jobs — that closes M2.
 - [ ] M3 (`0153` engine + `0154` user client, gated by `jtmalimetal=1`):
-      confirm the build contains `engine up, addresses from` and
-      `JackpotlteMali:`, then boot with `jtmalimetal=1` and read
-      `JACKPOTLTE MALI: engine up` plus
+      ~~confirm the build contains `engine up, addresses from` and
+      `JackpotlteMali:`~~ done — run `42871632907` is green and its real
+      kernel carries both, and the image is
+      `/var/tmp/a8-xnu-jt42-gpum3.img` (sha256 `536ab7ed...4a120901`).  What
+      is left is the boot: read `JACKPOTLTE MALI: engine up` plus
       `JackpotlteMali: the GPU is there for programs to draw with`.
 - [ ] M4: `redwood_drm`-shaped shim + Mesa built with Bifrost **v6**, then
       publish `IOAcceleratorES` properties under a boot arg.

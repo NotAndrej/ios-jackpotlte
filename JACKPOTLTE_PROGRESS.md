@@ -1015,17 +1015,26 @@ carries `job 1, identity mode`, `job 2, GPU page tables`, `-- the GPU ran it`,
 two job strings missing: it grepped a 30-byte `.lse.txt` sidecar instead of the
 kernel binary.
 
-M3 is building, not yet green: `0153` (persistent engine — dynamic three-level
-page tables, GPU address allocator, job queue and worker thread) and `0154`
-(`iokit/Kernel/arm/JackpotlteMali.cpp`, the panfrost user client over
-`SweetSurface`, started from `IOKitBSDInit`), both gated by `jtmalimetal=1`.
-Run `42869660692` was superseded by `fc3c750` + `ae9582f`, which silence three
-warnings — `-Wmissing-prototypes` on `0153`'s new non-static functions and on
-`0154`'s `extern "C" jackpotlte_mali_service_start`, and
-`-Wunused-parameter` on `0154`'s `externalMethod`.  They were warnings, not
+M3 is **green and packed**, not yet on the phone: `0153` (persistent engine —
+dynamic three-level page tables, GPU address allocator, job queue and worker
+thread) and `0154` (`iokit/Kernel/arm/JackpotlteMali.cpp`, the panfrost user
+client over `SweetSurface`, started from `IOKitBSDInit`), both gated by
+`jtmalimetal=1`.  Run `42871632907` is success; its real
+`kernel.development.a5xelte` (16,598,424 B, sha256 `a34d2968...93297f3a`)
+carries `engine up, addresses from`, `JackpotlteMali: request`,
+`the GPU is there for programs to draw with`, `the GPU did not come up` and
+both `job ...` lines, so the patches are in the kernel and not skipped.  Image:
+`/var/tmp/a8-xnu-jt42-gpum3.img` (sha256 `536ab7ed...4a120901`), base cmdline +
+`jtmaliprobe=1 jtmalipwr=1 jtmalijob=1 jtmalimetal=1`, `cpus=8`.
+
+Runs `42869660692` and `42870910337` were superseded by `fc3c750` + `ae9582f`,
+which silence three warnings — `-Wmissing-prototypes` on `0153`'s new
+non-static functions and on `0154`'s `extern "C" jackpotlte_mali_service_start`,
+and `-Wunused-parameter` on `0154`'s `externalMethod`.  They were warnings, not
 failures: this kernel builds with `-Weverything` but **no** `-Werror` (a green
 run's log holds 553,341 warnings), so only a patch that will not apply or a
-compile/link error turns a run red.  Rebuild: run `42871632907`.
+compile/link error turns a run red.  Superseding cost two CI cycles; check the
+logged compile command for a bare `-Werror` before treating a warning as fatal.
 
 Checked here while that build ran, without CI or a device: against a green
 run's `xnu-buildtree` artifact (which holds the real post-`0152` `xnu/` tree),

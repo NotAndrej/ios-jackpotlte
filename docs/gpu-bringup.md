@@ -79,7 +79,7 @@ cmdline plus `jtmaliprobe=1 jtmalipwr=1 jtmalijob=1` (`cpus=8`, no
 `sweethidtest`).  M2 is done only when the phone prints `word=0xc0ffee01` for
 **both** jobs; nothing has been flashed from this series yet.
 
-### M3 in patches `0153` + `0154` (building)
+### M3 in patches `0153` + `0154` (green, image packed, not yet on the phone)
 
 - `0153-jackpotlte-mali-engine.patch` turns the M2 helpers into a persistent
   engine (gate `jtmalimetal=1`, after `jtmaliprobe=1 jtmalipwr=1`): dynamic
@@ -99,6 +99,18 @@ cmdline plus `jtmaliprobe=1 jtmalipwr=1 jtmalijob=1` (`cpus=8`, no
 Success for M3 on the phone: `JACKPOTLTE MALI: engine up, addresses from
 0x1000000` and `JackpotlteMali: the GPU is there for programs to draw with`.
 
+Run `42871632907` (`main` @ `ae9582f` + the docs) is **success**.  Its
+`xnu-kernel`, the real `kernel.development.a5xelte` (16,598,424 B, sha256
+`a34d2968...93297f3a`), carries `engine up, addresses from`,
+`JackpotlteMali: request`, `the GPU is there for programs to draw with`,
+`the GPU did not come up`, both `job ...` lines, `M2 done as0_status=...` and
+the `A8 TOUCH: event backlog left=...` / `lift watchdog` strings — so the two
+patches really are in the kernel.  Image packed:
+`/var/tmp/a8-xnu-jt42-gpum3.img` (17,518,608 B, sha256
+`536ab7edcb8229a2c822d6232c7fbed83d5066388414d5fab0d2b74c4a120901`), base
+cmdline plus `jtmaliprobe=1 jtmalipwr=1 jtmalijob=1 jtmalimetal=1` (`cpus=8`,
+no `sweethidtest`; the cmdline was read back out of the image to check).
+
 > **Checked here, without CI or a device** (this host has no Apple SDK, but it
 > can still do a lot).  Download a green run's `xnu-buildtree` artifact (it
 > holds `xnu/` — the real post-`0152` sources — plus `sdk-kernel-platform/`
@@ -107,8 +119,9 @@ Success for M3 on the phone: `JACKPOTLTE MALI: engine up, addresses from
 > `xnu/` dir: both apply (the only offset is one line in `IOKitBSDInit.cpp`).
 > `tools/xnu-cc.py` re-runs the CI compile commands locally
 > (`python3 tools/xnu-cc.py LOG BT bsd/dev/jackpotlte_mali.c
-> iokit/Kernel/arm/JackpotlteMali.cpp --per-file` after pointing `CI_DXB` at
-> this repo's runner path and `CLANG` at the system clang); both files pass.
+> iokit/Kernel/arm/JackpotlteMali.cpp iokit/bsddev/IOKitBSDInit.cpp
+> --per-file`, with `CLANG` pointed at the system clang); all three pass
+> (`0 of 3 files failed`).
 > With `XNU_CC_OBJDIR` set it emits real arm64 objects, and `llvm-nm` then
 > shows `JackpotlteMali.o`'s only non-Apple undefined symbols are the
 > `jackpotlte_mali_*` ones, all defined in `jackpotlte_mali.o`, plus
@@ -142,9 +155,11 @@ Success for M3 on the phone: `JACKPOTLTE MALI: engine up, addresses from
 1. Flash `/var/tmp/a8-xnu-jt39-gpum2.img` to BOOT and read the two
    `job ... -- the GPU ran it` lines; both must print `word=0xc0ffee01`
    (that closes M2).
-2. Build `0153`+`0154` (push to `main` triggers `xnu.yml`), verify the new
-   strings (`engine up`, `JackpotlteMali:`) in the downloaded kernel, then boot
-   with `jtmalimetal=1` and confirm the engine and the service come up.
+2. ~~Build `0153`+`0154`~~ Done: run `42871632907`, image
+   `/var/tmp/a8-xnu-jt42-gpum3.img`.  Boot it (BOOT only) and read
+   `JACKPOTLTE MALI: engine up, addresses from 0x1000000` plus
+   `JackpotlteMali: the GPU is there for programs to draw with`; that closes
+   M3.  Both images are packed and waiting — the phone is the blocker.
 3. M4: build the `redwood_drm`-shaped shim and Mesa with Bifrost **v6**
    enabled, then publish `IOAcceleratorES` properties under a boot arg.
 
