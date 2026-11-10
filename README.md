@@ -1,6 +1,6 @@
 # iOS on the Samsung Galaxy A8 2018
 
-**XNU (xnu-8796, the iOS 16 generation) on the SM-A530F (Exynos 7885, `jackpotlte`).**
+**iOS 16 on the Samsung Galaxy A8 2018 (jackpotlte, Exynos 7885).**
 
 This repository carries the Galaxy A8 2018 bring-up. It is derived from the
 finished Galaxy S8 (`dreamlte`, Exynos 8895) port,
