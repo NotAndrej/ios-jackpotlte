@@ -1,6 +1,6 @@
 --- /dev/null
 +++ b/iokit/Kernel/arm/JackpotlteMali.cpp
-@@ -0,0 +1,619 @@
+@@ -0,0 +1,627 @@
 +/*
 + * JackpotlteMali: the Galaxy A8's Mali-G71 (Bifrost, arch 6) for programs to
 + * draw with.
@@ -38,6 +38,14 @@
 +#include <sys/systm.h>
 +
 +#include "SweetSurface.h"
++
++/*
++ * iokit/bsddev/IOKitBSDInit.cpp calls this once the probe has run.
++ * -Wmissing-prototypes (the tree builds with -Weverything -Werror) wants it
++ * declared above either branch's definition, so it is declared out here where
++ * both the board's and the empty one can see it.
++ */
++extern "C" void jackpotlte_mali_service_start(void);
 +
 +#if defined(ARM64_BOARD_CONFIG_A5XELTE) && defined(JACKPOTLTE)
 +
@@ -142,7 +150,7 @@
 +
 +static IOLock * gMaliLock;
 +
-+/* counters, for the log line bsd/dev/jackpotlte_mali.c prints every minute */
++/* Activity counters, for a fault report to show; nothing reads them yet. */
 +static uint32_t gMaliClients, gMaliBuffers, gMaliSubmits, gMaliFailed;
 +
 +/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */

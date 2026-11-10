@@ -101,13 +101,18 @@ Success for M3 on the phone: `JACKPOTLTE MALI: engine up, addresses from
 
 > The first build of the pair (run `42869660692`) was superseded before it
 > finished: the tree builds C **and** C++ with `-Weverything -Werror`, and
-> `0153`'s new non-static functions had no prototypes
-> (`-Wmissing-prototypes`) while `0154`'s `externalMethod` does not use
-> `dispatch`/`target`/`reference` (`-Wunused-parameter`).  Both were
-> reproduced locally with the system clang on a snippet of the same shape,
-> then fixed in `fc3c750` (`__unused`, like the other user clients in this
-> tree at `0038`/`0040`/`0046`, and a prototype block beside
-> `jackpotlte_mali_probe`).  Run `42870910337` rebuilt `main` with the fixes.
+> three warnings would have failed it.  `0153`'s new non-static functions had
+> no prototypes; `0154`'s `externalMethod` does not use
+> `dispatch`/`target`/`reference` (`-Wunused-parameter`); and `0154`'s
+> `extern "C" jackpotlte_mali_service_start` had no declaration above its
+> definition (the `extern "C"` block in the same file did not mention it) —
+> `-Wmissing-prototypes` fires in C++ too, which is why the reference declares
+> `RedwoodMaliStart` at the top of its own `.cpp`.  All three were reproduced
+> locally with the system clang on a snippet of the same shape, then fixed
+> (`__unused`, like the other user clients in this tree at
+> `0038`/`0040`/`0046`; a prototype block for the C file; a file-scope
+> `extern "C"` declaration for the C++ one).  `fc3c750` then `3210c1f`
+> rebuilt `main`.
 
 ## Next
 
