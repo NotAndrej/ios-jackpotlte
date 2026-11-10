@@ -2173,6 +2173,17 @@ bus recoveries during userland spawn (`exec userlandmanagerd`, `FairPlayd`).
 The IC's own `ERR_EVENT_QUEUE_FULL` status event still releases, because
 there the IC is explicitly saying it dropped data.
 
+CI `42857529491` (main @ `2720e09`) is **success**; the downloaded kernel
+(16,554,648 B, sha256 `fa3044fd...28f7dc4a`) carries
+`event backlog ... draining`, `lift watchdog, releasing`, the `backlog=`
+counters line, and the `press`/`release` lines, so `0150` applied.  Image
+`/var/tmp/a8-xnu-jt37-touchbacklog.img` (17,475,600 B, sha256
+`d8809f7c28a7034dd558dd4aada22ba2af867915d8205f82250871317fb61fe1`) is
+packed on the same base cmdline, **not yet flashed** (no device in fastboot
+when it was packed).  The test is a **drag**: press and move without lifting
+should keep `jt_ts_down` set until the real release, with `backlog=` showing
+how many clamped drains happened.
+
 ### GPU 0144 is really in the shippable kernel
 
 CI `42644071418` (main @ `9e2c729`, the GPU merge) completed **success**, and
