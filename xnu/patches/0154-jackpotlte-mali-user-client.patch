@@ -1,6 +1,6 @@
 --- /dev/null
 +++ b/iokit/Kernel/arm/JackpotlteMali.cpp
-@@ -0,0 +1,618 @@
+@@ -0,0 +1,619 @@
 +/*
 + * JackpotlteMali: the Galaxy A8's Mali-G71 (Bifrost, arch 6) for programs to
 + * draw with.
@@ -430,7 +430,8 @@
 +
 +IOReturn
 +JackpotlteMaliUserClient::externalMethod(uint32_t selector, IOExternalMethodArguments * args,
-+    IOExternalMethodDispatch * dispatch, OSObject * target, void * reference)
++    __unused IOExternalMethodDispatch * dispatch, __unused OSObject * target,
++    __unused void * reference)
 +{
 +	union {
 +		struct drm_gem_close close;

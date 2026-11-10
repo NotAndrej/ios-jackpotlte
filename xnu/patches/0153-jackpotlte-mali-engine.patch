@@ -25,7 +25,7 @@
  #include <machine/machine_routines.h>
  #include <mach/vm_param.h>
  #include <mach/vm_statistics.h>
-@@ -29,6 +36,7 @@
+@@ -29,10 +36,25 @@
  
  extern vm_offset_t ml_io_map(vm_offset_t, vm_size_t);
  extern uint64_t kvtophys(vm_offset_t va);
@@ -33,7 +33,25 @@
  extern void FlushPoC_DcacheRegion(vm_offset_t va, size_t length);
  
  void jackpotlte_mali_probe(void);
-@@ -303,11 +311,7 @@
+ 
++/* M3: the engine iokit/Kernel/arm/JackpotlteMali.cpp drives (prototypes here
++ * because the tree builds C with -Wmissing-prototypes). */
++bool jackpotlte_mali_ready(void);
++uint32_t jackpotlte_mali_shader_mask(void);
++bool jackpotlte_mali_parameter(uint32_t which, uint64_t *value);
++uint64_t jackpotlte_mali_address(uint64_t size);
++bool jackpotlte_mali_map(uint64_t gpu, uint64_t phys);
++void jackpotlte_mali_unmap(uint64_t gpu, uint64_t size);
++void jackpotlte_mali_mapped(void);
++uint32_t jackpotlte_mali_submit(uint64_t chain, bool fragment);
++uint64_t jackpotlte_mali_enqueue(uint64_t chain, bool fragment);
++bool jackpotlte_mali_wait(uint64_t seq, uint64_t timeout_ns);
++void jackpotlte_mali_start(volatile uint32_t *mali);
++
+ /* ---- windows ---- */
+ #define JT_MALI_PA		0x11500000u
+ #define JT_MALI_WINDOW		0x5000u
+@@ -303,11 +325,7 @@
  #define JT_FIRST_JOB_GPU	0x00100000ull
  
  static uint64_t *jt_pt_top;
@@ -45,7 +63,7 @@
  
  /* A zeroed page the GPU's own walk can read: its caches are not the
   * processor's, so the page is flushed to memory (redwood_mali.c:441-456). */
-@@ -326,31 +330,71 @@
+@@ -326,31 +344,71 @@
  	return (uint64_t *)page;
  }
  
@@ -134,7 +152,7 @@
  static void
  jt_as0_update(volatile uint32_t *mali, uint64_t transtab, uint32_t transcfg)
  {
-@@ -450,6 +494,10 @@
+@@ -450,6 +508,10 @@
  			jt_as0_update(mali, jt_pt_top_phys, transcfg_4k);
  			(void)jt_run_write_job(mali, page, JT_FIRST_JOB_GPU,
  			    shaders, "job 2, GPU page tables");
@@ -145,7 +163,7 @@
  		} else {
  			printf("JACKPOTLTE MALI: no memory for page tables\n");
  		}
-@@ -460,6 +508,390 @@
+@@ -460,6 +522,390 @@
  	    jt_rd(mali, JT_MALI_AS0 + JT_MALI_AS_FAULTSTATUS));
  }
  
@@ -536,7 +554,7 @@
  void
  jackpotlte_mali_probe(void)
  {
-@@ -527,10 +959,16 @@
+@@ -527,10 +973,16 @@
  	    ((v & 0xffff) >> 12) & 0xf, ((v & 0xffff) >> 4) & 0xff);
  	if (jt_mali_up(mali)) {
  		int job = 0;
