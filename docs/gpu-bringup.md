@@ -53,15 +53,19 @@ stable=1`, `GPU_ID=0x60000002 id=0x6000 arch=6 rev=0x2`, and `reset done,
 GPU up and cores powered` with `shaders=0x3 tiller=0x1 l2=0x1`, so **M0 and
 M1 are done on hardware**. See `JACKPOTLTE_PROGRESS.md` on `main`.)
 
-### M2 in patch `0149` (green build, not yet on the phone)
+### M2 in patch `0152` (green build, not yet on the phone)
 
-CI `42687783443` (branch `jackpotlte-gpu`) is **success**, and the downloaded
-`xnu-kernel` (16,554,720 B, sha256 `482b9145...d495e8`) carries
+CI `42692773680` (branch `jackpotlte-gpu` @ `d226b5d`, `0152` on top of
+main's `0151`; the branch was rebased onto main and the patch renumbered
+`0149` -> `0152` so the two branches no longer collide at `0149`) is
+**success**, and the downloaded `xnu-kernel`
+(16,554,768 B, sha256 `d578efa6...418b9d5b`) carries
 `JACKPOTLTE MALI: mmu_features=...`, `job 1, identity mode`, `job 2, GPU page
 tables`, `JACKPOTLTE MALI: M2 done as0_status=... fault=...` and
-`-- the GPU ran it`, so `0149` applied.  Image packed:
-`/var/tmp/a8-xnu-jt34-gpum2.img` (sha256 `9e0b18b1...15b5b3f0`), base cmdline
-plus `jtmaliprobe=1 jtmalipwr=1 jtmalijob=1`.  M2 is done only when the phone
+`-- the GPU ran it`, so `0152` applied.  Image packed:
+`/var/tmp/a8-xnu-jt34-gpum2.img` (sha256
+`ba78612699093ba3b364ed596f8f472661ab8e38523530ee1ea22e6c7d7c790b`), base
+cmdline plus `jtmaliprobe=1 jtmalipwr=1 jtmalijob=1`.  M2 is done only when the phone
 prints `word=0xc0ffee01` for **both** jobs; nothing has been flashed from
 this branch yet.
 
@@ -74,14 +78,14 @@ this branch yet.
 3. Then pack with `jtmalipwr=1`, flash, and read the power/QCH/PLL/gate lines
    plus `GPU_ID`. A Bifrost GPU_ID (arch nibble 6) with `M1 done, GPU up and
    reset` and the `*_READY` bits set is M1 done.
-4. M2: MMU + one job (`0149`, written; recipe below).
-5. Boot `0149` with `jtmalijob=1` (after `jtmalipwr=1`) and read the two
+4. M2: MMU + one job (`0152`, written; recipe below).
+5. Boot `0152` with `jtmalijob=1` (after `jtmalipwr=1`) and read the two
    `job ... -- the GPU ran it` lines. M2 is done when job 1 (identity) and
    job 2 (GPU page tables) both print `word=0xc0ffee01`.
 
-## M2 recipe (from the reference, written as `0149`)
+## M2 recipe (from the reference, written as `0152`)
 
-`xnu/patches/0149-jackpotlte-mali-mmu-job.patch` extends
+`xnu/patches/0152-jackpotlte-mali-mmu-job.patch` extends
 `jackpotlte_mali.c`; gate on `jtmalijob=1` and only run after `jt_mali_up()`
 returns true.
 
