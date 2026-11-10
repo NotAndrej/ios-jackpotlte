@@ -22,17 +22,25 @@ only for approved destructive steps, never bootloaders / EFS (p3) / recovery
 
 - [ ] **iOS identifies as an iPad in the Apple Account sign-in flow.** The
       About screen says "iPhone"/16.7.16, but the sign-in sheet calls the
-      device an iPad. `hw.machine`/`hw.model`/`hw.target`/`hw.product` come
-      from the ADT root (`0059-sweet-iphone-identity.patch`,
-      `tools/mkadt_jackpotlte.py`), and the donor `model`/`/product` node
-      comes from `research/ipsw-x/d22ap.adt`, which is **not in git** and was
-      missing when the last image was packed (mkadt warned "no /product
-      node"). So MobileGestalt gets no usable `ProductType` and the sign-in
-      UI guesses. Confirm at runtime (`sysctl hw.machine hw.model hw.target
-      hw.product`, and the MobileGestalt cache
-      `.../com.apple.MobileGestalt.plist`) before changing anything: the
-      cached plist is keyed by build + UUID and stale values survived a
-      reflash on the donor, so a clean reflash may be needed to see a fix.
+      device an iPad.
+      Root identity is set in `tools/mkadt.py` (root `compatible` =
+      `D22AP, iPhone10,3, xiaomi,sweet, ...`, `model` = `iPhone10,3`,
+      `target-type` = `D22`), so `hw.product` should be `iPhone10,3`, which
+      MobileGestalt recognises.
+      **But `research/` does not exist in either repo, so
+      `research/ipsw-x/d22ap.adt` is absent and mkadt prints "no /product
+      node"**: the ADT we boot has *no* `/product` node at all, so
+      MobileGestalt gets no product properties to derive ProductType /
+      device class / artwork from. That is the most likely cause.
+      Fix: extract the real donor tree (Apple artifact, kept out of git) —
+      `tools/remotezip.py URL DeviceTree.d22ap.im4p DIR` then
+      `ipsw img4 im4p extract DIR/.../DeviceTree.d22ap.im4p -o
+      research/ipsw-x/d22ap.adt` — and repack.
+      Confirm at runtime first (`sysctl hw.machine hw.model hw.target
+      hw.product` + the MobileGestalt cache
+      `.../com.apple.MobileGestalt.plist`); the cache is keyed by build +
+      UUID and stale values survived a reflash on the donor, so a clean
+      reflash may be needed before a fix is visible.
 
 ## Performance (the phone is very laggy)
 
