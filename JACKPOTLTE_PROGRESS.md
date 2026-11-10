@@ -2113,6 +2113,16 @@ slow.
    raw per-event dump and the per-poll `read ... left=` line are behind
    `a8touchverbose=1`, off by default.
 
+CI `42764449946` (main @ `574f6ea`) is **success**; the downloaded kernel
+(16,554,584 B, sha256 `f19a6b94...ae63ddc1`) carries
+`event queue overflow ... release all`, the `press`/`release` lines, the
+counters line and `a8touchverbose`, so `0149` applied.  Image
+`/var/tmp/a8-xnu-jt36-touchdrain.img` (17,475,600 B, sha256
+`b38d91d43b95985e9fecd6a9bcf465f5f98f977bb60ed52bce74e95bead3a69a`) is
+packed on the base cmdline (`a8touchlog=1 a8touchpwr=1 sweethidtest=5`, no
+`a8touchverbose`, no `sweetfb_noconsole=1`) and **not yet flashed** — the
+phone was not in fastboot when it was packed.
+
 ### GPU 0144 is really in the shippable kernel
 
 CI `42644071418` (main @ `9e2c729`, the GPU merge) completed **success**, and
