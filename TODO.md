@@ -9,8 +9,9 @@ only for approved destructive steps, never bootloaders / EFS (p3) / recovery
 
 ## Touch
 
-- [ ] GPU-style verification of drags end to end: `moves=` climbing with no
-      `lift watchdog, releasing` on a fast flick (jt37 result pending).
+- [x] ~~GPU-style verification of drags end to end: `moves=` climbing with no
+      `lift watchdog, releasing` on a fast flick (jt37 result pending).~~
+      Done on device in jt37: the About list scrolls by dragging.
 - [ ] ~~Remove the `SWEET HID: clients buttons=... touch=...` spam.~~ Done in
       `0151` (gated behind `sweethidclients=1`); the boot-arg `sweethidtest`
       no longer emits it.
@@ -46,8 +47,8 @@ only for approved destructive steps, never bootloaders / EFS (p3) / recovery
 
 - [ ] Software compositing: no GPU driver, so SpringBoard draws everything on
       the CPU. This is the expected main cause and the Mali port is the fix
-      (`docs/gpu-bringup.md`; M0/M1 are done on hardware, M2 is built and
-      waiting on a boot).
+      (`docs/gpu-bringup.md`; M0/M1 are done on hardware, the M2 image is
+      packed and waiting on a boot).
 - [ ] Console cost: every `printf`/`IOLog` redraws the framebuffer console.
       The test cmdline should stop carrying `-enable_kprintf_spam` and
       `sweethidtest=5` once the touch diagnosis is finished.
@@ -56,7 +57,17 @@ only for approved destructive steps, never bootloaders / EFS (p3) / recovery
 
 ## GPU
 
-- [ ] Boot the M2 image `/var/tmp/a8-xnu-jt34-gpum2.img`
-      (`jtmaliprobe=1 jtmalipwr=1 jtmalijob=1`) and read
-      `word=0xc0ffee01` for both jobs. Next milestone after that: MMU-backed
-      rendering (M3).
+The GPU series is on `main` (the `jackpotlte-gpu` branch was merged and
+deleted on 2026-11-10); build results and the image details live in
+`docs/gpu-bringup.md`.
+
+- [ ] Boot `/var/tmp/a8-xnu-jt39-gpum2.img` (sha256 `ae6a99e9...2379fde`,
+      `jtmaliprobe=1 jtmalipwr=1 jtmalijob=1`) and read `word=0xc0ffee01` for
+      both jobs — that closes M2.
+- [ ] M3 (`0153` engine + `0154` user client, gated by `jtmalimetal=1`):
+      confirm the build contains `engine up, addresses from` and
+      `JackpotlteMali:`, then boot with `jtmalimetal=1` and read
+      `JACKPOTLTE MALI: engine up` plus
+      `JackpotlteMali: the GPU is there for programs to draw with`.
+- [ ] M4: `redwood_drm`-shaped shim + Mesa built with Bifrost **v6**, then
+      publish `IOAcceleratorES` properties under a boot arg.
