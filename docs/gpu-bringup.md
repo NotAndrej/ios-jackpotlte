@@ -100,19 +100,25 @@ Success for M3 on the phone: `JACKPOTLTE MALI: engine up, addresses from
 0x1000000` and `JackpotlteMali: the GPU is there for programs to draw with`.
 
 > The first build of the pair (run `42869660692`) was superseded before it
-> finished: the tree builds C **and** C++ with `-Weverything -Werror`, and
-> three warnings would have failed it.  `0153`'s new non-static functions had
-> no prototypes; `0154`'s `externalMethod` does not use
+> finished, for three warnings only: `0153`'s new non-static functions had no
+> prototypes (`-Wmissing-prototypes`); `0154`'s `externalMethod` does not use
 > `dispatch`/`target`/`reference` (`-Wunused-parameter`); and `0154`'s
 > `extern "C" jackpotlte_mali_service_start` had no declaration above its
-> definition (the `extern "C"` block in the same file did not mention it) —
-> `-Wmissing-prototypes` fires in C++ too, which is why the reference declares
-> `RedwoodMaliStart` at the top of its own `.cpp`.  All three were reproduced
-> locally with the system clang on a snippet of the same shape, then fixed
-> (`__unused`, like the other user clients in this tree at
-> `0038`/`0040`/`0046`; a prototype block for the C file; a file-scope
-> `extern "C"` declaration for the C++ one).  `fc3c750` then `3210c1f`
-> rebuilt `main`.
+> definition — `-Wmissing-prototypes` fires in C++ too, which is why the
+> reference declares `RedwoodMaliStart` at the top of its own `.cpp`.  All
+> three were reproduced locally with the system clang on a snippet of the same
+> shape and fixed (`fc3c750`, `ae9582f`; `__unused`, as the other user clients
+> in this tree at `0038`/`0040`/`0046`).
+>
+> **They were warnings, not build failures.** The kernel is built with
+> `-Weverything` but **not** `-Werror`: the compile command in the CI log has
+> no bare `-Werror`, and green run `42866306317` contains two
+> `-Wmissing-noreturn` warnings (`a5xelte_keys.c`, `a5xelte_touch.c`) among
+> 553,341 warnings in the whole log.  A red build is only ever a patch that
+> would not apply (`Skipping patch`) or a compile/link error, so check for
+> `-Werror` in the logged compile command before treating a warning as fatal.
+> (The supersede cost two CI cycles.)  `jt_mali_worker`'s own `for (;;)`
+> still draws `-Wmissing-noreturn`; it is harmless.
 
 ## Next
 

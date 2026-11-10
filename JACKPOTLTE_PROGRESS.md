@@ -1019,11 +1019,13 @@ M3 is building, not yet green: `0153` (persistent engine — dynamic three-level
 page tables, GPU address allocator, job queue and worker thread) and `0154`
 (`iokit/Kernel/arm/JackpotlteMali.cpp`, the panfrost user client over
 `SweetSurface`, started from `IOKitBSDInit`), both gated by `jtmalimetal=1`.
-Run `42869660692` was superseded by `fc3c750`, which fixes the two warnings
-that would have failed it — `-Wmissing-prototypes` on `0153`'s new non-static
-functions and `-Wunused-parameter` on `0154`'s `externalMethod` (both
-reproduced locally with the system clang, since this host cannot build the
-kernel). Rebuild: run `42870910337`.
+Run `42869660692` was superseded by `fc3c750` + `ae9582f`, which silence three
+warnings — `-Wmissing-prototypes` on `0153`'s new non-static functions and on
+`0154`'s `extern "C" jackpotlte_mali_service_start`, and
+`-Wunused-parameter` on `0154`'s `externalMethod`.  They were warnings, not
+failures: this kernel builds with `-Weverything` but **no** `-Werror` (a green
+run's log holds 553,341 warnings), so only a patch that will not apply or a
+compile/link error turns a run red.  Rebuild: run `42871632907`.
 
 ### All eight cores in one logical cluster (`0137`) + the iOS-root gap (2026-11-08)
 
