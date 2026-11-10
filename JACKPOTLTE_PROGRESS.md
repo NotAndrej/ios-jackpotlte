@@ -2179,8 +2179,9 @@ CI `42857529491` (main @ `2720e09`) is **success**; the downloaded kernel
 counters line, and the `press`/`release` lines, so `0150` applied.  Image
 `/var/tmp/a8-xnu-jt37-touchbacklog.img` (17,475,600 B, sha256
 `d8809f7c28a7034dd558dd4aada22ba2af867915d8205f82250871317fb61fe1`) is
-packed on the same base cmdline, **not yet flashed** (no device in fastboot
-when it was packed).  The test is a **drag**: press and move without lifting
+packed on the same base cmdline, **flashed to `BOOT`** and rebooted at
+17:59:23 (`/tmp/opencode/touch/flash-jt37.log`).  The test is a **drag**:
+press and move without lifting
 should keep `jt_ts_down` set until the real release, with `backlog=` showing
 how many clamped drains happened.
 
