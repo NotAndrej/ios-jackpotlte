@@ -79,7 +79,7 @@ cmdline plus `jtmaliprobe=1 jtmalipwr=1 jtmalijob=1` (`cpus=8`, no
 `sweethidtest`).  M2 is done only when the phone prints `word=0xc0ffee01` for
 **both** jobs; nothing has been flashed from this series yet.
 
-### M3 in patches `0153` + `0154` (written, not built)
+### M3 in patches `0153` + `0154` (building)
 
 - `0153-jackpotlte-mali-engine.patch` turns the M2 helpers into a persistent
   engine (gate `jtmalimetal=1`, after `jtmaliprobe=1 jtmalipwr=1`): dynamic
@@ -98,6 +98,16 @@ cmdline plus `jtmaliprobe=1 jtmalipwr=1 jtmalijob=1` (`cpus=8`, no
 
 Success for M3 on the phone: `JACKPOTLTE MALI: engine up, addresses from
 0x1000000` and `JackpotlteMali: the GPU is there for programs to draw with`.
+
+> The first build of the pair (run `42869660692`) was superseded before it
+> finished: the tree builds C **and** C++ with `-Weverything -Werror`, and
+> `0153`'s new non-static functions had no prototypes
+> (`-Wmissing-prototypes`) while `0154`'s `externalMethod` does not use
+> `dispatch`/`target`/`reference` (`-Wunused-parameter`).  Both were
+> reproduced locally with the system clang on a snippet of the same shape,
+> then fixed in `fc3c750` (`__unused`, like the other user clients in this
+> tree at `0038`/`0040`/`0046`, and a prototype block beside
+> `jackpotlte_mali_probe`).  Run `42870910337` rebuilt `main` with the fixes.
 
 ## Next
 

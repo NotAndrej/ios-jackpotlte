@@ -1015,10 +1015,15 @@ carries `job 1, identity mode`, `job 2, GPU page tables`, `-- the GPU ran it`,
 two job strings missing: it grepped a 30-byte `.lse.txt` sidecar instead of the
 kernel binary.
 
-M3 is written, not yet built: `0153` (persistent engine — dynamic three-level
+M3 is building, not yet green: `0153` (persistent engine — dynamic three-level
 page tables, GPU address allocator, job queue and worker thread) and `0154`
 (`iokit/Kernel/arm/JackpotlteMali.cpp`, the panfrost user client over
 `SweetSurface`, started from `IOKitBSDInit`), both gated by `jtmalimetal=1`.
+Run `42869660692` was superseded by `fc3c750`, which fixes the two warnings
+that would have failed it — `-Wmissing-prototypes` on `0153`'s new non-static
+functions and `-Wunused-parameter` on `0154`'s `externalMethod` (both
+reproduced locally with the system clang, since this host cannot build the
+kernel). Rebuild: run `42870910337`.
 
 ### All eight cores in one logical cluster (`0137`) + the iOS-root gap (2026-11-08)
 
