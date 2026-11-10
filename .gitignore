@@ -16,3 +16,6 @@ shim/a5xelte/outxnu/
 shim/dreamlte/out/
 shim/jackpotlte/out/
 logs/
+
+# built userspace (from CI; see userspace/README.md)
+userspace/out/

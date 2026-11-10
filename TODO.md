@@ -24,11 +24,14 @@ only for approved destructive steps, never bootloaders / EFS (p3) / recovery
 - [ ] The red `😳 rdar:45025538` strip is UIKit's fallback bar for a screen it
       has no status-bar provider for; we hand it 360x740 pt (1080x2220 at the
       ADT's scale 3) and no iPhone is that. Diagnosed in
-      `JACKPOTLTE_PROGRESS.md` ("Why the status bar reads"). Needs a real
-      iPhone mode presented, and because our panel is 18.5:9 while every
-      notched mode is 19.5:9 the three ways to do it trade a chopped status
-      bar / a 5% vertical squeeze / per-pixel scaling. Owner's call; three
-      files move together (framebuffer logical size, ADT canvas, `SweetHID`).
+      `JACKPOTLTE_PROGRESS.md` ("Why the status bar reads"). The chosen fix is
+      to present a real mode (1125x2436 @3 = 375x812, the donor's), keep the
+      panel full and keep the status bar: 22 px of width cropped (as the donor
+      crops) and the height squeezed 2436 -> 2220 (8.9%). The 1080x2340 /
+      scale 2.88 idea is out - `display-scale` is a u32. Three files move
+      together: the framebuffer logical size and present mapping (`0124`), the
+      ADT canvas (`mkadt_jackpotlte.py`), and `SweetHID` (`0118`, plus the
+      driver's y range in `0131`).
 
 ## Home screen shows only ~6 apps
 
@@ -39,8 +42,11 @@ only for approved destructive steps, never bootloaders / EFS (p3) / recovery
       registers them. Host side is ready -
       `tools/jackpotlte/apply-root-tweaks.sh` (and the same step in
       `tools/mkiosroot.sh`).
-      Needs the owner's approval for the destructive step: re-sparse
-      (`img2simg`, freeing the old sparse first) and `fastboot flash USERDATA`.
+      Flashed 2026-11-10 (owner approved) with the 32 apps promoted and the
+      GPU probe installed; waiting on the photo of the home screen to confirm
+      the extra icons appear (if they do not, LaunchServices' cache may need
+      clearing - `com.apple.LaunchServices-*.csstore` - and that means another
+      USERDATA flash).
 
 ## Device identity
 

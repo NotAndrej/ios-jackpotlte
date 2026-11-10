@@ -2419,6 +2419,53 @@ apps. `docs/research/data-migration-prior-art.md` records that
 UniXNU-droidvm presents staged apps through a union over `/Applications`
 (`owner-staged-apps=1`), the same idea.
 
+### The app fix and the probe are flashed (`jt43`, 2026-11-10, awaiting the photo)
+
+`/var/tmp/IOSRoot.img` was prepared with `tools/jackpotlte/apply-root-tweaks.sh`
+(fsck clean before and after): **32 staged system apps moved into
+`/Applications`** and `maliprobe` installed at `/usr/local/bin/` with its
+LaunchDaemon. Verified in the image afterwards with `7z l`: `Maps.app`,
+`Music.app`, `Weather.app`, `Calculator.app`, `Files.app`, `Books.app`,
+`MobileMail.app`, `MobileNotes.app`, `Podcasts.app`, `Stocks.app`, `Tips.app`,
+`Compass.app`, `Magnifier.app`, `Health.app`, `Home.app` are all in
+`/Applications`, `/private/var/staged_system_apps` holds nothing, and
+`usr/local/bin/maliprobe` (66,984 bytes) and
+`System/Library/LaunchDaemons/com.jackpotlte.maliprobe.plist` (816 bytes) are
+present.
+
+The new sparse was built and verified before flashing:
+`img2simg IOSRoot.img IOSRoot.sparse.img` gave 12,145,402,264 bytes, and
+`tools/jackpotlte/verify-sparse.py` (new) walked all 27,819 chunks / 4,194,304
+blocks and compared every data byte against the raw image — the host has no
+room for a second 16 GB copy, so it verifies in place instead of by
+re-conversion. (`simg2img file -` is not a thing; it writes a file named `-`.)
+
+Flashed with the owner's approval: BOOT = `jt43` (quiet), USERDATA = the new
+sparse (47 sparse chunks, 510 s). The phone rebooted into it. What the next
+photo should show: the boot text (the M2 `word=0xc0ffee01` lines and M3's
+`engine up, addresses from 0x1000000` / `JackpotlteMali: the GPU is there for
+programs to draw with`, plus the probe's `JACKPOTLTE MALIPROBE:` report), and
+then the home screen with the 32 extra icons.
+
+### Display scale is an integer, so the mode has to be one UIKit has as well
+
+The owner chose "present 1080x2340, squeeze 5% vertically". Working out how to
+do it turned up a fact that rules it out as written: **`/chosen/display-scale`
+is a `u32`** (`tools/mkadt.py:95-99`, read straight by libMobileGestalt —
+`NOTES.md:89` records SpringBoard failing with "scale 0" when it was missing).
+3 is 3; a scale of 2.88 (which is what makes 1080x2340 a genuine iPhone 12 mini
+mode at 375x812 points) cannot be expressed. With scale 3 those pixels are
+360x780 points, which is no iPhone, so the red bar would probably stay.
+
+What is left for a screen this size is a mode UIKit knows **in pixels and in
+points at 3x**, and the only one that fits a 1080x2220 panel with a modest
+transform is the donor's own: **1125x2436, 375x812 points** (1170x2532 and up
+are worse). So the shape of the fix is unchanged — present a real mode, keep
+the panel full, keep the status bar — but the numbers are: 22 px (7 pt) of the
+width cropped, exactly as the donor crops it, and the height squeezed
+2436 -> 2220, which is 8.9%, not 5%. The alternative that keeps geometry exact
+is to scale both axes per pixel, which is the thing to do after M4, on a GPU.
+
 ### Why the status bar reads `😳 rdar:45025538` (2026-11-10)
 
 UIKit draws that red bar, not our root and not any app. When
