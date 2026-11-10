@@ -2351,3 +2351,70 @@ takes over (`sweetfb_noconsole=1` mutes the console only at the first
 present): `touch>0` → the digitizer pipe works and the remaining fault is
 geometry; `touch=0` → backboardd never opened it.  Awaiting the owner's
 photo/video of this boot.
+
+### Quiet boot: `sweetfb_noconsole=1` back in the packed cmdline (`jt43`, 2026-11-10)
+
+The GPU images `jt39`/`jt42` were packed **without** `sweetfb_noconsole=1`
+(`strings` on the image), so every kernel `printf` keeps painting over the GUI
+on the panel - the `exec` lines (`0042`/`0111`), the `SWEET HID`/touch
+counters, the Mali lines. That is what the owner sees as "verbose logging".
+`jt19` was the same situation on 2026-11-08 and the fix was this same boot arg.
+
+Packed `/var/tmp/a8-xnu-jt43-gpum3-quiet.img` (17,518,608 B, sha256
+`8a30023db26db6293930a8abb37574479f2bed12bd1098747044e19b137508dd`) from the
+*same* `jt42` kernel (`a34d2968...93297f3a`, also the artifact sha) with only
+the cmdline changed: the jt42 args plus `sweetfb_noconsole=1`. `cmp -l` against
+`jt42` differs in **104 bytes**, all inside the payload cmdline field and its
+checksums, so the kernel is byte-identical.
+
+Mechanism (`0067`, `0109`): `sweetfb_noconsole=1` sets `sweet_console_muted`
+in `serial_console.c` at **iOS's first frame**, not at boot - the early kernel
+text still draws (that is where the Mali `word=0xc0ffee01` lines live), then the
+Apple logo and GUI stay clean. Console text still goes to the persistent log,
+and a panic still draws (`sweet_console_muted && !panic_active()`). The
+`jtmali*` probe args are kept for now so that one photo can still close M2/M3;
+once that is in, dropping them makes the boot quiet from the first line.
+
+Not flashed: the phone was not in fastboot at pack time.
+
+### Only ~7 home-screen icons: the 32 apps iOS 16 leaves in `staged_system_apps` (2026-11-10)
+
+The owner sees about six apps on the home screen. Measured on the raw master
+`/var/tmp/IOSRoot.img` (`7z l`, listing kept at `/tmp/opencode/cur-listing.txt`):
+
+- `/Applications` holds **142** `.app` bundles, but almost all are XPC/UI
+  services (`AAUIViewService`, `AuthKitUIService`, ...) with no home-screen
+  icon. The real user apps there are only MobileSafari, MobileSMS,
+  MobilePhone, MobileSlideShow (Photos), Preferences (Settings), Camera and
+  AppStore - the icons that do appear.
+- `/private/var/staged_system_apps` holds **32** more, no name overlap with
+  `/Applications`: AppleTV, Books, Bridge, Calculator, Compass, Contacts,
+  FaceTime, Files, FindMy, Fitness, Freeform, Health, Home, Magnifier, Maps,
+  Measure, MobileCal, MobileMail, MobileNotes, MobileStore, MobileTimer,
+  Music, News, Passbook, Podcasts, Reminders, SequoiaTranslator, Shortcuts,
+  Stocks, Tips, VoiceMemos, Weather. They are **complete** bundles (each has
+  its Mach-O executable: Maps 18 MB, Books 21 MB, Weather 10 MB, Notes 8 MB),
+  487 MiB in total.
+- `/System/Library/AppPlaceholders/<name>.app` ships a placeholder icon and
+  `Info.plist` for each of the 32 - the system's "installing" icon.
+
+Why they never install: they do not belong in `/Applications` on a device.
+`BuildManifest.plist` for this IPSW identifies `Cryptex1,AppOS` as
+`087-86715-047.dmg`, a **10 MB** skeleton (its tree is only
+`System/Library` + `usr/libexec`, 1047 entries - it never holds an app), and
+the first-boot migration (`SystemAppMigrator` / `cryptexd`) is what installs
+the staged bundles onto the App cryptex at `/System/Cryptexes/App`. Our root
+is one plain HFS+ volume, the App cryptex is just a directory, and this image
+has the migration tweaks (`apply-root-tweaks.sh` sets `LastSystemVersion`),
+so nothing ever installs them and LaunchServices never registers them.
+
+Fix: move each staged bundle into `/Applications`, the directory
+LaunchServices already scans for the icons that work. Same volume, so it is a
+rename that costs no space. `tools/jackpotlte/promote-staged-apps.sh`
+(pkexec; fsck -> `mount -t hfsplus -o loop,rw,force` -> `mv` -> `sync` ->
+umount -> fsck) does this to an existing image, and `tools/mkiosroot.sh` now
+does the same during a from-scratch build. Applied to the master, the next
+USERDATA reflash (destructive; needs the owner's go-ahead) should show the 32
+apps. `docs/research/data-migration-prior-art.md` records that
+UniXNU-droidvm presents staged apps through a union over `/Applications`
+(`owner-staged-apps=1`), the same idea.

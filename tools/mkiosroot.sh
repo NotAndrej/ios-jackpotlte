@@ -87,6 +87,25 @@ copy "$work/os/root" "$work/root"
 copy "$work/sysos/root" "$work/root/private/preboot/Cryptexes/OS"
 copy "$work/appos/root" "$work/root/private/preboot/Cryptexes/App"
 
+# iOS 16 keeps the 32 home-screen apps in /private/var/staged_system_apps and
+# installs them onto the App cryptex at first boot (SystemAppMigrator).  Here
+# the App cryptex is a plain directory - the IPSW's Cryptex1,AppOS
+# (087-86715-047.dmg) is a 10 MB skeleton that never holds the apps - so the
+# migration installs nothing and SpringBoard only shows the ~7 real apps under
+# /Applications.  Put the staged bundles where LaunchServices scans.
+# Same volume, so the rename costs no space.
+# tools/jackpotlte/promote-staged-apps.sh does the same to a built image.
+if [ -d "$work/root/private/var/staged_system_apps" ]; then
+	promoted=0
+	for app in "$work/root/private/var/staged_system_apps"/*.app; do
+		[ -e "$app" ] || continue
+		[ -e "$work/root/Applications/${app##*/}" ] && continue
+		sudo mv "$app" "$work/root/Applications/"
+		promoted=$((promoted + 1))
+	done
+	echo "promoted $promoted staged system apps into /Applications"
+fi
+
 # Shared cache where dyld looks at ignition level 1: hard links, no extra space.
 dsc=private/preboot/Cryptexes/OS/System/Library/Caches/com.apple.dyld
 sudo mkdir -p "$work/root/System/Library/Caches/com.apple.dyld"

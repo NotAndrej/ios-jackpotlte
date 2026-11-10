@@ -19,6 +19,18 @@ only for approved destructive steps, never bootloaders / EFS (p3) / recovery
       low). Recovery works, but the stall itself is still unexplained. Only
       chase if a fast flick still drops events.
 
+## Home screen shows only ~6 apps
+
+- [ ] Move the 32 bundles in `/private/var/staged_system_apps` (Maps, Music,
+      Weather, Clock, Calculator, Files, Books, Notes, Mail, ...) into
+      `/Applications`: iOS 16 installs them onto the App cryptex at first boot,
+      which our single plain-HFS root cannot do, so LaunchServices never
+      registers them. Host side is ready -
+      `tools/jackpotlte/promote-staged-apps.sh` (and the same step in
+      `tools/mkiosroot.sh`).
+      Needs the owner's approval for the destructive step: re-sparse
+      (`img2simg`, freeing the old sparse first) and `fastboot flash USERDATA`.
+
 ## Device identity
 
 - [ ] **iOS identifies as an iPad in the Apple Account sign-in flow.** The
@@ -50,8 +62,10 @@ only for approved destructive steps, never bootloaders / EFS (p3) / recovery
       (`docs/gpu-bringup.md`; M0/M1 are done on hardware, the M2 image is
       packed and waiting on a boot).
 - [ ] Console cost: every `printf`/`IOLog` redraws the framebuffer console.
-      The test cmdline should stop carrying `-enable_kprintf_spam` and
-      `sweethidtest=5` once the touch diagnosis is finished.
+      `jt43` puts `sweetfb_noconsole=1` back (mutes the panel at iOS's first
+      frame: the Apple logo and GUI stay clean, early text still draws), so the
+      remaining step is to drop the `jtmali*` probe args once M2/M3 are read
+      off a photo, and stop carrying `sweethidtest=5`.
 - [ ] `exec %s` prints on every exec (`0042`/`0111`) — consider gating behind
       a boot arg like the other diagnostics.
 
