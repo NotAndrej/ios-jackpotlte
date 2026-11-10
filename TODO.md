@@ -26,7 +26,7 @@ only for approved destructive steps, never bootloaders / EFS (p3) / recovery
       `/Applications`: iOS 16 installs them onto the App cryptex at first boot,
       which our single plain-HFS root cannot do, so LaunchServices never
       registers them. Host side is ready -
-      `tools/jackpotlte/promote-staged-apps.sh` (and the same step in
+      `tools/jackpotlte/apply-root-tweaks.sh` (and the same step in
       `tools/mkiosroot.sh`).
       Needs the owner's approval for the destructive step: re-sparse
       (`img2simg`, freeing the old sparse first) and `fastboot flash USERDATA`.

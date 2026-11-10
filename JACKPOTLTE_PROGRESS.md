@@ -2410,10 +2410,10 @@ so nothing ever installs them and LaunchServices never registers them.
 
 Fix: move each staged bundle into `/Applications`, the directory
 LaunchServices already scans for the icons that work. Same volume, so it is a
-rename that costs no space. `tools/jackpotlte/promote-staged-apps.sh`
-(pkexec; fsck -> `mount -t hfsplus -o loop,rw,force` -> `mv` -> `sync` ->
-umount -> fsck) does this to an existing image, and `tools/mkiosroot.sh` now
-does the same during a from-scratch build. Applied to the master, the next
+rename that costs no space. `tools/jackpotlte/apply-root-tweaks.sh` (the same
+pkexec fsck / mount-rw / umount wrapper it already used for the donor tweaks)
+moves them on an existing image, and `tools/mkiosroot.sh` does the same during
+a from-scratch build. Applied to the master, the next
 USERDATA reflash (destructive; needs the owner's go-ahead) should show the 32
 apps. `docs/research/data-migration-prior-art.md` records that
 UniXNU-droidvm presents staged apps through a union over `/Applications`

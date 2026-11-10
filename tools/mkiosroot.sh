@@ -94,7 +94,7 @@ copy "$work/appos/root" "$work/root/private/preboot/Cryptexes/App"
 # migration installs nothing and SpringBoard only shows the ~7 real apps under
 # /Applications.  Put the staged bundles where LaunchServices scans.
 # Same volume, so the rename costs no space.
-# tools/jackpotlte/promote-staged-apps.sh does the same to a built image.
+# tools/jackpotlte/apply-root-tweaks.sh does the same to a built image.
 if [ -d "$work/root/private/var/staged_system_apps" ]; then
 	promoted=0
 	for app in "$work/root/private/var/staged_system_apps"/*.app; do
