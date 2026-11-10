@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
 """Apple Device Tree (ADT) tools.
 
   adt.py dump FILE [--hex]      FILE = raw ADT or an IM4P-wrapped DeviceTree

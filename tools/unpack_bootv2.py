@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
 """Unpack an Android boot image header v0-v2 into kernel/ramdisk/second/dtb + header.txt."""
 import struct, sys, os
 src, out = sys.argv[1], sys.argv[2]

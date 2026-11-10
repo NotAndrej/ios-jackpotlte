@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: MIT
 # Build the Samsung EL1 loader. No flash or payload packaging here.
 set -eu
 cd "$(dirname "$0")"

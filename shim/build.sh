@@ -1,4 +1,5 @@
 #!/bin/bash
+# SPDX-License-Identifier: MIT
 # Build the shim and wrap it in a boot.img v2 that mirrors the stock PixelOS header.
 set -euo pipefail
 cd "$(dirname "$0")"

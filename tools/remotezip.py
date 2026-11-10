@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
 """List or extract single members of a remote zip (e.g. an IPSW) via HTTP range requests.
 
   remotezip.py URL                      list members

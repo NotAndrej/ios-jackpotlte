@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
 """Extract one IM4P payload from an IPSW without unpacking the archive.
 
   im4p_extract.py IPSW MEMBER OUT        e.g. Firmware/all_flash/DeviceTree.d22ap.im4p

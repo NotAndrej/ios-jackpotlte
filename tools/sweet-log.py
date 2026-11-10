@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
 """Decode the SWEET persistent console log (kernel patch 0047).
 
   sweet-log.py AREA.bin [OUT.txt]

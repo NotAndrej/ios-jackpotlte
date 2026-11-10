@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MIT */
 /*
  * Just enough flattened-device-tree parsing for the Samsung EL1/MMU-off
  * loaders: find /chosen (initrd location) and, for the jackpotlte bring-up

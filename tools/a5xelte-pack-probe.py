@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
 """Repack a Samsung BOOT candidate containing the RAM-only a5xelte probe.
 
 Host-side only. Never opens a block device and never flashes the phone.

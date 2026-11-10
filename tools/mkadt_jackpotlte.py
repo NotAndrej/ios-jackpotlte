@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
 """Build the Galaxy A8 2018 (SM-A530F, jackpotlte, Exynos 7885) ADT.
 
 Stage 1: an entry-only tree. Every value is sourced from the mainline 7885

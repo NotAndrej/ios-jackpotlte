@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
 """Re-run xnu compile commands from a CI log locally (syntax check only).
 
   xnu-cc.py LOG BUILDTREE [FILTER ...]

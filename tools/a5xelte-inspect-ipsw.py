@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
 """List local IPSW identities and root-image members without extracting them."""
 
 import argparse

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
 """Convert an Android sparse image to a raw image **with holes**.
 
 Why this exists: /usr/bin/simg2img on this host writes the output densely

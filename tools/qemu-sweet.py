@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
 """Boot a SWEETXNU payload (tools/mkpayload.py) in QEMU's virt board.
 
   qemu-sweet.py PAYLOAD OUTDIR [--secs N] [--gdb] [--live-serial]

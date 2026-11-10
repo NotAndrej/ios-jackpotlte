@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
 """Print and unpack a Samsung (Exynos) Android boot.img v0 with a 'dt' section.
 
 Copied from tools/dreamlte_bootimg_info.py (S8); the Samsung v0 layout is not

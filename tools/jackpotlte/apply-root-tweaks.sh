@@ -1,4 +1,5 @@
 #!/bin/bash
+# SPDX-License-Identifier: MIT
 # Apply the donor (SWEET) iOS-root tweaks to the jackpotlte iOS root image.
 #
 #   pkexec tools/jackpotlte/apply-root-tweaks.sh [IMAGE]

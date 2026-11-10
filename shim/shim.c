@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MIT */
 /*
  * Milestone 2: one boot answers the questions that decide the XNU port.
  *   - CPU feature registers (16K granule, GIC sysreg interface)

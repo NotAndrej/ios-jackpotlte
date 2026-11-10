@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
 """Validate repository integrity, patch sequences, and script syntax.
 
   tools/validate-repo.py [--verbose]

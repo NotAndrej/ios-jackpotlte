@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
 """Decode patch 0110's SYSTEM console ring from a TWRP block read."""
 import argparse
 import pathlib

@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MIT */
 /*
  * Milestone 3: EL1 stage-1 MMU with the 16K granule XNU uses.
  *

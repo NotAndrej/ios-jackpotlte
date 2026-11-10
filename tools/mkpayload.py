@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
 """Pack an xnu kernel Mach-O + ADT into the payload the sweet shim boots.
 
   mkpayload.py KERNEL ADT OUT [--cmdline "..."] [--ramdisk IMAGE]

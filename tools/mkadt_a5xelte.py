@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
 """Build an entry-only a5xelte ADT from the donor's minimal schema.
 
 This includes the Exynos7580 GICv2 and eMMC MMIO window for a read-only

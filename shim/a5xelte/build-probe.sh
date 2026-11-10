@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: MIT
 # Build a diagnostic Samsung Image. This script never packages or flashes BOOT.
 set -eu
 cd "$(dirname "$0")"

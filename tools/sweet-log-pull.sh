@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: MIT
 # Read the SWEET console log (kernel patch 0047) from a phone booted into
 # OrangeFox recovery (fastboot boot recovery/recovery.img; adb root shell).
 #   tools/sweet-log-pull.sh [-s SERIAL] OUT.txt

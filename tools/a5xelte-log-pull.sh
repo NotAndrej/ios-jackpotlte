@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: MIT
 # TWRP only: read patch 0110's log area from SYSTEM p20 into private files.
 set -eu
 

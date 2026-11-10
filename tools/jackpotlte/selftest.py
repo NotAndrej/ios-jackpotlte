@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
 """Self-test for the jackpotlte boot pipeline (no device, no kernel needed).
 
 Builds a tiny synthetic Mach-O kernel, runs it through the real tools:

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
 """Read-only a5xelte XNU preflight. Run on the existing Linux system.
 
 Prints board facts and unknowns; it neither opens block devices nor writes files.

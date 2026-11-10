@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
 """Write an Android sparse image holding only the blocks where NEW differs from OLD.
 
   sparsediff.py OLD.img NEW.img OUT.simg [--block 4096]

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
 """Make selected launchd jobs log to the console (SWEET bring-up debugging).
 
   patch-launchd-plist.py IN.plist OUT.plist LABEL [LABEL ...]

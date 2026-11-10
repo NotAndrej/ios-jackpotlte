@@ -1,4 +1,5 @@
 #!/bin/bash
+# SPDX-License-Identifier: MIT
 # Build the Galaxy A8 2018 (SM-A530F, jackpotlte) XNU loader (Samsung S-Boot
 # "kernel" Image). Optionally pack a BOOT image:
 #   build.sh STOCK_BOOT.img PAYLOAD.bin OUT.img   full payload

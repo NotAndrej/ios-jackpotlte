@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
 set -euo pipefail
 
 # Rebuild the libdispatch firehose archive for Exynos7580's ARMv8.0 A53.

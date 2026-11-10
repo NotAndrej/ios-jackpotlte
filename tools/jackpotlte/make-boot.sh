@@ -1,4 +1,5 @@
 #!/bin/bash
+# SPDX-License-Identifier: MIT
 # Kernel Mach-O -> Galaxy A8 2018 (SM-A530F, jackpotlte) BOOT image.
 #   make-boot.sh KERNEL STOCK_BOOT.img OUT.img [boot-args...]
 # Default boot-args: one CPU, verbose console, no watchdog; no root device

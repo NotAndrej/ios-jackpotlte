@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MIT */
 ENTRY(_start)
 SECTIONS
 {

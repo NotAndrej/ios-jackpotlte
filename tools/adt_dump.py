@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
 """Print an ADT as an indented tree (small values decoded): adt_dump.py FILE"""
 import struct
 import sys

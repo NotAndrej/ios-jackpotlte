@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MIT */
 /*
  * Milestone 5 probe: can we talk to the internal UFS that ABL booted from?
  *

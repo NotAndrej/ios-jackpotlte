@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MIT */
 /*
  * Minimal text console on the ABL splash framebuffer. With the MMU off
  * every access is Device memory, so stay aligned (-mstrict-align).

@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: MIT
 # Host side of the phone's USB Ethernet (kernel sweetusb=2, patches 0075-0077).
 #   tools/sweet-usbnet.sh [LOGFILE]
 # Waits for the phone's CDC-ECM interface (host MAC 02:00:5e:77:ee:01),

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
 """Symbolicate SWEET console crash reports (patch 0043) typed in from a photo.
 
   sweet-crash.py CACHE ROOT [REPORT.txt]       (report on stdin if omitted)

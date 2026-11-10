@@ -189,4 +189,8 @@ iOS belongs to Apple and is not distributed here: download the IPSW yourself.
 
 ## License
 
-The XNU patches are derived from XNU and fall under the [APSL 2.0](https://opensource.apple.com/apsl/). Code written after Linux drivers (for example `shim/dreamlte/touch_probe.c`) is GPL-2.0, see the SPDX headers. The upstream projects ios-sweet and ios-a5xelte did not state an overall license, so the remaining files have no separate license yet.
+The upstream ios-sweet code, and the code of the two ports derived from it - the Galaxy A8 2018 (`jackpotlte`) port and the Galaxy A5 2016 (`a5xelte`) port - is MIT, see [LICENSE](LICENSE). Code files carry an `SPDX-License-Identifier: MIT` header.
+
+The XNU patches (`xnu/patches/`) are derived from XNU and fall under the [APSL 2.0](https://opensource.apple.com/apsl/). Code written after Linux drivers (for example `shim/dreamlte/touch_probe.c`, `shim/a5xelte/display_console.c`) is GPL-2.0, see the SPDX headers.
+
+The Galaxy S8 (`dreamlte`) material (`shim/dreamlte/`, `tools/dreamlte/`, `tools/dreamlte_bootimg_info.py`, `tools/dreamlte_mkboot.py`, `tools/mkadt_dreamlte.py`) carries no license yet, except the files whose SPDX header already names GPL-2.0.

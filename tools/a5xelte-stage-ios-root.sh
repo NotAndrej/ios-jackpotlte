@@ -1,4 +1,5 @@
 #!/bin/bash
+# SPDX-License-Identifier: MIT
 # Stage a minimal iPhone 8 Plus iOS 16 root on an already-mounted HFSX volume.
 # Run as root: iOS UID/GID values are part of the boot contract.
 set -euo pipefail

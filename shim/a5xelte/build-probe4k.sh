@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: MIT
 # Build a separate, unflashed Samsung 4 KiB MMU diagnostic Image.
 set -eu
 cd "$(dirname "$0")"

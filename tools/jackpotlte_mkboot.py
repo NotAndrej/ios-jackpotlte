@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
 """Build a Samsung (Exynos) boot.img v0 that reuses the stock header and DT.
 
 Copied from tools/dreamlte_mkboot.py (S8). The Samsung v0 layout is not

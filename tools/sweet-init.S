@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MIT */
 /*
  * First userspace program for SWEET bring-up: mockfs serves the RAM disk
  * itself as /sbin/launchd, so this static binary is PID 1. It proves that
