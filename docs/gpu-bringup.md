@@ -1,7 +1,8 @@
 # Galaxy A8 2018 (jackpotlte) GPU / Metal bring-up
 
-Branch `jackpotlte-gpu`, forked from `main` at `523beb5`. Independent of the
-touch work on `main`.
+On `main` since 2026-11-10: the `jackpotlte-gpu` branch was fast-forwarded into
+`main` and then retired (worktree, local branch and remote branch all deleted),
+so the GPU patches and the touch work are one series again (`0152` onward).
 
 Plan: `docs/jackpotlte-mali.md` — M0 probe -> M1 power/clock -> M2 MMU + one
 job -> M3 `RedwoodMali`-shaped user client over `SweetSurface` -> M4 Metal
@@ -53,35 +54,61 @@ stable=1`, `GPU_ID=0x60000002 id=0x6000 arch=6 rev=0x2`, and `reset done,
 GPU up and cores powered` with `shaders=0x3 tiller=0x1 l2=0x1`, so **M0 and
 M1 are done on hardware**. See `JACKPOTLTE_PROGRESS.md` on `main`.)
 
-### M2 in patch `0152` (green build, not yet on the phone)
+### M2 in patch `0152` (green build, image packed, not yet on the phone)
 
 CI `42692773680` (branch `jackpotlte-gpu` @ `d226b5d`, `0152` on top of
 main's `0151`; the branch was rebased onto main and the patch renumbered
-`0149` -> `0152` so the two branches no longer collide at `0149`) is
-**success**, and the downloaded `xnu-kernel`
-(16,554,768 B, sha256 `d578efa6...418b9d5b`) carries
-`JACKPOTLTE MALI: mmu_features=...`, `job 1, identity mode`, `job 2, GPU page
-tables`, `JACKPOTLTE MALI: M2 done as0_status=... fault=...` and
-`-- the GPU ran it`, so `0152` applied.  Image packed:
-`/var/tmp/a8-xnu-jt34-gpum2.img` (sha256
-`ba78612699093ba3b364ed596f8f472661ab8e38523530ee1ea22e6c7d7c790b`), base
-cmdline plus `jtmaliprobe=1 jtmalipwr=1 jtmalijob=1`.  M2 is done only when the phone
-prints `word=0xc0ffee01` for **both** jobs; nothing has been flashed from
-this branch yet.
+`0149` -> `0152` so the two branches no longer collide at `0149`) was
+**success**.  After the branch became `main` (`0c48a82`, a fast-forward), run
+`42866306317` rebuilt the same tree, also **success**; its `xnu-kernel`
+(16,571,352 B, sha256 `bca16b89...434cf3e3`) carries `mmu_features=...`,
+`job 1, identity mode`, `job 2, GPU page tables`, `M2 done as0_status=...
+fault=...` and `-- the GPU ran it`, **and** the `0150`/`0151` touch strings
+(`A8 TOUCH: event backlog left=... draining`, `A8 TOUCH: lift watchdog`) with
+`sweethidclients` present.
+
+> A watcher first reported the two `job ...` strings missing. It had grepped
+> `kernel.development.a5xelte.lse.txt` (a 30-byte sidecar) instead of
+> `kernel.development.a5xelte`, because its `find -regex` matched the sidecar
+> first. Always point `strings`/`grep` at the real kernel file.
+
+Image packed from that verified kernel:
+`/var/tmp/a8-xnu-jt39-gpum2.img` (sha256
+`ae6a99e9d055d6fe48ed8fc139396b16621cd45b6d2a89119acdb44bc2379fde`), base
+cmdline plus `jtmaliprobe=1 jtmalipwr=1 jtmalijob=1` (`cpus=8`, no
+`sweethidtest`).  M2 is done only when the phone prints `word=0xc0ffee01` for
+**both** jobs; nothing has been flashed from this series yet.
+
+### M3 in patches `0153` + `0154` (written, not built)
+
+- `0153-jackpotlte-mali-engine.patch` turns the M2 helpers into a persistent
+  engine (gate `jtmalimetal=1`, after `jtmaliprobe=1 jtmalipwr=1`): dynamic
+  three-level page tables (`jt_pt_below`/`jt_map_page`/`jt_unmap_page`), the
+  GPU-address allocator, `jackpotlte_mali_parameter/address/map/unmap/mapped/
+  submit`, and a 64-entry job queue run by a worker thread
+  (`jackpotlte_mali_enqueue/wait`). Ported from `redwood_mali.c:583-1146`.
+- `0154-jackpotlte-mali-user-client.patch` adds
+  `iokit/Kernel/arm/JackpotlteMali.cpp` (registered in
+  `iokit/conf/files.arm64`, started from `IOKitBSDInit` after the probe). It
+  speaks the panfrost ioctls `0x40-0x48`, plus `0x7d` (wait for a job by
+  number) and `0x7e` (a `SweetSurface`'s pixels as a buffer). Buffers are
+  kernel-user-shared memory; a surface is mapped from its pixel `offset` so the
+  buffer's base is pixel 0. The service is created only once
+  `jackpotlte_mali_ready()` is true.
+
+Success for M3 on the phone: `JACKPOTLTE MALI: engine up, addresses from
+0x1000000` and `JackpotlteMali: the GPU is there for programs to draw with`.
 
 ## Next
 
-1. CI-green on this branch (`gh workflow run xnu.yml --ref jackpotlte-gpu`),
-   verify the kernel really contains the strings (`strings | grep JACKPOTLTE MALI`).
-2. Pack with `cpus=8 ... jtmaliprobe=1` (probe only) and flash BOOT; read the
-   `g3d_config`/`g3d_status` line. That answers whether S-Boot leaves G3D up.
-3. Then pack with `jtmalipwr=1`, flash, and read the power/QCH/PLL/gate lines
-   plus `GPU_ID`. A Bifrost GPU_ID (arch nibble 6) with `M1 done, GPU up and
-   reset` and the `*_READY` bits set is M1 done.
-4. M2: MMU + one job (`0152`, written; recipe below).
-5. Boot `0152` with `jtmalijob=1` (after `jtmalipwr=1`) and read the two
-   `job ... -- the GPU ran it` lines. M2 is done when job 1 (identity) and
-   job 2 (GPU page tables) both print `word=0xc0ffee01`.
+1. Flash `/var/tmp/a8-xnu-jt39-gpum2.img` to BOOT and read the two
+   `job ... -- the GPU ran it` lines; both must print `word=0xc0ffee01`
+   (that closes M2).
+2. Build `0153`+`0154` (push to `main` triggers `xnu.yml`), verify the new
+   strings (`engine up`, `JackpotlteMali:`) in the downloaded kernel, then boot
+   with `jtmalimetal=1` and confirm the engine and the service come up.
+3. M4: build the `redwood_drm`-shaped shim and Mesa with Bifrost **v6**
+   enabled, then publish `IOAcceleratorES` properties under a boot arg.
 
 ## M2 recipe (from the reference, written as `0152`)
 

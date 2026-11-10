@@ -999,6 +999,27 @@ Note the host is Linux with no Apple SDK/KDK, so **kernel builds only come
 from the `macos-15` CI runner**; push triggers only `main`/`s8-dreamlte`, so the
 branch must be built with `gh workflow run xnu.yml --ref jackpotlte-gpu`.
 
+**Merged to `main` and the branch retired (2026-11-10).** The GPU series is no
+longer a side branch: `jackpotlte-gpu` (`0c48a82`, M2 in `0152` on top of the
+touch fixes `0148`-`0151`) was fast-forwarded into `main` and pushed; the
+worktree, the local branch and `origin/jackpotlte-gpu` were then deleted. From
+here GPU patches go to `main` like every other patch, so `xnu.yml` builds them
+on push (no more manual `--ref`, and the note above no longer applies).
+
+M2's kernel was verified after the merge (run `42866306317`, success): the real
+`kernel.development.a5xelte` (16,571,352 B, sha256 `bca16b89...434cf3e3`)
+carries `job 1, identity mode`, `job 2, GPU page tables`, `-- the GPU ran it`,
+`M2 done as0_status=...` and the `0150`/`0151` touch strings. Image:
+`/var/tmp/a8-xnu-jt39-gpum2.img` (sha256 `ae6a99e9...2379fde`, base cmdline +
+`jtmaliprobe=1 jtmalipwr=1 jtmalijob=1`). A watcher had wrongly reported the
+two job strings missing: it grepped a 30-byte `.lse.txt` sidecar instead of the
+kernel binary.
+
+M3 is written, not yet built: `0153` (persistent engine — dynamic three-level
+page tables, GPU address allocator, job queue and worker thread) and `0154`
+(`iokit/Kernel/arm/JackpotlteMali.cpp`, the panfrost user client over
+`SweetSurface`, started from `IOKitBSDInit`), both gated by `jtmalimetal=1`.
+
 ### All eight cores in one logical cluster (`0137`) + the iOS-root gap (2026-11-08)
 
 `0137-jackpotlte-single-logical-cluster.patch` (31 insertions, 2 hunks) takes
