@@ -1,3 +1,13 @@
+# DRAFT — SUPERSEDED by xnu/patches/0155-jackpotlte-metal-accelerator.patch
+#
+# The real patch is much smaller than this sketch: it publishes the
+# IOAcceleratorES service from AppleCLCD::start and sets the two properties
+# under boot-arg jtmetal=1.  There is no setProperties() method and no
+# jtAcceleratorPublish() found by a root walk in the reference's real
+# implementation either (iokit/Kernel/MiniIOMobileFramebuffer.cpp:1934-1971 --
+# class, then publishAccelerator(provider) called with the framebuffer's own
+# provider).  Kept for the reasoning about the boot-arg gate; do not apply.
+#
 # DRAFT — NOT APPLIED, NOT IN xnu/patches/
 #
 # jackpotlte IOAcceleratorES service skeleton (Metal discovery step 1-2).

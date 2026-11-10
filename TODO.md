@@ -71,5 +71,7 @@ deleted on 2026-11-10); build results and the image details live in
       `/var/tmp/a8-xnu-jt42-gpum3.img` (sha256 `536ab7ed...4a120901`).  What
       is left is the boot: read `JACKPOTLTE MALI: engine up` plus
       `JackpotlteMali: the GPU is there for programs to draw with`.
-- [ ] M4: `redwood_drm`-shaped shim + Mesa built with Bifrost **v6**, then
-      publish `IOAcceleratorES` properties under a boot arg.
+- [ ] M4: the `JackpotlteMetal` bundle (Metal plug-in + AIR frontend) and Mesa
+      built with Bifrost **v6**.  Its first step is written: `0155` publishes
+      the `IOAcceleratorES` service and, under boot-arg `jtmetal=1`, the two
+      properties that name the plug-in (`docs/gpu-bringup.md`).

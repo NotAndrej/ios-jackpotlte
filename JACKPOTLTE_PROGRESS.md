@@ -1047,6 +1047,24 @@ the driver object) and `sweet_surface_copy`, and that
 `jackpotlte_mali_service_start` is exported unmangled.  So M3's remaining
 unknowns are runtime ones, not build ones.  Recipe in `docs/gpu-bringup.md`.
 
+**M4 step 1 written as `0155` (2026-11-10, build-green, not yet on the phone).**
+`0155-jackpotlte-metal-accelerator.patch` adds the `IOAcceleratorES` service
+Metal discovers, published from `AppleCLCD::start` in
+`iokit/Kernel/arm/SweetFramebuffer.cpp` — the service the reference adds in
+`iokit/Kernel/MiniIOMobileFramebuffer.cpp:1934-1971`.  It is always published
+and carries no Metal properties; with boot-arg `jtmetal=1` it names
+`MetalPluginName` = `JackpotlteMetal` and `MetalPluginClassName` =
+`JackpotlteMetalDevice`, the two keys Metal reads before it loads a plug-in.
+The gate stays off by default because a device that cannot draw yet makes an
+asking program assert and CoreAnimation would pick Metal for the screen.
+Checked without a device: the patch applies clean to a green run's
+post-`0154` `xnu-buildtree` and `tools/xnu-cc.py` compiles
+`SweetFramebuffer.cpp` with that run's own command (`0 of 1 files failed`).
+Boot check: with `jtmetal=1`, `the accelerator names JackpotlteMetal as its
+Metal plug-in`; without it, nothing.  The draft
+`docs/drafts/jackpotlte-mali/0138-jackpotlte-ioacceleratores.draft` is
+superseded and now says so.
+
 ### All eight cores in one logical cluster (`0137`) + the iOS-root gap (2026-11-08)
 
 `0137-jackpotlte-single-logical-cluster.patch` (31 insertions, 2 hunks) takes

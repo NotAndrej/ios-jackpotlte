@@ -160,8 +160,38 @@ no `sweethidtest`; the cmdline was read back out of the image to check).
    `JACKPOTLTE MALI: engine up, addresses from 0x1000000` plus
    `JackpotlteMali: the GPU is there for programs to draw with`; that closes
    M3.  Both images are packed and waiting — the phone is the blocker.
-3. M4: build the `redwood_drm`-shaped shim and Mesa with Bifrost **v6**
-   enabled, then publish `IOAcceleratorES` properties under a boot arg.
+3. M4: `0155` (the accelerator service Metal discovers) is written and built;
+   what is left is the `JackpotlteMetal` bundle itself, the
+   `redwood_drm`-shaped shim, and Mesa with Bifrost **v6** enabled.
+
+### M4 step 1 in `0155` (written, build-green, not yet on the phone)
+
+`0155-jackpotlte-metal-accelerator.patch` publishes an `IOAcceleratorES`
+service from `AppleCLCD::start`, the class the reference adds in
+`iokit/Kernel/MiniIOMobileFramebuffer.cpp:1934-1971`.  It exists unconditionally
+and carries **no** Metal properties by default: CoreAnimation waits for a
+service of that class before it looks for a GPU at all, and one that does not
+name its Metal driver is passed over by Metal, which is the same software
+renderer as before.  With boot-arg `jtmetal=1` it also sets
+`MetalPluginName` = `JackpotlteMetal` and `MetalPluginClassName` =
+`JackpotlteMetalDevice` — the names the bundle in M4's next step must have.
+
+Why the gate is not optional: with those properties Metal loads the bundle and
+treats the service as a real GPU; a device that cannot draw yet makes a program
+that asks for Metal assert, and CoreAnimation would then pick Metal for the
+screen (the reference hit exactly this: `docs/metal-plan.md`, step 1's "the next
+wall").
+
+Checked here, without CI or a device: the patch applies to a green run's
+post-`0154` `xnu-buildtree` (`git apply --check`, clean) and `tools/xnu-cc.py`
+compiles `iokit/Kernel/arm/SweetFramebuffer.cpp` with that run's own compile
+command (`0 of 1 files failed`).  Boot check when the phone is free: with
+`jtmetal=1` the log must show `the accelerator names JackpotlteMetal as its
+Metal plug-in`; without it, no such line and no change.
+
+The earlier sketch of this step (`docs/drafts/jackpotlte-mali/
+0138-jackpotlte-ioacceleratores.draft`) is superseded by `0155` and says so.
+
 
 ## M4 groundwork: what the reference's userland needs from us
 
