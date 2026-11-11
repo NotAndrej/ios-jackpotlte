@@ -29,17 +29,18 @@ lib=$repo/userspace/libjackpotlte
 mkdir -p "$out"
 
 # -Wall -Wextra -Werror on everything: the request layer's structures are an
-# ABI, and a warning there is a bug.
+# ABI, and a warning there is a bug.  No -Wl flags here: the -c steps below
+# cannot take them, and clang counts an unused one as an error.
 common=(-O2 -Wall -Wextra -Werror -Wpedantic)
 
 # -Wl,-undefined,dynamic_lookup: IOKit's user entry points are declared in the
-# sources, not linked (the iOS SDK ships no IOKit headers), so the device's own
-# IOKit resolves them when the tool loads.  It belongs at link time, not in the
-# archive.
-probe_common=("${common[@]}" -Wl,-undefined,dynamic_lookup)
+# sources, not linked (neither the iOS SDK nor the macOS one ships IOKit
+# headers for these), so the platform's own IOKit resolves them at load time.
+# Link time only - an archive is not linked.
+lookup=(-Wl,-undefined,dynamic_lookup)
 
 echo "--- host copy of the probe (the ABI self-test) ---"
-clang "${common[@]}" -o "$out/maliprobe.host" "$probe_src"
+clang "${common[@]}" "${lookup[@]}" -o "$out/maliprobe.host" "$probe_src"
 
 echo "--- host copy of the M4 request layer's test ---"
 # The sanitizers are the reason this is a host build and not an arm64 one: they
@@ -55,7 +56,7 @@ clang "${common[@]}" -c "$lib/jackpotlte_iokit.c" -o "$out/jackpotlte_iokit.host
 
 echo "--- arm64 iOS probe ---"
 sdk=$(xcrun --sdk iphoneos --show-sdk-path)
-xcrun --sdk iphoneos clang "${probe_common[@]}" -target arm64-apple-ios16.0 \
+xcrun --sdk iphoneos clang "${common[@]}" "${lookup[@]}" -target arm64-apple-ios16.0 \
 	-isysroot "$sdk" -o "$out/maliprobe" "$probe_src"
 
 echo "--- arm64 iOS libjackpotlte.a ---"
