@@ -1,6 +1,6 @@
 --- a/iokit/Kernel/arm/SweetFramebuffer.cpp
 +++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
-@@ -235,19 +235,38 @@ AppleCLCD::start(IOService *provider)
+@@ -235,19 +235,42 @@ AppleCLCD::start(IOService *provider)
  	PE_parse_boot_argn("sweetfb_native", &native, sizeof(native));
  	fLogicalW = fWidth;
  	fLogicalH = fHeight;
@@ -23,6 +23,10 @@
 -#elif !defined(ARM64_BOARD_CONFIG_A5XELTE)
 +	fOffX = (int32_t)(fLogicalW - fWidth) / 2;
 +	/* fOffY stays 0: the extra rows are squeezed, not cropped. */
++	if (fLogicalH > fHeight) {
++		IOLog("SWEET FB: iPhone X mode %ux%u squeezed onto the %ux%u panel\n",
++		    fLogicalW, fLogicalH, fWidth, fHeight);
++	}
 +#elif defined(DREAMLTE)
 +	if (!native) {
 +		fLogicalW = SWEET_FB_LOGICAL_W;
@@ -42,7 +46,7 @@
  	fLock = IOLockAlloc();
  	fClients = OSArray::withCapacity(4);
  	fSurface = sweet_surface_create_physical(fPhys, fWidth, fHeight, fRowBytes, SWEET_FB_FORMAT_BGRA);
-@@ -449,6 +468,10 @@ AppleCLCD::present(const uint8_t *rec)
+@@ -449,6 +472,10 @@ AppleCLCD::present(const uint8_t *rec)
  		}
  	}
  
@@ -53,7 +57,7 @@
  	for (uint32_t layer = 0; layer < SWEET_FB_LAYERS; layer++) {
  		uint32_t id = get32(rec, 0x54 + 4 * layer);
  		const uint8_t *a = rec + 0x64 + 16 * layer;
-@@ -503,18 +526,46 @@ AppleCLCD::present(const uint8_t *rec)
+@@ -503,18 +530,46 @@ AppleCLCD::present(const uint8_t *rec)
  		if (h > (int32_t)s->height - sy) {
  			h = (int32_t)s->height - sy;
  		}

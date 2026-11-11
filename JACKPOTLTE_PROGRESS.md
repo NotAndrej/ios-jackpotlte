@@ -2671,9 +2671,12 @@ exactly once, the source rows rise monotonically from 0 to 2434, and all 1080
 columns are covered. That says nothing about the phone.
 
 On the phone this is right only if the red strip is gone from the lock screen
-**and** the console line reads `presented as 1125x2436`. A squeezed picture
-with the strip still there would mean the canvas did not reach backboardd;
-`sweetfb_native=1` puts the old geometry back.
+**and** the console shows `SWEET FB: iPhone X mode 1125x2436 squeezed onto the
+1080x2220 panel` followed by the existing `presented as 1125x2436` (the first
+line is the marker to grep for in the downloaded kernel: a green build is not
+a patch that applied). A squeezed picture with the strip still there would
+mean the canvas did not reach backboardd; `sweetfb_native=1` puts the old
+geometry back.
 
 This and the quiet console (`a5fb_noconsole=1`) go into one new BOOT. Its
 cmdline is `jt43`'s with that one word changed, but because `0156` is a kernel
