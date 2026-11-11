@@ -2087,7 +2087,8 @@ swipe up from the bottom of the lock screen, and read the on-screen
 `SWEET HID: clients buttons=... touch=...` line together.
 
 **Flashed to `BOOT` and rebooted at 21:00:20** (`/tmp/opencode/touch/flash-jt33.log`),
-device `52005b4aec8d15b1`.  Result pending: a swipe up from the lock screen
+the phone's fastboot serial (recorded locally only, not in this file).  Result
+pending: a swipe up from the lock screen
 and a photo of the on-screen counters.
 
 ### `0148` — the jt33 boot logged nothing at all
@@ -2261,7 +2262,7 @@ trusted on its own again. Both images are packed in `/var/tmp/`:
 `a8-xnu-gpu-probe.img` (`jtmaliprobe=1`) and `a8-xnu-gpu-pwr.img`
 (`jtmaliprobe=1 jtmalipwr=1`), on the `jt28`-style base cmdline.
 
-**Probe flashed 2026-11-09 16:48** (`flash-watch.log`): device `52005b4aec8d15b1`
+**Probe flashed 2026-11-09 16:48** (`flash-watch.log`): the phone
 appeared in fastboot as the queued watcher started, `BOOT` was written and the
 phone rebooted (probe sha256 `a556f11824251a67123ad9497810c8a61b76dc8e974cc8d0120cb4955cac8c7f`).
 Device result pending: photograph the `JACKPOTLTE MALI:` block —
@@ -2285,7 +2286,7 @@ worth more than two: a **combined** image is armed instead —
 `jtmalipwr`). One boot then answers both (a) whether the PMU-window fix stops
 the M0 panic and what `g3d_config`/`status`/`GPU_ID` read, and (b) the touch
 client count. Watcher `/tmp/opencode/gpu/wait-probe-hidtest.sh` (pid 64555)
-flashes it once when `52005b4aec8d15b1` next appears in fastboot;
+flashes it once when the phone next appears in fastboot;
 `/tmp/opencode/gpu/flash-probe-hidtest.log` records it. The earlier
 `a8-xnu-jt29-hidtest.img` watcher (pid 58899) was **stopped**: `jt29` predates
 the PMU-window fix, so that kernel carries the panicking `JT_PMU_WINDOW
@@ -2682,3 +2683,38 @@ This and the quiet console (`a5fb_noconsole=1`) go into one new BOOT. Its
 cmdline is `jt43`'s with that one word changed, but because `0156` is a kernel
 change the image also carries a rebuilt kernel, so it is no longer a
 cmdline-only repack.
+
+### `jt44` built and checked, not yet flashed (2026-11-11)
+
+CI `43033244620` (commit `e219bf1`) finished **success**. The downloaded
+`kernel.development.a5xelte` (16,601,960 B, sha256
+`28228568eb7c8c4d56b08643eca2178011a620207af7266767ff8a2a100f8c50`, matching
+the artifact's own `SHA256SUMS`) carries the string
+`SWEET FB: iPhone X mode %ux%u squeezed onto the %ux%u panel`, so `0156` is in
+the kernel that was packed and not only in the patch series.
+
+`jt44` = that kernel + the regenerated ADT + the `jt43` cmdline with
+`a5fb_noconsole=1` in place of `sweetfb_noconsole=1`, packed with `jt43` as
+the header/DTBH source:
+
+```
+17,522,704 B  /var/tmp/a8-xnu-jt44-quiet-iphonex.img
+sha256 d86b760e674fa2411434fc254f55398cf2d3b03b8d40c37b790d48e119d61109
+```
+
+Read back out of the packed image (not out of the build inputs): the payload
+magic is at `0xd800`, the cmdline is the expected 302 bytes ending
+`... jtmalimetal=1 a5fb_noconsole=1`, `/arm-io/disp0` has
+`canvas-width/height 1125x2436`, and `/a5xelte-fbcon` still has 1080x2220
+(that node is the early console's scan-out buffer, not the presented size).
+`jackpotlte_bootimg_info.py` reports kernel 0xcb50, ramdisk 0xfd3db0,
+dt 0x870400 and the same addresses as before.
+
+The phone was not attached to this machine, so nothing was flashed. To try it:
+`fastboot flash BOOT /var/tmp/a8-xnu-jt44-quiet-iphonex.img`. `jt43` stays the
+fallback; if `jt44` shows a squeezed
+picture with the red bar still there, repack the same payload with
+`sweetfb_native=1` added to the cmdline and flash that.
+
+Also: CI `43032631715` went red on `jackpotlte_drm.h/.c` (`-Wnewline-eof`);
+fixed in `46829ab`, and `43033244632` is green.
