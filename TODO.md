@@ -31,11 +31,13 @@ only for approved destructive steps, never bootloaders / EFS (p3) / recovery
 - [ ] `sweetfb_noconsole=1` does nothing on the A8: this board reads
       **`a5fb_noconsole`** (`0109`). `jt31`/`jt38`/`jt43` were all packed with
       the wrong name, so the console kept painting over the GUI in every one
-      of them. Repack any quiet image with `a5fb_noconsole=1`.
+      of them. **Confirmed on the device 2026-11-11** (lockscreen up, kernel
+      text still drawn over it). Repack with `a5fb_noconsole=1`; nothing else
+      has to change.
 
 ## Home screen shows only ~6 apps
 
-- [ ] Move the 32 bundles in `/private/var/staged_system_apps` (Maps, Music,
+- [x] Move the 32 bundles in `/private/var/staged_system_apps` (Maps, Music,
       Weather, Clock, Calculator, Files, Books, Notes, Mail, ...) into
       `/Applications`: iOS 16 installs them onto the App cryptex at first boot,
       which our single plain-HFS root cannot do, so LaunchServices never
@@ -43,10 +45,8 @@ only for approved destructive steps, never bootloaders / EFS (p3) / recovery
       `tools/jackpotlte/apply-root-tweaks.sh` (and the same step in
       `tools/mkiosroot.sh`).
       Flashed 2026-11-10 (owner approved) with the 32 apps promoted and the
-      GPU probe installed; waiting on the photo of the home screen to confirm
-      the extra icons appear (if they do not, LaunchServices' cache may need
-      clearing - `com.apple.LaunchServices-*.csstore` - and that means another
-      USERDATA flash).
+      GPU probe installed. **All of them show on the home screen on the
+      2026-11-11 boot** - no LaunchServices cache clearing was needed.
 
 ## Device identity
 

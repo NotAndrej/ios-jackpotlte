@@ -11,11 +11,13 @@
  * It is not a test of the kernel.  "Green" here means the layer asks correctly,
  * nothing about whether the GPU answers; that needs the phone.
  */
+#include "jackpotlte_drm.h"
 #include "jackpotlte_gpu.h"
 
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 
 static unsigned failures;
 
@@ -173,6 +175,35 @@ reply_offset(struct fake *f, unsigned char *data, size_t size)
 	(void)f;
 	(void)size;
 	r->offset = 0x02000000;
+}
+
+/* 0154:551: the kernel keeps every buffer and says so. */
+static void
+reply_madvise(struct fake *f, unsigned char *data, size_t size)
+{
+	struct jt_madvise_req *r = (struct jt_madvise_req *)data;
+
+	(void)f;
+	(void)size;
+	r->retained = 1;
+}
+
+/* A SweetSurface as the kernel describes it (0154:328-351). */
+static void
+reply_surface(struct fake *f, unsigned char *data, size_t size)
+{
+	struct jt_surface_req *r = (struct jt_surface_req *)data;
+
+	(void)f;
+	(void)size;
+	r->handle = 9;
+	r->size = 0x400000;
+	r->offset = 0;
+	r->rowBytes = 1080 * 4;
+	r->width = 1080;
+	r->height = 2220;
+	r->pixelFormat = 0x4;
+	r->planes = 1;
 }
 
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
@@ -346,6 +377,27 @@ test_param_and_release(void)
 }
 
 static void
+test_madvise(void)
+{
+	struct fake *f;
+	struct jt_gpu *g = open_with(&f);
+	struct jt_madvise_req sent;
+	uint32_t retained = 0;
+
+	arm(f, JT_PANFROST_MADVISE, reply_madvise);
+	CHECK(jt_bo_madvise(g, 7, 1 /* PANFROST_MADV_DONTNEED */, &retained) == 0,
+	    "madvise failed");
+	memcpy(&sent, f->sent, sizeof(sent));
+	CHECK(f->selector == JT_PANFROST_MADVISE, "selector %#x", f->selector);
+	CHECK(f->size == sizeof(struct jt_madvise_req), "sent %zu bytes", f->size);
+	CHECK(sent.handle == 7 && sent.madv == 1, "madvise fields wrong");
+	CHECK(retained == 1, "retained %u, not the kernel's answer", retained);
+
+	CHECK(jt_bo_madvise(g, 0, 0, &retained) == -EINVAL, "handle 0 was accepted");
+	jt_gpu_close(g);
+}
+
+static void
 test_surface(void)
 {
 	struct fake *f;
@@ -362,6 +414,185 @@ test_surface(void)
 	CHECK(sent.surface == 12 && sent.handle == JT_SURFACE_DESCRIBE,
 	    "surface %u handle %#x", sent.surface, sent.handle);
 	jt_gpu_close(g);
+}
+
+/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
+ * The libdrm face (jackpotlte_drm.c): the same fake, reached through the
+ * request codes Mesa uses.  What is checked is the translation - that a DRM
+ * request becomes the kernel's structure, with the right fields, and that the
+ * kernel's answer comes back in the caller's structure.
+ */
+static void
+test_drm_ioctl(void)
+{
+	struct fake *f;
+	struct jt_gpu *g = open_with(&f);
+	struct jt_create_bo_req create;
+	struct jt_get_param_req param;
+	struct jt_mmap_bo_req mmap_bo;
+	struct jt_madvise_req madvise;
+	struct jt_submit_req submit;
+	struct jt_wait_req waited;
+	uint32_t handles[2] = { 7, 8 };
+	unsigned char dummy[16] = { 0 };
+
+	jackpotlte_drm_attach(g);
+
+	/* The code's size field is the structure's size: drmIoctl() has only
+	 * the code, so that is all it can tell the kernel. */
+	memset(&create, 0, sizeof(create));
+	create.size = 16384;
+	arm(f, JT_PANFROST_CREATE_BO, reply_create);
+	CHECK(drmIoctl(-1, JACKPOTLTE_DRM_REQUEST(JT_PANFROST_CREATE_BO, sizeof(create)),
+	    &create) == 0, "create_bo through drmIoctl failed");
+	CHECK(f->selector == JT_PANFROST_CREATE_BO, "selector %#x", f->selector);
+	CHECK(f->size == sizeof(struct jt_create_bo_req), "sent %zu bytes", f->size);
+	CHECK(create.handle == 7 && create.offset == 0x01000000, "the answer was not written back");
+
+	/* A request unknown to the kernel is refused here, without a call. */
+	CHECK(jackpotlte_drm_ioctl(g, JACKPOTLTE_DRM_REQUEST(0x46, 8), dummy, 8) == -ENOTTY,
+	    "the performance counter request was not -ENOTTY");
+	CHECK(jackpotlte_drm_ioctl(g, JACKPOTLTE_DRM_REQUEST(0x0a, 8), dummy, 8) == -ENOTTY,
+	    "a JM context request was not -ENOTTY");
+	CHECK(jackpotlte_drm_ioctl(g, JACKPOTLTE_DRM_REQUEST(0x40, 16), dummy, 16) == -EINVAL,
+	    "a short submit structure was accepted");
+
+	memset(&param, 0, sizeof(param));
+	param.param = JT_PARAM_GPU_ID_HI;
+	arm(f, JT_PANFROST_GET_PARAM, reply_param);
+	CHECK(jackpotlte_drm_ioctl(g, JACKPOTLTE_DRM_REQUEST(JT_PANFROST_GET_PARAM, sizeof(param)),
+	    &param, sizeof(param)) == 0, "get_param failed");
+	CHECK(param.value == 0x7010, "value %#llx", (unsigned long long)param.value);
+
+	/* MMAP_BO is answered here: the offset is bookkeeping (the mapping is by
+	 * handle), and the kernel is not asked. */
+	memset(&mmap_bo, 0, sizeof(mmap_bo));
+	mmap_bo.handle = 5;
+	CHECK(jackpotlte_drm_ioctl(g, JACKPOTLTE_DRM_REQUEST(JT_PANFROST_MMAP_BO, sizeof(mmap_bo)),
+	    &mmap_bo, sizeof(mmap_bo)) == 0, "mmap_bo failed");
+	CHECK(mmap_bo.offset == (uint64_t)5 << 12, "offset %#llx", (unsigned long long)mmap_bo.offset);
+
+	memset(&madvise, 0, sizeof(madvise));
+	madvise.handle = 7;
+	madvise.madv = 1;
+	arm(f, JT_PANFROST_MADVISE, reply_madvise);
+	CHECK(jackpotlte_drm_ioctl(g, JACKPOTLTE_DRM_REQUEST(JT_PANFROST_MADVISE, sizeof(madvise)),
+	    &madvise, sizeof(madvise)) == 0, "madvise failed");
+	CHECK(madvise.retained == 1, "retained was not written back");
+
+	/* The submit: the kernel's number comes back in `jc`, and the sync
+	 * object the caller named is given that number. */
+	memset(&submit, 0, sizeof(submit));
+	submit.jc = 0x01000000;
+	submit.out_sync = 3;
+	submit.bo_handles = (uint64_t)(uintptr_t)handles;
+	submit.bo_handle_count = 2;
+	submit.requirements = JT_JD_REQ_FS;
+	f->job_seq = 42;
+	CHECK(jackpotlte_drm_ioctl(g, JACKPOTLTE_DRM_REQUEST(JT_PANFROST_SUBMIT, sizeof(submit)),
+	    &submit, sizeof(submit)) == 0, "submit failed");
+	CHECK(f->selector == JT_PANFROST_SUBMIT, "selector %#x", f->selector);
+	CHECK(f->size == 40, "the kernel was sent %zu bytes, not its 40-byte submit", f->size);
+	CHECK(submit.jc == 42, "the job's number was not written back in jc");
+	CHECK(jackpotlte_drm_last_seq() == 42, "last_seq %llu",
+	    (unsigned long long)jackpotlte_drm_last_seq());
+
+	CHECK(drmSyncobjWait(-1, &submit.out_sync, 1, 0, 0, NULL) == 0,
+	    "the sync object did not wait for the job");
+	memcpy(&waited, f->sent, sizeof(waited));
+	CHECK(f->selector == JT_WAIT, "selector %#x", f->selector);
+	CHECK(waited.seq == 42, "waited for job %llu", (unsigned long long)waited.seq);
+
+	/* A surface: described, and then made.  The field names differ from the
+	 * kernel's; the structure that travels is the kernel's. */
+	{
+		struct jackpotlte_drm_surface described;
+		struct jackpotlte_drm_surface made;
+		struct jt_surface_req sent;
+
+		memset(&described, 0, sizeof(described));
+		described.surface = 12;
+		described.handle = JACKPOTLTE_DRM_DESCRIBE;
+		CHECK(jackpotlte_drm_surface(-1, &described) == 0, "surface describe failed");
+		memcpy(&sent, f->sent, sizeof(sent));
+		CHECK(sent.surface == 12 && sent.handle == JT_SURFACE_DESCRIBE,
+		    "surface %u handle %#x", sent.surface, sent.handle);
+
+		memset(&made, 0, sizeof(made));
+		made.surface = 12;
+		made.handle = 0;
+		arm(f, JT_SURFACE, reply_surface);
+		CHECK(jackpotlte_drm_surface(-1, &made) == 0, "surface describe-and-make failed");
+		CHECK(made.handle == 9 && made.size == 0x400000, "the buffer was not written back");
+		CHECK(made.row_bytes == 1080 * 4 && made.width == 1080 && made.height == 2220,
+		    "row_bytes/width/height were not translated");
+		CHECK(made.pixel_format == 0x4 && made.planes == 1,
+		    "pixel_format/planes were not translated");
+	}
+
+	/* A buffer given back takes its mapping with it. */
+	{
+		static int memory[2];
+
+		f->map_address = memory;
+		f->map_size = sizeof(memory);
+		CHECK(jackpotlte_drm_map(-1, 5, 8) == memory, "map failed");
+		CHECK(jackpotlte_drm_map(-1, 5, 8) == memory, "the second map failed");
+		CHECK(f->maps == 1, "the second map called the kernel again (%u maps)", f->maps);
+		jackpotlte_drm_unmap(-1, 5, memory);
+		CHECK(f->unmaps == 0, "unmap did not keep the mapping");
+		CHECK(drmCloseBufferHandle(-1, 5) == 0, "close failed");
+		CHECK(f->unmaps == 1 && f->unmap_handle == 5, "the mapping was not unmapped");
+		CHECK(f->selector == JT_DRM_GEM_CLOSE, "selector %#x", f->selector);
+	}
+
+	jackpotlte_drm_attach(NULL);
+	jt_gpu_close(g);
+}
+
+static void
+test_drm_misc(void)
+{
+	drmVersionPtr version;
+	drmDevicePtr device = NULL;
+	uint64_t capability = 1;
+	uint32_t a = 0, b = 0;
+	int file = -1;
+
+	jackpotlte_drm_attach(NULL);
+	CHECK(drmOpenWithType("panfrost", NULL, DRM_NODE_RENDER) == -1,
+	    "a device was opened without a GPU");
+	CHECK(drmOpenWithType("msm", NULL, DRM_NODE_RENDER) == -1, "an msm device was opened");
+
+	version = drmGetVersion(-1);
+	CHECK(version != NULL, "no version");
+	if (version != NULL) {
+		CHECK(version->version_major == 1 && version->version_minor == 2,
+		    "version %d.%d", version->version_major, version->version_minor);
+		CHECK(version->name != NULL && strcmp(version->name, "panfrost") == 0,
+		    "name %s", version->name == NULL ? "(null)" : version->name);
+		drmFreeVersion(version);
+	}
+
+	CHECK(drmGetCap(-1, 0, &capability) == 0 && capability == 0, "get_cap");
+	CHECK(drmGetNodeTypeFromFd(-1) == DRM_NODE_RENDER, "node type");
+	CHECK(drmGetDevices2(0, NULL, 0) == 0, "device enumeration is not empty");
+	CHECK(drmGetDevice2(-1, 0, &device) == -ENODEV, "a device was found");
+	CHECK(drmPrimeHandleToFD(-1, 1, 0, &file) == -1 && errno == ENOSYS,
+	    "a buffer was exported as a descriptor");
+
+	CHECK(drmSyncobjCreate(-1, 0, &a) == 0 && a != 0, "syncobj create");
+	CHECK(drmSyncobjCreate(-1, 0, &b) == 0 && b != a, "the second syncobj is not new");
+	CHECK(drmSyncobjExportSyncFile(-1, a, &file) == 0 && file >= 0, "sync file export");
+	if (file >= 0) {
+		CHECK(drmSyncobjImportSyncFile(-1, b, file) == 0, "sync file import");
+		close(file);
+	}
+	CHECK(drmSyncobjTransfer(-1, b, 0, a, 0, 0) == 0, "syncobj transfer");
+	CHECK(drmSyncobjWait(-1, &b, 1, 0, 0, NULL) == 0, "an unsubmitted sync object did not wait");
+	CHECK(drmSyncobjReset(-1, &a, 1) == 0, "syncobj reset");
+	CHECK(drmSyncobjDestroy(-1, a) == 0, "syncobj destroy");
+	CHECK(drmSyncobjFDToHandle(-1, -1, &a) == -ENOSYS, "syncobj fd import is not ENOSYS");
 }
 
 static void
@@ -383,7 +614,10 @@ main(void)
 	test_submit();
 	test_waits();
 	test_param_and_release();
+	test_madvise();
 	test_surface();
+	test_drm_ioctl();
+	test_drm_misc();
 	test_errno_table();
 
 	if (failures != 0) {

@@ -2578,3 +2578,53 @@ CI `42884335048` (`main` @ `d074908`) finished **success**. The downloaded
 plug-in` plus `IOAcceleratorES`, `JackpotlteMetal` and `JackpotlteMetalDevice`
 symbols, so `0155` really compiled and linked into the shippable kernel (green
 alone is not trusted). It is not yet flashed; `jtmetal=1` is the gate.
+
+### Reached: iOS at the lockscreen, all 32 promoted apps on the home screen (2026-11-11)
+
+The `jt43` boot (USERDATA from 2026-11-10, 32 bundles promoted into
+`/Applications`) runs iOS to its lockscreen, and the home screen behind it
+shows **all 32 of the promoted apps**, not the six that were there before. So
+the diagnosis of the missing icons was right - iOS 16 expects to install them
+onto the App cryptex, which a single plain-HFS root cannot do - and the
+same-volume rename into `/Applications` is enough; no LaunchServices
+`csstore` clearing was needed.
+
+That is a screen result, seen on the phone, and it is the first time the iOS
+home screen has been complete on this board.
+
+**What is still wrong on the same screen:** the kernel console keeps drawing
+its text over the GUI. `jt43` was packed with `sweetfb_noconsole=1`, which
+this board ignores: `0109` reads **`a5fb_noconsole`** under
+`ARM64_BOARD_CONFIG_A5XELTE` and keeps the `sweetfb_noconsole` name only in the
+`#else`. So the quiet switch has never applied to an A5XELTE image. The fix is
+the boot-arg name and nothing else; a repacked BOOT (same kernel, cmdline
+changed) is enough, and it does not touch the root.
+
+### M4 step 2: the libdrm face of the shim (2026-11-11)
+
+`userspace/libjackpotlte/jackpotlte_drm.h` + `jackpotlte_drm.c` are the surface
+Mesa's panfrost is built against instead of libdrm. The names libdrm owns keep
+their meaning (`drmOpenWithType`, `drmIoctl`, `drmGetVersion`, the `drmSyncobj*`
+family, `drmPrimeFDToHandle` for a SweetSurface by its ID, ...), so Mesa calls
+them unmodified; what libdrm has no equivalent for is ours with a
+`jackpotlte_` prefix (`jackpotlte_drm_map`/`_unmap` in place of `mmap` on the
+device, `jackpotlte_drm_surface`, `jackpotlte_drm_last_seq`/`_wait_seq`).
+
+The part that differs from the reference's shim is that the structures are
+translated field by field instead of passed through: current Linux's
+`struct drm_panfrost_submit` is 48 bytes, 0154 reads exactly its 40-byte one
+and refuses a larger request, and the kernel's answer (the job's number) comes
+back in `jc` where Linux puts nothing. A request's low byte is still the
+kernel's selector, because 0154's selectors are Linux's ioctl numbers.
+`PANFROST_MADVISE` now carries the kernel's `retained` answer back (it was
+discarded), which is what panfrost reads to decide whether a buffer still has
+its memory.
+
+Checked on a build machine: `test_gpu_host` runs the whole drm face against the
+same fake IOKit (submit round trip with `out_sync` -> job number, the 40-byte
+size actually sent, create/get_param/madvise/mmap/close, surface describe and
+describe-and-make with the field translation, the mapping kept across
+unmap and dropped at close, version/cap/node/devices, sync objects and their
+sync files), under ASan+UBSan with `-Wall -Wextra -Werror -Wpedantic`. The ABI
+check still reports the 10 selectors, 10 structures and 2 constants identical
+to `0154`. Neither says anything about the GPU; only the phone can.

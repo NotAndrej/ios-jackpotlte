@@ -178,7 +178,7 @@ int  jt_bo_create(struct jt_gpu *g, uint64_t size, uint32_t *handle, uint64_t *g
 int  jt_bo_offset(struct jt_gpu *g, uint32_t handle, uint64_t *gpu_address);
 int  jt_bo_map(struct jt_gpu *g, uint32_t handle, void **address, uint64_t *size);
 int  jt_bo_unmap(struct jt_gpu *g, uint32_t handle, void *address, uint64_t size);
-int  jt_bo_madvise(struct jt_gpu *g, uint32_t handle, uint32_t madv);
+int  jt_bo_madvise(struct jt_gpu *g, uint32_t handle, uint32_t madv, uint32_t *retained);
 int  jt_bo_release(struct jt_gpu *g, uint32_t handle);
 
 int  jt_get_param(struct jt_gpu *g, uint32_t which, uint64_t *value);

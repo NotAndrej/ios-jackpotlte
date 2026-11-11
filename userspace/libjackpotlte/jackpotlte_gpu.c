@@ -169,12 +169,13 @@ jt_bo_unmap(struct jt_gpu *g, uint32_t handle, void *address, uint64_t size)
 }
 
 /* Ask the kernel to drop the memory, and read back whether it did.  This
- * kernel keeps it (retained = 1), which is a valid answer: panfrost then keeps
- * the buffer rather than assuming it was freed. */
+ * kernel keeps it (retained = 1, 0154:551), which is a valid answer: panfrost
+ * then keeps the buffer rather than assuming it was freed. */
 int
-jt_bo_madvise(struct jt_gpu *g, uint32_t handle, uint32_t madv)
+jt_bo_madvise(struct jt_gpu *g, uint32_t handle, uint32_t madv, uint32_t *retained)
 {
 	struct jt_madvise_req r;
+	int ret;
 
 	if (g == NULL || handle == 0) {
 		return -EINVAL;
@@ -182,7 +183,11 @@ jt_bo_madvise(struct jt_gpu *g, uint32_t handle, uint32_t madv)
 	memset(&r, 0, sizeof(r));
 	r.handle = handle;
 	r.madv = madv;
-	return request(g, JT_PANFROST_MADVISE, &r, sizeof(r));
+	ret = request(g, JT_PANFROST_MADVISE, &r, sizeof(r));
+	if (ret == 0 && retained != NULL) {
+		*retained = r.retained;
+	}
+	return ret;
 }
 
 /*

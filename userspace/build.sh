@@ -10,8 +10,9 @@
 #   out/maliprobe.host       host copy, for `--abi` (the check CI greps)
 #   out/maliprobe            arm64 iOS, for the phone
 #   out/test_gpu_host        host copy of the M4 request layer's test, for CI to run
-#   out/libjackpotlte.a      arm64 iOS: the M4 shim (request layer + iOS backend)
-#   out/jackpotlte_gpu.h     the header that goes with the archive
+#   out/libjackpotlte.a      arm64 iOS: the M4 shim (request layer + iOS backend + libdrm face)
+#   out/jackpotlte_gpu.h     the headers that go with the archive
+#   out/jackpotlte_drm.h     (jackpotlte_drm.h is installed as Mesa's xf86drm.h)
 #
 # The phone copies are not signed.  They do not have to be: the root they run in
 # boots with cs_enforcement_disable=1 and launchd_unsecure_cache=1, so an
@@ -45,9 +46,12 @@ clang "${common[@]}" "${lookup[@]}" -o "$out/maliprobe.host" "$probe_src"
 echo "--- host copy of the M4 request layer's test ---"
 # The sanitizers are the reason this is a host build and not an arm64 one: they
 # catch a wrong offset or a structure written past its size, which is exactly
-# what a mistake in this layer is.
+# what a mistake in this layer is.  jackpotlte_drm.c is in it too: its request
+# translation is the part Mesa will depend on, and it runs against the same
+# fake here.
 clang "${common[@]}" -O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer \
-	-o "$out/test_gpu_host" "$lib/jackpotlte_gpu.c" "$lib/test_gpu_host.c"
+	-o "$out/test_gpu_host" "$lib/jackpotlte_gpu.c" "$lib/jackpotlte_drm.c" \
+	"$lib/test_gpu_host.c"
 
 echo "--- the iOS backend parses without a Darwin header ---"
 # It declares its own IOKit externs on purpose (the SDK ships no headers for
@@ -67,10 +71,15 @@ for source in jackpotlte_gpu.c jackpotlte_iokit.c; do
 	xcrun --sdk iphoneos clang "${common[@]}" -target arm64-apple-ios16.0 \
 		-isysroot "$sdk" -c "$lib/$source" -o "$obj/${source%.c}.o"
 done
+# JACKPOTLTE_DRM_IOS: the drm face opens the service itself on the phone.  The
+# host test attaches its fake instead, and must not link IOKit (above).
+xcrun --sdk iphoneos clang "${common[@]}" -DJACKPOTLTE_DRM_IOS=1 \
+	-target arm64-apple-ios16.0 -isysroot "$sdk" \
+	-c "$lib/jackpotlte_drm.c" -o "$obj/jackpotlte_drm.o"
 rm -f "$out/libjackpotlte.a"
 libtool -static -o "$out/libjackpotlte.a" "$obj"/*.o
 rm -rf "$obj"
-cp "$lib/jackpotlte_gpu.h" "$out/jackpotlte_gpu.h"
+cp "$lib/jackpotlte_gpu.h" "$lib/jackpotlte_drm.h" "$out/"
 
 echo
 file "$out/maliprobe"
@@ -78,4 +87,4 @@ lipo -info "$out/libjackpotlte.a"
 echo
 echo "built:"
 ls -l "$out/maliprobe" "$out/maliprobe.host" "$out/test_gpu_host" \
-	"$out/libjackpotlte.a" "$out/jackpotlte_gpu.h"
+	"$out/libjackpotlte.a" "$out/jackpotlte_gpu.h" "$out/jackpotlte_drm.h"

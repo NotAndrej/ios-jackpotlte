@@ -65,8 +65,20 @@ in this process, a job chain submitted and waited for, and the GPU's parameters:
 userspace/libjackpotlte/jackpotlte_gpu.h     the API and the ABI it mirrors
 userspace/libjackpotlte/jackpotlte_gpu.c     the requests (no IOKit in here)
 userspace/libjackpotlte/jackpotlte_iokit.c   the iOS backend (IOKit)
+userspace/libjackpotlte/jackpotlte_drm.h     the libdrm face (installed as Mesa's xf86drm.h)
+userspace/libjackpotlte/jackpotlte_drm.c     and the requests it translates
 userspace/libjackpotlte/test_gpu_host.c      the host test
 ```
+
+`jackpotlte_drm.*` is the layer above that, and the one Mesa is built against.
+Mesa's panfrost calls libdrm: it opens a device, hands it Linux's DRM request
+codes, and maps buffers as if it had `mmap()` on the device. There is no libdrm
+on iOS, so this supplies the names panfrost uses with their libdrm meaning and
+adds `jackpotlte_drm_map`/`_unmap`/`_surface` for what libdrm has no
+equivalent for. Its request numbers are Linux's, and 0154's selectors are those
+numbers' low bytes, so nothing is renumbered — but the structures are
+translated field by field, because the kernel reads exactly its own 40-byte
+submit and refuses anything larger.
 
 `jackpotlte_gpu.c` knows nothing about Darwin. Everything it does with the
 kernel goes through a four-entry vtable (`call`, `map`, `unmap`, `close`), so
@@ -107,7 +119,8 @@ out/maliprobe.host     host copy of the probe, for `--abi`
 out/maliprobe          arm64 iOS probe
 out/test_gpu_host      host copy of the M4 layer's test (CI runs it)
 out/libjackpotlte.a    arm64 iOS: the M4 shim
-out/jackpotlte_gpu.h   the header the archive goes with
+out/jackpotlte_gpu.h   the headers the archive goes with
+out/jackpotlte_drm.h   (installed into Mesa's tree as xf86drm.h)
 ```
 
 CI runs the same script on `macos-15`, runs the two checks above, and uploads
