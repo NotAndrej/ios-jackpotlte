@@ -1,13 +1,16 @@
 name: userspace
 
 # Builds the phone's userspace in CI, because it is arm64 iOS (the iPhoneOS
-# SDK) and this project keeps no Mac.  Today that is jackpotlte-maliprobe; the
-# M4 shim, the Metal plug-in and Mesa will come through the same job.
+# SDK) and this project keeps no Mac.  That is jackpotlte-maliprobe and, now,
+# libjackpotlte - the M4 shim: the request layer a Linux-shaped GPU userspace
+# (Mesa's panfrost) or the Metal plug-in draws through.
 #
-# The ABI step is the point: the tool's structures and selectors are checked
-# against xnu/patches/0154, so a change on either side that they no longer
-# agree on goes red here instead of on the phone (see JACKPOTLTE_PROGRESS.md,
-# "green is not a patch that applied").
+# Two checks are the point.  The M4 layer's ABI is compared against the kernel's
+# own declarations (tools/jackpotlte/check-mali-abi.py compiles static asserts
+# out of xnu/patches/0154), and the request layer's behaviour is checked against
+# a fake IOKit under the sanitizers.  A structure that drifts, or a request that
+# stops carrying the right fields, goes red here instead of on the phone (see
+# JACKPOTLTE_PROGRESS.md, "green is not a patch that applied").
 
 on:
   workflow_dispatch:
@@ -15,6 +18,9 @@ on:
     branches: [main, s8-dreamlte]
     paths:
       - "userspace/**"
+      # The ABI check reads these, so a change to them has to run it.
+      - "xnu/patches/015*.patch"
+      - "tools/jackpotlte/check-mali-abi.py"
       - ".github/workflows/userspace.yml"
 
 concurrency:
@@ -28,13 +34,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build (host copy and arm64 iOS copy)
+      - name: Build (host copies, arm64 iOS probe, arm64 iOS libjackpotlte.a)
         run: userspace/build.sh
 
-      - name: The phone's copy is arm64
+      - name: The M4 ABI is the kernel's ABI
+        run: python3 tools/jackpotlte/check-mali-abi.py
+
+      - name: The request layer asks the kernel for the right things
+        run: userspace/out/test_gpu_host
+
+      - name: The phone's copies are arm64
         run: |
           file userspace/out/maliprobe
           lipo -info userspace/out/maliprobe | grep -q arm64
+          lipo -info userspace/out/libjackpotlte.a | grep -q arm64
 
       - name: The ABI agrees with the kernel patch
         run: |
@@ -69,10 +82,11 @@ jobs:
       - name: The host copy runs
         run: userspace/out/maliprobe.host --help
 
-      # The arm64 copy is the artifact that goes into the iOS root
-      # (/usr/local/bin/maliprobe); this project keeps no Mac, so a run's
-      # artifact is how it gets off the runner.
+      # The arm64 copies are the artifacts that go onto the phone:
+      # /usr/local/bin/maliprobe, and libjackpotlte.a with its header for the
+      # next userspace layer to link against.  This project keeps no Mac, so a
+      # run's artifact is how they get off the runner.
       - uses: actions/upload-artifact@v4
         with:
-          name: maliprobe
+          name: userspace
           path: userspace/out/

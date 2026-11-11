@@ -14,9 +14,10 @@ remaining distance to a fast home screen is userspace, in three pieces:
 
 1. `jackpotlte-maliprobe` (here): prove a Darwin client can reach the GPU
    through `JackpotlteMali` and share memory with it.
-2. the shim: the reference's `redwood_drm.c` retargeted from `RedwoodMali` to
-   `JackpotlteMali`, so a Linux-shaped GPU userspace (Mesa's panfrost) can open
-   the GPU through libdrm.
+2. `libjackpotlte` (here): the shim. Not the reference's `redwood_drm.c` copied
+   over — a small library of its own that speaks `0154` and hands the GPU to a
+   Linux-shaped userspace (Mesa's panfrost) or to Metal, with the requests it
+   builds checked on the build machine instead of on the phone.
 3. Mesa with Bifrost **v6**, then the `JackpotlteMetal` bundle
    (`0155` publishes the service it plugs into; `JackpotlteMetalDevice`).
 
@@ -53,16 +54,65 @@ The phone's copy is unsigned. It does not have to be signed: the root boots with
 `cs_enforcement_disable=1` and `launchd_unsecure_cache=1`, and the kernel
 carries the built-in entitlements this needs.
 
+## libjackpotlte
+
+The shim. Our kernel exposes the GPU as one IOKit service whose user client
+answers panfrost's requests (`xnu/patches/0154`); this turns that into the small
+surface a GPU userspace actually wants — a buffer with a GPU address, its memory
+in this process, a job chain submitted and waited for, and the GPU's parameters:
+
+```
+userspace/libjackpotlte/jackpotlte_gpu.h     the API and the ABI it mirrors
+userspace/libjackpotlte/jackpotlte_gpu.c     the requests (no IOKit in here)
+userspace/libjackpotlte/jackpotlte_iokit.c   the iOS backend (IOKit)
+userspace/libjackpotlte/test_gpu_host.c      the host test
+```
+
+`jackpotlte_gpu.c` knows nothing about Darwin. Everything it does with the
+kernel goes through a four-entry vtable (`call`, `map`, `unmap`, `close`), so
+the whole layer runs on the build machine against a fake IOKit and what it would
+send to the phone is asserted there (`test_gpu_host`, under ASan/UBSan). That is
+deliberate: the phone is the only place this can run for real, and every mistake
+costs a flash. `jackpotlte_iokit.c` is the backend that does the same calls
+`maliprobe` makes, and releases what a tool may leak.
+
+Two things keep the ABI honest, and both run in CI:
+
+- `test_gpu_host` proves the layer **asks correctly** — the right
+  selector, the right structure size, the right fields, and the kernel's
+  refusals turned into the right `errno`.
+- `tools/jackpotlte/check-mali-abi.py` proves the layer and the kernel **agree**.
+  It lifts the selectors, struct bodies and constants out of
+  `xnu/patches/0154`, puts them beside our header, and compiles a unit of
+  `_Static_assert`s that every value, size and field offset is the same. A moved
+  field or a renumbered request stops the build rather than the phone.
+
+Neither of those is a test of the GPU. "Green" means the layer is not the
+problem; whether the GPU answers is a question only the phone can answer.
+
+The archive is built for arm64 iOS as `out/libjackpotlte.a` with
+`out/jackpotlte_gpu.h`. It resolves IOKit at load time, so whatever links it
+needs `-Wl,-undefined,dynamic_lookup` the way `maliprobe` does.
+
 ## Build
 
 ```
 userspace/build.sh [DEST]      # DEST defaults to userspace/out
 ```
 
-Needs macOS: `out/maliprobe` is arm64 iOS (iPhoneOS SDK), `out/maliprobe.host`
-is the local copy for `--abi`. CI runs the same script on `macos-15` and
-uploads `out/` as an artifact, so a phone copy can be pulled from a run without
-a Mac in the loop.
+Needs macOS: the phone's copies are arm64 iOS (iPhoneOS SDK). `build.sh` writes
+
+```
+out/maliprobe.host     host copy of the probe, for `--abi`
+out/maliprobe          arm64 iOS probe
+out/test_gpu_host      host copy of the M4 layer's test (CI runs it)
+out/libjackpotlte.a    arm64 iOS: the M4 shim
+out/jackpotlte_gpu.h   the header the archive goes with
+```
+
+CI runs the same script on `macos-15`, runs the two checks above, and uploads
+`out/` as the `userspace` artifact, so a phone copy can be pulled from a run
+without a Mac in the loop.
 
 ## Getting a tool into the iOS root
 
