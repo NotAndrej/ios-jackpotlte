@@ -21,8 +21,14 @@ only for approved destructive steps, never bootloaders / EFS (p3) / recovery
 
 ## Status bar
 
-- [ ] ~~Present a real iPhone mode so the status-bar provider is found.~~
-      **Dropped (owner, 2026-11-11).** The diagnosis is in
+- [ ] Present a real iPhone mode so the status-bar provider is found.
+      **Re-requested by the owner 2026-11-11**, so the drop below is
+      superseded: `0156` presents 1125x2436 on A5XELTE and the owner chose to
+      squeeze the 2436 rows onto the 2220-row panel (not to crop a strip).
+      Details and the phone check are in `JACKPOTLTE_PROGRESS.md`
+      ("The rdar bar fix goes back in"). `sweetfb_native=1` restores the
+      panel geometry from the cmdline alone.
+      ~~Dropped (owner, 2026-11-11).~~ The diagnosis is in
       `JACKPOTLTE_PROGRESS.md` ("Why the status bar reads"); nothing was ever
       flashed for it. For the record if it is ever wanted: `display-scale` is
       a u32, so the 12 mini's 2.88 is not expressible and only a 3x mode UIKit

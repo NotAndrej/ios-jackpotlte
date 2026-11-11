@@ -2456,6 +2456,10 @@ display-related was ever written or flashed: the kernel still reports
 diagnosis above stands as the answer to why the bar reads `rdar:45025538`; the
 change itself is not being pursued.
 
+*(Superseded later the same day: the owner asked for it again and chose the
+squeeze, `0156` - see "The rdar bar fix goes back in" at the end of this
+file.)*
+
 **`sweetfb_noconsole=1` has never done anything on this board.** The A5XELTE
 build reads **`a5fb_noconsole`** — `0109` wraps the argument in
 `#if defined(ARM64_BOARD_CONFIG_A5XELTE)` and the A8 takes the first branch
@@ -2464,8 +2468,9 @@ build reads **`a5fb_noconsole`** — `0109` wraps the argument in
 with `sweetfb_noconsole=1`, kept drawing the console over the GUI exactly as
 before, and the "quiet boot" that `jt19` got on 2026-11-08 stopped working when
 `0109` renamed the argument. Any future quiet image must pack
-`a5fb_noconsole=1` (and `0146`/`0151`'s comments, which say
-`sweetfb_noconsole=1`, should say the A8's name).
+`a5fb_noconsole=1` (and `0146`/`0151`'s comments, which said
+`sweetfb_noconsole=1`, now say "the quiet console"; the `0067`/`0109`/`0110`
+comment in `serial_console.c` still names the donor argument).
 
 ### Display scale is an integer, so the mode has to be one UIKit has as well
 
@@ -2628,3 +2633,49 @@ unmap and dropped at close, version/cap/node/devices, sync objects and their
 sync files), under ASan+UBSan with `-Wall -Wextra -Werror -Wpedantic`. The ABI
 check still reports the 10 selectors, 10 structures and 2 constants identical
 to `0154`. Neither says anything about the GPU; only the phone can.
+
+### The rdar bar fix goes back in, with the quiet console (2026-11-11)
+
+The owner asked for the status-bar fix again and picked how the geometry is
+solved: present the iPhone X mode **1125x2436** (375x812 points at the ADT's
+`display-scale 3`) and **squeeze its 2436 rows onto the 2220-row panel**,
+rather than cropping a strip off the top or the bottom. Nothing in this
+section is on the phone yet.
+
+`xnu/patches/0156-jackpotlte-presented-iphone-x-mode.patch` is the change, in
+two files:
+
+- `SweetFramebuffer.cpp`: the A5XELTE branch of `start()` sets
+  `fLogicalW/H = 1125x2436`, `fOffX = 22`, `fOffY = 0`. `present()` gained the
+  row mapping: panel row `y` copies logical row `y*2436/2220` (nearest), so the
+  whole canvas lands on the shorter panel, and the 45 extra columns are
+  cropped 22 left / 23 right, the way the donor crops its panel.
+  `sweetfb_native=1` still presents 1080x2220, so the way back to today's
+  screen is a cmdline repack rather than a kernel rebuild.
+- `SweetHID.cpp`: the ZT7538 reports 1080x1920 over the whole panel, so the
+  touch normaliser keeps dividing rows by 1920 (which reaches the bottom of the
+  display, as it did before) and only gains the column offset,
+  `nx = (x + 22)/1125`.
+
+`tools/mkadt_jackpotlte.py` writes `canvas-width/height 1125x2436` now - the
+presented size, which is what IOMobileFramebuffer and MobileGestalt read - while
+the `a5xelte-fbcon` node keeps the physical 1080x2220. The only bytes that
+changed in the ADT blob are the three that make up those two canvas words
+(the blob also carries a fresh random 64-byte `random-seed` each run, so the
+rest of it differs between any two generations and cannot be compared
+byte-for-byte).
+
+The row mapping was checked on the build host (a scratch program, not
+committed): with the real numbers, every one of the 2220 panel rows is written
+exactly once, the source rows rise monotonically from 0 to 2434, and all 1080
+columns are covered. That says nothing about the phone.
+
+On the phone this is right only if the red strip is gone from the lock screen
+**and** the console line reads `presented as 1125x2436`. A squeezed picture
+with the strip still there would mean the canvas did not reach backboardd;
+`sweetfb_native=1` puts the old geometry back.
+
+This and the quiet console (`a5fb_noconsole=1`) go into one new BOOT. Its
+cmdline is `jt43`'s with that one word changed, but because `0156` is a kernel
+change the image also carries a rebuilt kernel, so it is no longer a
+cmdline-only repack.

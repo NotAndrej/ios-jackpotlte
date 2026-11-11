@@ -5,7 +5,7 @@
  
  /*
 - * Diagnostic (boot-arg sweethidtest=N): how many user clients have opened
-- * each Sweet HID service.  With sweetfb_noconsole=1 the console keeps
+- * each Sweet HID service.  With the quiet console the screen keeps
 - * drawing until the GUI's first present and only then goes silent, so the
 - * last visible line of this report is the state at the moment backboardd
 - * started presenting -- i.e. whether it had opened the digitizer/buttons.

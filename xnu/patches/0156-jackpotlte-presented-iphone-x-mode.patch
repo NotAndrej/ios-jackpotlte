@@ -1,0 +1,130 @@
+--- a/iokit/Kernel/arm/SweetFramebuffer.cpp
++++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
+@@ -235,19 +235,38 @@ AppleCLCD::start(IOService *provider)
+ 	PE_parse_boot_argn("sweetfb_native", &native, sizeof(native));
+ 	fLogicalW = fWidth;
+ 	fLogicalH = fHeight;
+-#if defined(DREAMLTE)
++	fOffX = 0;
++	fOffY = 0;
++#if defined(ARM64_BOARD_CONFIG_A5XELTE)
++	/*
++	 * UIKit has status-bar geometry only for real iPhone screens. Without
++	 * one it falls back to the red rdar:45025538 bar, so present the
++	 * iPhone X mode 1125x2436 (375x812 points at the ADT's display-scale 3).
++	 * The panel is 1080x2220: the 45 extra columns are cropped (22 left,
++	 * 23 right) and present() squeezes the 2436 rows onto 2220.
++	 * sweetfb_native=1 presents the panel as it is (1080x2220) again.
++	 */
+ 	if (!native) {
+ 		fLogicalW = SWEET_FB_LOGICAL_W;
+ 		fLogicalH = SWEET_FB_LOGICAL_H;
+ 	}
+-#elif !defined(ARM64_BOARD_CONFIG_A5XELTE)
++	fOffX = (int32_t)(fLogicalW - fWidth) / 2;
++	/* fOffY stays 0: the extra rows are squeezed, not cropped. */
++#elif defined(DREAMLTE)
++	if (!native) {
++		fLogicalW = SWEET_FB_LOGICAL_W;
++		fLogicalH = SWEET_FB_LOGICAL_H;
++	}
++	fOffX = (int32_t)(fLogicalW - fWidth) / 2;
++	fOffY = (int32_t)(fLogicalH - fHeight) / 2;
++#else
+ 	if (!native && fWidth <= SWEET_FB_LOGICAL_W && fHeight <= SWEET_FB_LOGICAL_H) {
+ 		fLogicalW = SWEET_FB_LOGICAL_W;
+ 		fLogicalH = SWEET_FB_LOGICAL_H;
+ 	}
+-#endif
+ 	fOffX = (int32_t)(fLogicalW - fWidth) / 2;
+ 	fOffY = (int32_t)(fLogicalH - fHeight) / 2;
++#endif
+ 	fLock = IOLockAlloc();
+ 	fClients = OSArray::withCapacity(4);
+ 	fSurface = sweet_surface_create_physical(fPhys, fWidth, fHeight, fRowBytes, SWEET_FB_FORMAT_BGRA);
+@@ -449,6 +468,10 @@ AppleCLCD::present(const uint8_t *rec)
+ 		}
+ 	}
+ 
++	/* A5XELTE presents fLogicalH rows on fHeight panel rows (fOffY == 0 by
++	 * construction, see start()); every other board maps 1:1 or crops. */
++	bool squeeze = fOffY == 0 && fLogicalH > fHeight;
++
+ 	for (uint32_t layer = 0; layer < SWEET_FB_LAYERS; layer++) {
+ 		uint32_t id = get32(rec, 0x54 + 4 * layer);
+ 		const uint8_t *a = rec + 0x64 + 16 * layer;
+@@ -503,18 +526,46 @@ AppleCLCD::present(const uint8_t *rec)
+ 		if (h > (int32_t)s->height - sy) {
+ 			h = (int32_t)s->height - sy;
+ 		}
+-		if (w > (int32_t)fWidth - dx) {
+-			w = (int32_t)fWidth - dx;
+-		}
+-		if (h > (int32_t)fHeight - dy) {
+-			h = (int32_t)fHeight - dy;
+-		}
+ 		uint64_t last = (uint64_t)s->offset + (uint64_t)(sy + h - 1) * s->bytesPerRow +
+ 		    (uint64_t)(sx + w) * 4;
+ 		if (w <= 0 || h <= 0 || s->elementWidth != 1 || s->elementHeight != 1 ||
+ 		    s->memory == NULL || last > s->memory->getLength()) {
+ 			src = 0;
+ 		}
++		if (src != 0 && bpe == 4 && squeeze) {
++			/* Squeeze: panel row y shows logical row y*fLogicalH/fHeight,
++			 * so the whole presented canvas lands on the shorter panel. */
++			int32_t dy0 = (int32_t)(((int64_t)dy * fHeight) / fLogicalH);
++			int32_t dy1 = (int32_t)(((int64_t)(dy + h) * fHeight) / fLogicalH);
++			if (dy0 < 0) {
++				dy0 = 0;
++			}
++			if (dy1 > (int32_t)fHeight) {
++				dy1 = fHeight;
++			}
++			if (w > (int32_t)fWidth - dx) {
++				w = (int32_t)fWidth - dx;
++			}
++			for (int32_t y = dy0; y < dy1 && w > 0; y++) {
++				int32_t ly = (int32_t)(((int64_t)y * fLogicalH) / fHeight);
++				int32_t ry = sy + (ly - dy);
++				if (ly < dy || ly >= dy + h || ry < 0 ||
++				    ry >= (int32_t)s->height) {
++					continue;
++				}
++				memcpy((void *)(fPixels + (uint64_t)y * fRowBytes + (uint64_t)dx * 4),
++				    (const void *)(src + s->offset + (uint64_t)ry * s->bytesPerRow + (uint64_t)sx * 4),
++				    (size_t)w * 4);
++			}
++			s->release();
++			continue;
++		}
++		if (w > (int32_t)fWidth - dx) {
++			w = (int32_t)fWidth - dx;
++		}
++		if (h > (int32_t)fHeight - dy) {
++			h = (int32_t)fHeight - dy;
++		}
+ 		if (src != 0 && bpe == 4) {
+ 			for (int32_t y = 0; y < h; y++) {
+ 				memcpy((void *)(fPixels + (uint64_t)(dy + y) * fRowBytes + (uint64_t)dx * 4),
+--- a/iokit/Kernel/arm/hid/SweetHID.cpp
++++ b/iokit/Kernel/arm/hid/SweetHID.cpp
+@@ -471,9 +471,17 @@ SweetHIDTouch::start(IOService *provider)
+ 	int native = 0;
+ 	PE_parse_boot_argn("sweetfb_native", &native, sizeof(native));
+ #if defined(ARM64_BOARD_CONFIG_A5XELTE)
+-	fLogicalW = 1080;
++	/*
++	 * The display is presented as 1125x2436 (SweetFramebuffer.cpp) unless
++	 * sweetfb_native is set. The ZT7538 reports 1080x1920 over the whole
++	 * panel, so the presented width and the 22-column left crop move and
++	 * the row count stays the digitizer's: y/1920 reaches the bottom of
++	 * the display, as it did when the panel was presented 1:1.
++	 */
++	fLogicalW = native ? 1080 : 1125;
+ 	fLogicalH = 1920;
+-	fOffX = fOffY = 0;
++	fOffX = native ? 0 : (fLogicalW - 1080) / 2;
++	fOffY = 0;
+ #else
+ 	fLogicalW = native ? 1080 : 1125;
+ 	fLogicalH = native ? 2400 : 2436;
