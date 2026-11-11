@@ -318,6 +318,11 @@ surprises the v6 command stream holds.
 | panfrost native layer + patches | Surface/BO model (`SweetSurface` offset/cache) | — |
 | `RedwoodMali.cpp` user-client shape | ioctl/SweetSurface binding | — |
 
+The licence side of this table is checked, file by file and commit by commit, in
+`docs/mali-userland-provenance.md`: the AIR frontend and the SoC-side driver have
+a grant that travels with them, the Metal driver and the plug-in do not, and the
+decision on those two is the owner's.
+
 ---
 
 ## 8. The single biggest unknown

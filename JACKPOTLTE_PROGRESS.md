@@ -2718,3 +2718,34 @@ picture with the red bar still there, repack the same payload with
 
 Also: CI `43032631715` went red on `jackpotlte_drm.h/.c` (`-Wnewline-eof`);
 fixed in `46829ab`, and `43033244632` is green.
+
+### The Mali reference's licensing, checked file by file (2026-11-11)
+
+The open question was whether the reference's Mali userland can be reused. The
+answer is now written down in `docs/mali-userland-provenance.md`, from the
+public repositories at the pinned commits:
+
+- The snapshot every Mali file comes from — `hakios-xnu-kernel` branch `mtk` @
+  `620c775` — carries **no licence file at all**, and it is a single commit, so
+  there is no earlier one to fall back on.
+- The repository's `LICENSE` appeared later, on `main`, grants MIT to "the
+  user-space code in `userland/src/`", and `main` **no longer contains the Mali
+  userland**: the only `redwood` path in it is `docs/devices/redwood.md`.
+- `tools/mesa/air/*` (the AIR frontend) is different: 16 of its 17 files carry
+  `SPDX-License-Identifier: MIT` in the file itself, only `air_metal.h` does not.
+- All 23 files of `userland/src/metal/` and `redwoodmetal.m` carry no SPDX line
+  and no copyright line.
+- The reference's own `COMPLIANCE.md`/`THIRD_PARTY_LICENSES.md` list its Metal
+  plug-in as **to verify**, because it "began from vcvkk's" plug-in and that
+  repository "states no license".
+- `hakios-mt6768`, where the SoC driver we already cite lives, is clean: `NOTICE`
+  gives `kernel/` APSL 2.0 and everything else MIT, and says no third-party code
+  was copied. Our `xnu/patches/` are already APSL 2.0, so that half adds no new
+  obligation.
+- `oosexgang/hakios-metal` is the **Adreno** driver despite the name, not the
+  Mali one.
+
+Three options are set out in the document. The recommended one is to take the
+AIR frontend and the SoC-side driver (both granted) and write our own Metal side,
+because the unverified files are the ones the whole performance work would rest
+on. The owner has not chosen yet; nothing was imported.

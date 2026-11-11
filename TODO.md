@@ -122,6 +122,14 @@ deleted on 2026-11-10); build results and the image details live in
       `tools/jackpotlte/apply-root-tweaks.sh` so the root keeps one mount pass.
       Next after that: the `redwood_drm`-shaped shim (`RedwoodMali` ->
       `JackpotlteMali`), then Mesa panfrost v6, then the Metal plug-in.
-- [ ] Open question for the owner: the reference userspace (shim + Metal
-      plug-in + AIR frontend + Mesa patches) is a ~6k-line import whose licence
-      the reference itself marks "to verify".  Import it or write ours?
+- [ ] Open question for the owner: what to reuse from the reference's Mali
+      side. The provenance has been checked and written down in
+      `docs/mali-userland-provenance.md`: the AIR frontend
+      (`tools/mesa/air/*`) carries a per-file MIT grant and the SoC driver
+      (`hakios-mt6768/kernel/`) is APSL 2.0, the same licence our `xnu/patches/`
+      already carry - but the Metal driver itself (`redwoodmetal.m` +
+      `userland/src/metal/*.cpp`, ~470 KB) has no licence header and no licence
+      in the snapshot it comes from, and the reference's own `COMPLIANCE.md`
+      lists its plug-in as "to verify". Three options are set out there;
+      **option 1 (take the frontend and the driver, write our own Metal side) is
+      the recommendation**, and the call is the owner's.
