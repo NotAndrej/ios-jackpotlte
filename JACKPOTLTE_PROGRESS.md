@@ -2447,6 +2447,26 @@ photo should show: the boot text (the M2 `word=0xc0ffee01` lines and M3's
 programs to draw with`, plus the probe's `JACKPOTLTE MALIPROBE:` report), and
 then the home screen with the 32 extra icons.
 
+### Dropped: the status-bar fix, and the `sweetfb_noconsole` that never applied
+
+**The status-bar change is dropped (owner, 2026-11-11).** Nothing
+display-related was ever written or flashed: the kernel still reports
+1080x2220 through selector 8, the ADT still carries `canvas 1080x2220` and
+`display-scale 3`, and no patch was ever made for the presented mode. The
+diagnosis above stands as the answer to why the bar reads `rdar:45025538`; the
+change itself is not being pursued.
+
+**`sweetfb_noconsole=1` has never done anything on this board.** The A5XELTE
+build reads **`a5fb_noconsole`** — `0109` wraps the argument in
+`#if defined(ARM64_BOARD_CONFIG_A5XELTE)` and the A8 takes the first branch
+(`xnu/patches/0109-a5xelte-decon-iosurface-bridge.patch:83`), with the donor's
+`sweetfb_noconsole` in the `#else`. So `jt31`, `jt38` and `jt43`, all packed
+with `sweetfb_noconsole=1`, kept drawing the console over the GUI exactly as
+before, and the "quiet boot" that `jt19` got on 2026-11-08 stopped working when
+`0109` renamed the argument. Any future quiet image must pack
+`a5fb_noconsole=1` (and `0146`/`0151`'s comments, which say
+`sweetfb_noconsole=1`, should say the A8's name).
+
 ### Display scale is an integer, so the mode has to be one UIKit has as well
 
 The owner chose "present 1080x2340, squeeze 5% vertically". Working out how to

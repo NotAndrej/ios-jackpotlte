@@ -21,17 +21,17 @@ only for approved destructive steps, never bootloaders / EFS (p3) / recovery
 
 ## Status bar
 
-- [ ] The red `😳 rdar:45025538` strip is UIKit's fallback bar for a screen it
-      has no status-bar provider for; we hand it 360x740 pt (1080x2220 at the
-      ADT's scale 3) and no iPhone is that. Diagnosed in
-      `JACKPOTLTE_PROGRESS.md` ("Why the status bar reads"). The chosen fix is
-      to present a real mode (1125x2436 @3 = 375x812, the donor's), keep the
-      panel full and keep the status bar: 22 px of width cropped (as the donor
-      crops) and the height squeezed 2436 -> 2220 (8.9%). The 1080x2340 /
-      scale 2.88 idea is out - `display-scale` is a u32. Three files move
-      together: the framebuffer logical size and present mapping (`0124`), the
-      ADT canvas (`mkadt_jackpotlte.py`), and `SweetHID` (`0118`, plus the
-      driver's y range in `0131`).
+- [ ] ~~Present a real iPhone mode so the status-bar provider is found.~~
+      **Dropped (owner, 2026-11-11).** The diagnosis is in
+      `JACKPOTLTE_PROGRESS.md` ("Why the status bar reads"); nothing was ever
+      flashed for it. For the record if it is ever wanted: `display-scale` is
+      a u32, so the 12 mini's 2.88 is not expressible and only a 3x mode UIKit
+      knows in both points and pixels works (1125x2436 = 375x812), which costs
+      22 px of width and 8.9% of height on a 1080x2220 panel.
+- [ ] `sweetfb_noconsole=1` does nothing on the A8: this board reads
+      **`a5fb_noconsole`** (`0109`). `jt31`/`jt38`/`jt43` were all packed with
+      the wrong name, so the console kept painting over the GUI in every one
+      of them. Repack any quiet image with `a5fb_noconsole=1`.
 
 ## Home screen shows only ~6 apps
 
