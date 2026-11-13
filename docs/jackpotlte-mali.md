@@ -384,8 +384,21 @@ we have to copy:
 
 Pieces for this port:
 
-1. an `EAGLContext` replacement that calls Mesa (OSMesa), in `userspace/` beside
-   `libjackpotlte` — not written;
+1. ~~an `EAGLContext` replacement that calls Mesa (OSMesa)~~ **written, not yet
+   loaded or run**: `userspace/jackpotlte-gl/` is that library, built by
+   `userspace/build.sh` as `out/libjackpotlte-gl.dylib`. It installs eight
+   `EAGLContext` methods: the six CoreAnimation's renderer asks
+   (`initWithAPI:properties:`, `API`, `setParameter:to:`,
+   `getMacroContextPrivate`, `texImageIOSurface:...`,
+   `attachImage:toCoreSurface:invertedRender:`), `-sharegroup` (CoreImage asks
+   it, and the reference crashed there for want of it) and `-dealloc`. GL is
+   answered through the table above, whose entries resolve each function through
+   OSMesa's own `OSMesaGetProcAddress` — never by name, because iOS's
+   `OpenGLES.framework` is in the shared cache and would answer instead. A
+   SweetSurface becomes a texture through `0003`'s frontend hook
+   (`glEGLImageTargetTexture2DOES` with the surface's ID), so nothing is copied.
+   CI proves it builds for arm64 iOS and
+   that it references no `gl*` name; it does not prove anything draws;
 2. ~~the GL entry-point table~~ **done**: `userspace/jackpotlte-gl/eagl_slots.txt`
    (409 entries, 457 names), generated from this build's cache by
    `tools/jackpotlte/eagl-slots.py`. Each `OpenGLES.framework` export is a
@@ -397,7 +410,9 @@ Pieces for this port:
    interpose, or a replacement `OpenGLES` binary — is an open question to settle
    against this root. The root already boots with `cs_enforcement_disable=1`
    and `launchd_unsecure_cache=1` (`userspace/README.md`), which rules nothing
-   out but proves nothing about dyld's own `DYLD_*` policy either;
+   out but proves nothing about dyld's own `DYLD_*` policy either. With the
+   shim written, this is the next thing to answer on the phone, and it needs a
+   `userdata` write (below);
 4. the verification rule stands: a library that loads is not a frame. The first
    claim that CoreAnimation draws on the Mali needs a photo.
 
