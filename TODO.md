@@ -153,11 +153,13 @@ deleted on 2026-11-10); build results and the image details live in
       boot-arg `jtexecinject`, which the kernel applies in `exec_extract_strings()`
       (kernel CI `43496663209` green on `5d7765c`; the binary carries both
       `jtexecinject` and `DYLD_INSERT_LIBRARIES=`), and
-      `tools/jackpotlte/apply-root-tweaks.sh` installs the two dylibs into
-      `/usr/local/lib`. What is left: the owner's word for the `userdata` write,
-      then a BOOT image whose cmdline carries the `jtmaliprobe…` gates plus
-      `jtexecinject=/usr/local/lib/libjackpotlte-gl.dylib,backboardd`, and a
-      photo. Loaded is not drawn: the first draw claim is a frame on the panel.
+      `tools/jackpotlte/apply-root-tweaks.sh` put the two dylibs into the master
+      root's `/usr/local/lib` on 2026-11-13 (hash-matched to the CI copies), and
+      the BOOT image is packed: `/var/tmp/a8-xnu-jt45-gles-inject.img` — the CI
+      kernel, the Mali gates plus `a5fb_noconsole=1`, and the injection boot-arg.
+      What is left is the phone: flash `USERDATA` (the raw master) and `BOOT`,
+      boot, photograph. Loaded is not drawn: the first draw claim is a frame on
+      the panel.
 - [x] M4 GLES, first piece: the OpenGL ES dispatch table of this phone's build
       (2026-11-13). `-[EAGLContext getMacroContextPrivate]` hands out a table
       of function pointers and iOS calls `entry(table[0], args...)`; the offsets

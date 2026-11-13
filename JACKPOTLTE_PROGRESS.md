@@ -2994,17 +2994,23 @@ evidence. What does hold: `0035`/`0036` mark root-filesystem binaries
 `CONFIG_ENFORCE_LIBRARY_VALIDATION` is undefined, which it is not in this
 configuration.
 
-Deployment is host-side and ready. `tools/jackpotlte/apply-root-tweaks.sh`
-installs `out/libjackpotlte-gl.dylib` + `out/libOSMesa.8.dylib` into the root's
-`/usr/local/lib` (the shim loads Mesa by `@loader_path/libOSMesa.8.dylib`, so one
-directory holding both is enough), and the BOOT image
+Deployment, done on the host on 2026-11-13: `tools/jackpotlte/apply-root-tweaks.sh`
+(which runs `tools/sweet-root-tweaks.py`) patched the master
+`/var/tmp/IOSRoot.img` in place. The donor tweaks were already in it from
+2026-11-08, so the run added only the two dylibs into
+`/usr/local/lib/libjackpotlte-gl.dylib` + `libOSMesa.8.dylib` (the shim loads
+Mesa by `@loader_path/libOSMesa.8.dylib`, so one directory holding both is
+enough); both hash-match the CI artifacts `userspace/out/` holds, and fsck was
+clean before and after. The BOOT image
 `/var/tmp/a8-xnu-jt45-gles-inject.img` (17,522,704 B, sha256
 `5529f02861e59ebda048c446f2ef021db2efc2569230974e49d5740a37cadbbb`) is packed:
 CI `43496663209`'s kernel, the `jt43`/`jt44` cmdline with its Mali gates and
 `a5fb_noconsole=1`, plus
 `jtexecinject=/usr/local/lib/libjackpotlte-gl.dylib,backboardd` (364 bytes, read
-back out of the image). It is not flashed. What is left is the owner's word for
-the `userdata` write, then the flash, the boot and a photo; the phone answers
-whether dyld honours the injected variable for `backboardd`, and only a frame on
-the panel is a draw claim. `docs/jackpotlte-mali.md` §9 has this with the
-citations.
+back out of the image). What is left is the two flashes, the boot and a photo.
+The master goes to `USERDATA` raw rather than through a sparse copy: the
+partition is `0x5122FBE00` (20.28 GiB) and the master is 16.0 GiB, while
+re-sparsing would need another 12 GB this host does not have free. The phone
+answers whether dyld honours the injected variable for `backboardd`, and only a
+frame on the panel is a draw claim. `docs/jackpotlte-mali.md` §9 has this with
+the citations.

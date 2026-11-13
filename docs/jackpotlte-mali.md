@@ -478,11 +478,13 @@ The kernel code takes several names per library and several `LIBRARY,NAME...`
 groups separated by `;`, so `,SpringBoard` can be added to the same group if
 CoreAnimation there turns out to need it too.
 
-The steps (2 is done; the rest are not):
+The steps (1 and 2 are done; the rest are not):
 
-1. install both dylibs into the root at that path (a `userdata` write: owner's
-   word first), the way `tools/jackpotlte/apply-root-tweaks.sh` already installs
-   the probe;
+1. ~~install both dylibs into the root~~ **installed 2026-11-13**:
+   `tools/jackpotlte/apply-root-tweaks.sh` patched the master in place; the
+   donor tweaks were already in it, so the run added only
+   `/usr/local/lib/libjackpotlte-gl.dylib` + `libOSMesa.8.dylib`, and both
+   hash-match the CI copies in `userspace/out/`;
 2. ~~pack a BOOT image~~ **packed**:
    `/var/tmp/a8-xnu-jt45-gles-inject.img`, 17,522,704 B, sha256
    `5529f02861e59ebda048c446f2ef021db2efc2569230974e49d5740a37cadbbb`. Its
@@ -492,14 +494,17 @@ The steps (2 is done; the rest are not):
    jtmalimetal=1`) and `a5fb_noconsole=1` — with the injection boot-arg above
    appended; read back out of the packed image it is 364 bytes
    (`tools/jackpotlte/make-boot.sh`);
-3. `fastboot flash BOOT`, boot, photograph the screen;
+3. `fastboot flash USERDATA` with the raw master (`/var/tmp/IOSRoot.img`; the
+   partition is 20.28 GiB and the master 16.0 GiB, so no re-sparse is needed),
+   then `fastboot flash BOOT /var/tmp/a8-xnu-jt45-gles-inject.img`, boot,
+   photograph the screen;
 4. read the console for `jackpotlte-gl:` lines — the ones it always prints
    (`GL_VERSION`, `GL_RENDERER`) and `... is ours: n of 10 methods` — and, for a
    surface it refuses, that refusal's own line. A frame on the panel is the
    claim; the lines are only how it is reached.
 
-Nothing has been flashed and nothing has been on the phone: step 1 comes first,
-and only the dylibs' placement in the root needs the owner's word.
+Nothing has been flashed and nothing has been on the phone. The root carries the
+dylibs as of 2026-11-13; the phone is the blocker.
 
 Licence: this is our own code (the chosen route). The reference's `eagl.c` is
 under the same README-only MIT statement as the rest of its Mali userland
