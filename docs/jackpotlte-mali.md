@@ -434,9 +434,11 @@ Pieces for this port:
    reference's spaces, because a boot-arg's value ends at the first space
    (`pexpert/gen/bootargs.c`, `argstrcpy2()`). It applies to the pristine tree
    (`patch -p1 --dry-run`) and the kernel builds with it: CI `43496663209` on
-   `5d7765c` produced `kernel.development.a5xelte`, 16,602,208 bytes, with all
-   157 project patches applied. Building is not booting: nothing has been on the
-   phone;
+   `5d7765c` produced `kernel.development.a5xelte`, 16,602,208 bytes, sha256
+   `e51763fa76bac3f187699d6045748609acda224d1543317181fa55852823a6e6`, with all
+   157 project patches applied — and the binary carries both `jtexecinject` and
+   `DYLD_INSERT_LIBRARIES=`, so the code is compiled in, not merely applied.
+   Building is not booting: nothing has been on the phone;
 
    The code-signing half is not what the reference's comment makes it.
    `cs_require_lv()` (`bsd/kern/kern_cs.c`) has **no caller anywhere in
@@ -482,7 +484,9 @@ The steps, none of which has been run:
    word first), the way `tools/jackpotlte/apply-root-tweaks.sh` already installs
    the probe;
 2. pack a BOOT image whose kernel is the one CI `43496663209` built and whose
-   cmdline carries the boot-arg above (`tools/jackpotlte/make-boot.sh`);
+   cmdline is the `jt43`/`jt44` one (it carries the Mali gates `0144`/`0152`/
+   `0153`/`0154` read: `jtmaliprobe=1 jtmalipwr=1 jtmalijob=1 jtmalimetal=1`)
+   plus the injection boot-arg above (`tools/jackpotlte/make-boot.sh`);
 3. `fastboot flash BOOT`, boot, photograph the screen;
 4. read the console for `jackpotlte-gl:` lines — the ones it always prints
    (`GL_VERSION`, `GL_RENDERER`) and `... is ours: n of 10 methods` — and, for a
