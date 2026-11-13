@@ -5,8 +5,11 @@ On `main` since 2026-11-10: the `jackpotlte-gpu` branch was fast-forwarded into
 so the GPU patches and the touch work are one series again (`0152` onward).
 
 Plan: `docs/jackpotlte-mali.md` — M0 probe -> M1 power/clock -> M2 MMU + one
-job -> M3 `RedwoodMali`-shaped user client over `SweetSurface` -> M4 Metal
-plug-in with Bifrost **v6** enabled (our G71 is v6; the HakiOS reference is v7).
+job -> M3 `RedwoodMali`-shaped user client over `SweetSurface` -> M4 GLES: Mesa
+panfrost **v6** (our G71 is v6; the HakiOS reference is v7) behind an
+`EAGLContext` shim.  M4 was first sketched as a Metal plug-in; that route is
+deferred and the GLES one settled instead (`docs/jackpotlte-mali.md` §6,
+2026-11-13).
 
 ## Status
 
@@ -160,11 +163,16 @@ no `sweethidtest`; the cmdline was read back out of the image to check).
    `JACKPOTLTE MALI: engine up, addresses from 0x1000000` plus
    `JackpotlteMali: the GPU is there for programs to draw with`; that closes
    M3.  Both images are packed and waiting — the phone is the blocker.
-3. M4: `0155` (the accelerator service Metal discovers) is written and built;
-   what is left is the `JackpotlteMetal` bundle itself, the
-   `redwood_drm`-shaped shim, and Mesa with Bifrost **v6** enabled.
+3. M4: **the GLES route, settled 2026-11-13** (`docs/jackpotlte-mali.md` §6).
+   The `redwood_drm`-shaped shim (`userspace/libjackpotlte`) and Mesa 25.0.7
+   panfrost v6 are written and the Mesa build is green (CI `43491401891` on
+   `60aba9d`); the `EAGLContext` shim (`userspace/jackpotlte-gl/`) is written
+   and its userspace CI green (`43489433732` on `069825f`).  `0155` and the
+   `JackpotlteMetal` bundle below are deferred with the Metal route.  What is
+   left: the loader (`0157`) plus a `userdata` write for the two dylibs, then a
+   BOOT image and a photo (§9 of that document).
 
-### M4 step 1 in `0155` (written, build-green, not yet on the phone)
+### Metal route, step 1 in `0155` (written, build-green, not yet on the phone; deferred)
 
 `0155-jackpotlte-metal-accelerator.patch` publishes an `IOAcceleratorES`
 service from `AppleCLCD::start`, the class the reference adds in
