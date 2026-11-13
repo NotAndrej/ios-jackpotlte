@@ -48,6 +48,10 @@ jobs:
           file userspace/out/maliprobe
           lipo -info userspace/out/maliprobe | grep -q arm64
           lipo -info userspace/out/libjackpotlte.a | grep -q arm64
+          # The EAGL shim is a dylib, so `file` says it and lipo agrees (a
+          # thin arm64 Mach-O dylib, not an archive).
+          file userspace/out/libjackpotlte-gl.dylib | grep -q 'Mach-O 64-bit dynamically linked shared library arm64'
+          lipo -info userspace/out/libjackpotlte-gl.dylib | grep -q arm64
 
       - name: The ABI agrees with the kernel patch
         run: |

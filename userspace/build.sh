@@ -81,7 +81,17 @@ xcrun --sdk iphoneos clang "${common[@]}" "${lookup[@]}" -target arm64-apple-ios
 # OpenGLES.framework is in the dyld shared cache and defines every one of them,
 # so a by-name reference would bind Apple's driver, which knows nothing of these
 # contexts; everything goes through jackpotlte_gl_proc (OSMesaGetProcAddress).
-if nm -u "$out/libjackpotlte-gl.dylib" | grep -E ' _gl[A-Z]'; then
+#
+# nm's own failure is checked first, and separately: in `if nm ... | grep`, a
+# failing nm makes the pipeline fail and the branch is simply not taken, so the
+# one check that matters could pass by never running.  nm writes the undefined
+# names to stdout and exits 0; no output from it means it did not run.
+gl_undefined=$(nm -u "$out/libjackpotlte-gl.dylib")
+if [ -z "$gl_undefined" ]; then
+	echo "error: nm -u says nothing about the shim: is it a Mach-O dylib?" >&2
+	exit 1
+fi
+if printf '%s\n' "$gl_undefined" | grep -E ' _gl[A-Z]'; then
 	echo "error: the shim refers to an OpenGL ES function by name" >&2
 	exit 1
 fi
@@ -105,9 +115,10 @@ rm -rf "$obj"
 cp "$lib/jackpotlte_gpu.h" "$lib/jackpotlte_drm.h" "$out/"
 
 echo
-file "$out/maliprobe"
+file "$out/maliprobe" "$out/libjackpotlte-gl.dylib"
 lipo -info "$out/libjackpotlte.a"
 echo
 echo "built:"
 ls -l "$out/maliprobe" "$out/maliprobe.host" "$out/test_gpu_host" \
-	"$out/libjackpotlte.a" "$out/jackpotlte_gpu.h" "$out/jackpotlte_drm.h"
+	"$out/libjackpotlte.a" "$out/libjackpotlte-gl.dylib" \
+	"$out/jackpotlte_gpu.h" "$out/jackpotlte_drm.h"
