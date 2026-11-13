@@ -365,13 +365,17 @@ my_attachImage(id self, SEL selector, unsigned long target, IOSurfaceRef surface
    return surface_is_texture(e, surface, target, "-attachImage:");
 }
 
-/* objc_msgSendSuper as <objc/message.h> declares it (an id, and variadic), read
- * as what is wanted here (nothing). */
+/*
+ * objc_msgSendSuper, read as what is wanted here.  <objc/message.h> declares it
+ * as `void objc_msgSendSuper(void)` - Apple's form, which says the arguments
+ * are the caller's to know - so this is the one place the two are written out:
+ * the declared function pointer, and the call.
+ */
 static void
 send_to_super(struct objc_super *super, SEL selector)
 {
    union {
-      id (*as_declared)(struct objc_super *, SEL, ...);
+      void (*as_declared)(void);
       void (*as_called)(struct objc_super *, SEL);
    } send;
 
