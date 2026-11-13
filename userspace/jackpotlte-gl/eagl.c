@@ -42,7 +42,6 @@
  */
 #include "jackpotlte_gl.h"
 
-#include <IOSurface/IOSurface.h>
 #include <objc/message.h>
 #include <objc/runtime.h>
 #include <stdarg.h>
@@ -50,6 +49,20 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+/*
+ * IOSurface's accessors, declared here: the iPhoneOS SDK ships no header for
+ * them (the framework is there, the header is not), the same arrangement the
+ * iOS backend uses for IOKit (userspace/libjackpotlte/jackpotlte_iokit.c).  The
+ * names are the framework's and the process that loads this library has it.
+ */
+typedef struct __IOSurface *IOSurfaceRef;
+uint32_t IOSurfaceGetID(IOSurfaceRef surface);
+uint32_t IOSurfaceGetPixelFormat(IOSurfaceRef surface);
+size_t IOSurfaceGetPlaneCount(IOSurfaceRef surface);
+size_t IOSurfaceGetBytesPerElement(IOSurfaceRef surface);
+size_t IOSurfaceGetWidth(IOSurfaceRef surface);
+size_t IOSurfaceGetHeight(IOSurfaceRef surface);
 
 /* The GL names this file itself uses. */
 #define GL_TEXTURE_2D             0x0de1
