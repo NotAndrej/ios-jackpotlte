@@ -2749,3 +2749,12 @@ Three options are set out in the document. The recommended one is to take the
 AIR frontend and the SoC-side driver (both granted) and write our own Metal side,
 because the unverified files are the ones the whole performance work would rest
 on. The owner has not chosen yet; nothing was imported.
+
+One boot of `jt44` answers more than the display question, so it is worth a
+photo of the console as well as a look at the screen. Its cmdline is `jt43`'s
+with that one word changed (read back out of both images to check), so it still
+carries `jtmaliprobe=1 jtmalipwr=1 jtmalijob=1 jtmalimetal=1`, the gates `0144`,
+`0152`, `0153` and `0154` read, and the kernel in it is the one CI
+`43033244620` built. The same boot therefore also reports M2 (`word=0xc0ffee01`
+for both jobs) and M3 (`engine up` plus `JackpotlteMali:`) if those stages run.
+`jtmetal` is deliberately **not** set: the plug-in it names does not exist yet.
