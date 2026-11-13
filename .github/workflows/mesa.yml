@@ -1,0 +1,89 @@
+name: mesa
+
+# Builds Mesa's panfrost (Bifrost v6) for arm64 iOS, against this port's GPU
+# user client instead of libdrm (tools/mesa-jackpotlte/).  This is the M4
+# userspace below the Metal plug-in.
+#
+# What a green run means and does not mean: it means the library builds for the
+# phone with panfrost v6 and the drm face in it.  It does not mean anything has
+# drawn on the GPU; that needs a boot and a photo (JACKPOTLTE_PROGRESS.md).
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "tools/mesa-jackpotlte/**"
+      # The drm face is staged from here, so a change to it has to build.
+      - "userspace/libjackpotlte/**"
+      - "xnu/patches/0154-*.patch"
+      - ".github/workflows/mesa.yml"
+
+concurrency:
+  group: mesa-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: |
+          python3 --version
+          xcrun --show-sdk-version --sdk iphoneos
+          # meson and ninja come from the script's own venv, so the runner needs
+          # only python3 and the iPhoneOS SDK.
+
+      - name: Build Mesa for arm64 iOS
+        run: |
+          tools/mesa-jackpotlte/mk-mesa-jackpotlte.sh "$RUNNER_TEMP/mesa-build"
+
+      - name: The library is the phone's
+        run: |
+          set -e
+          lib="$RUNNER_TEMP/mesa-build/out/libOSMesa.8.dylib"
+          file "$lib"
+          lipo -info "$lib" | grep -q arm64
+          # Undefined symbols are how the drm face reaches IOKit: it declares
+          # them and they resolve on the phone (userspace/build.sh does the
+          # same for maliprobe).  Check the shape, not that it is 0.
+          echo "undefined symbols: $(nm -u "$lib" | wc -l | tr -d ' ')"
+
+      - name: Panfrost v6 is what was built, and the drm face is in it
+        run: |
+          set -e
+          build="$RUNNER_TEMP/mesa-build/build"
+          grep -q 'pan-arch-v6' "$build/build.ninja"
+          # The drm face's request translation is what panfrost calls instead
+          # of libdrm; the object has to exist in the panfrost kmod library.
+          find "$build" -name 'jackpotlte_drm.c.o' | grep -q .
+          find "$build" -name 'pan_kmod.c.o' | grep -q .
+          # The architecture is compiled in: the arm64 dylib names the v6 path.
+          strings "$RUNNER_TEMP/mesa-build/out/libOSMesa.8.dylib" | grep -q 'panfrost'
+
+      - name: The softpipe fallback is still there
+        run: |
+          # OSMESA_SOFTWARE=1 must keep working, so the library has to carry
+          # both drivers.  softpipe's screen is what osmesa_create_screen()
+          # falls back to when drmOpenWithType("panfrost") fails.
+          nm "$RUNNER_TEMP/mesa-build/out/libOSMesa.8.dylib" | grep -qi 'softpipe'
+
+      - name: Show the build log if anything went wrong
+        if: failure()
+        run: |
+          echo "=== meson-setup.log ==="
+          tail -n 80 "$RUNNER_TEMP/mesa-build/meson-setup.log" || true
+          echo "=== build.log ==="
+          tail -n 120 "$RUNNER_TEMP/mesa-build/build.log" || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mesa-osmesa-panfrost-v6
+          path: |
+            ${{ runner.temp }}/mesa-build/out/libOSMesa.8.dylib
+            ${{ runner.temp }}/mesa-build/out/built-from
+            ${{ runner.temp }}/mesa-build/meson-setup.log
+            ${{ runner.temp }}/mesa-build/build.log
