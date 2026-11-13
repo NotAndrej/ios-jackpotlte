@@ -478,22 +478,28 @@ The kernel code takes several names per library and several `LIBRARY,NAME...`
 groups separated by `;`, so `,SpringBoard` can be added to the same group if
 CoreAnimation there turns out to need it too.
 
-The steps, none of which has been run:
+The steps (2 is done; the rest are not):
 
 1. install both dylibs into the root at that path (a `userdata` write: owner's
    word first), the way `tools/jackpotlte/apply-root-tweaks.sh` already installs
    the probe;
-2. pack a BOOT image whose kernel is the one CI `43496663209` built and whose
-   cmdline is the `jt43`/`jt44` one (it carries the Mali gates `0144`/`0152`/
-   `0153`/`0154` read: `jtmaliprobe=1 jtmalipwr=1 jtmalijob=1 jtmalimetal=1`)
-   plus the injection boot-arg above (`tools/jackpotlte/make-boot.sh`);
+2. ~~pack a BOOT image~~ **packed**:
+   `/var/tmp/a8-xnu-jt45-gles-inject.img`, 17,522,704 B, sha256
+   `5529f02861e59ebda048c446f2ef021db2efc2569230974e49d5740a37cadbbb`. Its
+   kernel is the one CI `43496663209` built (sha256 `e51763fa...823a6e6`) and
+   its cmdline is the `jt43`/`jt44` one — it carries the Mali gates
+   `0144`/`0152`/`0153`/`0154` read (`jtmaliprobe=1 jtmalipwr=1 jtmalijob=1
+   jtmalimetal=1`) and `a5fb_noconsole=1` — with the injection boot-arg above
+   appended; read back out of the packed image it is 364 bytes
+   (`tools/jackpotlte/make-boot.sh`);
 3. `fastboot flash BOOT`, boot, photograph the screen;
 4. read the console for `jackpotlte-gl:` lines — the ones it always prints
    (`GL_VERSION`, `GL_RENDERER`) and `... is ours: n of 10 methods` — and, for a
    surface it refuses, that refusal's own line. A frame on the panel is the
    claim; the lines are only how it is reached.
 
-Nothing has been built with that cmdline and nothing has been on the phone.
+Nothing has been flashed and nothing has been on the phone: step 1 comes first,
+and only the dylibs' placement in the root needs the owner's word.
 
 Licence: this is our own code (the chosen route). The reference's `eagl.c` is
 under the same README-only MIT statement as the rest of its Mali userland
