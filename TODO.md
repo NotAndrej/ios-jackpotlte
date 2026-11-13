@@ -85,10 +85,12 @@ only for approved destructive steps, never bootloaders / EFS (p3) / recovery
       (`docs/gpu-bringup.md`; M0/M1 are done on hardware, the M2 image is
       packed and waiting on a boot).
 - [ ] Console cost: every `printf`/`IOLog` redraws the framebuffer console.
-      `jt43` puts `sweetfb_noconsole=1` back (mutes the panel at iOS's first
-      frame: the Apple logo and GUI stay clean, early text still draws), so the
-      remaining step is to drop the `jtmali*` probe args once M2/M3 are read
-      off a photo, and stop carrying `sweethidtest=5`.
+      `jt43` carries `sweetfb_noconsole=1`, but this board reads
+      **`a5fb_noconsole`** (see the status-bar item above), so that image mutes
+      nothing and the console kept painting over the GUI. Repack with
+      `a5fb_noconsole=1`; after that the remaining step is to drop the
+      `jtmali*` probe args once M2/M3 are read off a photo, and stop carrying
+      `sweethidtest=5`.
 - [ ] `exec %s` prints on every exec (`0042`/`0111`) — consider gating behind
       a boot arg like the other diagnostics.
 
@@ -118,32 +120,44 @@ deleted on 2026-11-10); build results and the image details live in
       shim, not the Metal plug-in. The Metal plug-in (`0155`'s
       `JackpotlteMetal` bundle and the reference's AIR frontend) is deferred, and
       the licence question for its reuse is parked with it.
-- [ ] M4 userspace, started: `userspace/jackpotlte-maliprobe` is the first tool
-      that speaks the `0154` ABI from a Darwin client (`userspace/README.md`,
-      built in CI by `.github/workflows/userspace.yml`, whose `--abi` step
-      checks the structures and selectors against `xnu/patches/0154`).
-      Not in the root image yet: the arm64 binary comes out of a CI run, and
-      putting it at `/usr/local/bin/maliprobe` +
-      `/System/Library/LaunchDaemons/com.jackpotlte.maliprobe.plist` belongs in
-      `tools/jackpotlte/apply-root-tweaks.sh` so the root keeps one mount pass.
-      Next after that: the `redwood_drm`-shaped shim (`RedwoodMali` ->
-      `JackpotlteMali`) — written as `userspace/libjackpotlte` — then Mesa
-      panfrost v6, then the Metal plug-in.
-- [ ] M4 Mesa (Bifrost v6), written and in CI: `tools/mesa-jackpotlte/` is a
-      three-patch series that builds Mesa 25.0.7's panfrost v6 for arm64 iOS
-      against `userspace/libjackpotlte` instead of libdrm, and
+- [ ] M4 userspace: `userspace/jackpotlte-maliprobe` is the first tool that
+      speaks the `0154` ABI from a Darwin client (`userspace/README.md`, built
+      in CI by `.github/workflows/userspace.yml`, whose `--abi` step checks the
+      structures and selectors against `xnu/patches/0154`). The arm64 binary
+      comes out of a CI run; `tools/jackpotlte/apply-root-tweaks.sh` installs
+      it at `/usr/local/bin/maliprobe` +
+      `/System/Library/LaunchDaemons/com.jackpotlte.maliprobe.plist` (flashed
+      2026-11-10, above), together with the GL libraries below. Written since:
+      the drm stand-in (`userspace/libjackpotlte`), Mesa panfrost v6, and the
+      EAGL shim; the Metal plug-in is deferred with the route (above).
+- [ ] M4 Mesa (Bifrost v6), written and green in CI: `tools/mesa-jackpotlte/`
+      is a four-patch series that builds Mesa 25.0.7's panfrost v6 for arm64
+      iOS against `userspace/libjackpotlte` instead of libdrm, and
       `.github/workflows/mesa.yml` builds `out/libOSMesa.8.dylib` on
-      `macos-15`. The patches apply to a pristine tarball, but the build has
-      not run green yet and the library has never been on the phone: the first
-      real claim needs a boot and a photo.
-- [ ] M4 GLES: after the panfrost library builds, the missing piece is the
-      CoreAnimation path. On iOS the window server draws through `EAGLContext`
-      (`QuartzCore`'s `EAGLServer::renderer()` tries Metal first, then EAGL), and
-      `CoreImage` reaches GLES through `+[CIContext contextWithEAGLContext:]`.
-      The shim replaces a handful of `EAGLContext` methods and backs them with
-      Mesa (where the reference's `libredwood-gl.dylib` backs its own); its
-      recorded obstacle — CoreImage stopping on `-[EAGLContext sharegroup]`,
-      which it never replaced — is the kind of thing to expect. Not written yet.
+      `macos-15`. Run `43491401891` is green on `60aba9d` (artifact
+      `mesa-osmesa-panfrost-v6`; `out/libOSMesa.8.dylib` 13,223,048 B, arm64,
+      1296 exported `gl*`), so the patches apply and the library links. It has
+      never been on the phone: the first real claim needs a boot and a photo.
+- [ ] M4 GLES: the CoreAnimation path. On iOS the window server draws through
+      `EAGLContext` (`QuartzCore`'s `EAGLServer::renderer()` tries Metal first,
+      then EAGL), and `CoreImage` reaches GLES through
+      `+[CIContext contextWithEAGLContext:]`. The shim replaces a handful of
+      `EAGLContext` methods and backs them with Mesa (where the reference's
+      `libredwood-gl.dylib` backs its own); its recorded obstacle — CoreImage
+      stopping on `-[EAGLContext sharegroup]`, which it never replaced — is the
+      kind of thing to expect. Written: `userspace/jackpotlte-gl/` builds
+      `out/libjackpotlte-gl.dylib` (userspace CI `43489433732`, green on
+      `069825f`) and installs ten `EAGLContext` methods. It is not in the root
+      on the phone and no frame has been drawn: that waits on the loader.
+- [ ] M4 loader + first frame: `0157-jackpotlte-exec-inject.patch` adds the
+      boot-arg `jtexecinject`, which the kernel applies in `exec_extract_strings()`
+      (kernel CI `43496663209` green on `5d7765c`; the binary carries both
+      `jtexecinject` and `DYLD_INSERT_LIBRARIES=`), and
+      `tools/jackpotlte/apply-root-tweaks.sh` installs the two dylibs into
+      `/usr/local/lib`. What is left: the owner's word for the `userdata` write,
+      then a BOOT image whose cmdline carries the `jtmaliprobe…` gates plus
+      `jtexecinject=/usr/local/lib/libjackpotlte-gl.dylib,backboardd`, and a
+      photo. Loaded is not drawn: the first draw claim is a frame on the panel.
 - [x] M4 GLES, first piece: the OpenGL ES dispatch table of this phone's build
       (2026-11-13). `-[EAGLContext getMacroContextPrivate]` hands out a table
       of function pointers and iOS calls `entry(table[0], args...)`; the offsets
