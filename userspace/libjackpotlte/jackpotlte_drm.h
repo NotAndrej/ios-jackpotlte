@@ -40,9 +40,24 @@ extern "C" {
 #endif
 
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
- * What Mesa's panfrost takes from libdrm's xf86drm.h.  Mesa includes Mesa's
- * own drm-uapi/drm.h for the request codes; nothing here repeats what it says.
+ * What Mesa's panfrost takes from libdrm's xf86drm.h.
+ *
+ * The request codes and their structures are Linux's, and Mesa carries them
+ * (include/drm-uapi/drm.h, which itself includes drm_mode.h).  Real libdrm's
+ * xf86drm.h includes drm.h, and so does this one: Mesa's renderonly.c includes
+ * only <xf86drm.h> and then uses DRM_IOCTL_MODE_CREATE_DUMB and
+ * struct drm_mode_create_dumb, so a stand-in that left them out would not be a
+ * stand-in at all.  Nothing here repeats what that header says.
+ *
+ * The include is conditional because this header is also built outside Mesa
+ * (userspace/build.sh, for the phone), where there is no drm-uapi copy and
+ * nothing asks for those codes.
  */
+#if defined(__has_include)
+#if __has_include("drm-uapi/drm.h")
+#include "drm-uapi/drm.h"
+#endif
+#endif
 #ifndef DRM_NODE_PRIMARY
 #define DRM_NODE_PRIMARY        0
 #endif

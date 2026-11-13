@@ -53,6 +53,17 @@ missing backend.
 `jackpotlte_drm.h` is installed twice in the tree, as `xf86drm.h` (the name
 panfrost includes) and under its own name (what the shim's sources include).
 
+It includes Mesa's own `drm-uapi/drm.h` where that header is available, as real
+libdrm's `xf86drm.h` includes `drm.h`.  Not for panfrost, which includes Mesa's
+copy itself, but for Mesa's `renderonly.c` (`src/gallium/auxiliary/meson.build`
+adds it whenever `dep_libdrm` is found, and panfrost calls the `renderonly_*`
+functions from `pan_resource.c`, so it has to be built): it includes only
+`<xf86drm.h>` and then uses `DRM_IOCTL_MODE_CREATE_DUMB` and
+`struct drm_mode_create_dumb`.  Without the definitions the build stops there
+instead of in the driver, which is what the first CI run did.  Outside Mesa
+(`userspace/build.sh`, for the phone) there is no `drm-uapi` copy and nothing
+asks for those codes, so the include is conditional (`__has_include`).
+
 ## What this is not
 
 - Not the Metal driver.  `docs/mali-userland-provenance.md` is where that
