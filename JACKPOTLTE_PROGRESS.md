@@ -2726,8 +2726,11 @@ answer is now written down in `docs/mali-userland-provenance.md`, from the
 public repositories at the pinned commits:
 
 - The snapshot every Mali file comes from — `hakios-xnu-kernel` branch `mtk` @
-  `620c775` — carries **no licence file at all**, and it is a single commit, so
-  there is no earlier one to fall back on.
+  `620c775` — carries **no licence file at all**. (Re-checked 2026-11-13: the
+  branch is not a single commit — its root is `3f31f34285` (2026-11-06,
+  parentless), it has 7 commits with HEAD `a962798418fa` (2026-11-10), and no
+  commit on it holds a licence file. It also shares no history with `main`, so
+  `main`'s licence cannot reach it by any route.)
 - The repository's `LICENSE` appeared later, on `main`, grants MIT to "the
   user-space code in `userland/src/`", and `main` **no longer contains the Mali
   userland**: the only `redwood` path in it is `docs/devices/redwood.md`.
@@ -2758,3 +2761,35 @@ carries `jtmaliprobe=1 jtmalipwr=1 jtmalijob=1 jtmalimetal=1`, the gates `0144`,
 `43033244620` built. The same boot therefore also reports M2 (`word=0xc0ffee01`
 for both jobs) and M3 (`engine up` plus `JackpotlteMali:`) if those stages run.
 `jtmetal` is deliberately **not** set: the plug-in it names does not exist yet.
+
+### M4 userspace: Mesa panfrost v6 for iOS, written (2026-11-13)
+
+The M4 plan chose Mesa's panfrost as the layer below the Metal plug-in, and the
+work to build it is now written: `tools/mesa-jackpotlte/` holds three patches
+against Mesa 25.0.7 and `.github/workflows/mesa.yml` builds
+`out/libOSMesa.8.dylib` for arm64 iOS on `macos-15`.
+
+- `0001-darwin-drm-standin.patch` — there is no libdrm and no `mmap()` on a
+  device, so `dep_libdrm` becomes a dependency on `src/jackpotlte-drm` (our
+  `userspace/libjackpotlte`, installed as `xf86drm.h`); a buffer is mapped and
+  unmapped by its handle; a SweetSurface's size comes from the kernel's describe
+  request (`0154`'s `0x7e`), not `lseek()`.
+- `0002-panfrost-v6-darwin.patch` — the A8's G71 is Bifrost **v6**, so the
+  Darwin build compiles that architecture alone (the reference builds v7 for the
+  Mali-G52), and `pan_raw_format_mask_midgard` is compiled for v6 too. This is
+  the board-specific change; `docs/jackpotlte-mali.md` §4 has the gap analysis.
+- `0003-osmesa-panfrost-screen.patch` — OSMesa asks for the GPU's screen before
+  the processor's (`OSMESA_SOFTWARE=1` still forces softpipe), and turns a
+  SweetSurface's pixels into a texture.
+
+All three apply with `patch -p1` to a pristine `mesa-25.0.7.tar.xz`
+(sha256 `592272df…510f8a6`), `bash -n` and the repo validator pass, and the
+workflow has not run yet. **Nothing has been built green and nothing has been on
+the phone**: a library that builds is not a screen.
+
+The licensing re-check of the same day corrected the earlier note: the `mtk`
+branch is 7 commits, not one, and `vcvkk/darwin-redwood` (the origin the
+reference points to) is gone from GitHub with no archive, so its terms cannot be
+confirmed by anyone. `docs/mali-userland-provenance.md` now carries this, the
+APSL 2.0 obligations for the kernel half, and the four internal contradictions a
+written reuse request would settle. The recommended option is unchanged.

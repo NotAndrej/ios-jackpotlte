@@ -121,15 +121,24 @@ deleted on 2026-11-10); build results and the image details live in
       `/System/Library/LaunchDaemons/com.jackpotlte.maliprobe.plist` belongs in
       `tools/jackpotlte/apply-root-tweaks.sh` so the root keeps one mount pass.
       Next after that: the `redwood_drm`-shaped shim (`RedwoodMali` ->
-      `JackpotlteMali`), then Mesa panfrost v6, then the Metal plug-in.
+      `JackpotlteMali`) — written as `userspace/libjackpotlte` — then Mesa
+      panfrost v6, then the Metal plug-in.
+- [ ] M4 Mesa (Bifrost v6), written and in CI: `tools/mesa-jackpotlte/` is a
+      three-patch series that builds Mesa 25.0.7's panfrost v6 for arm64 iOS
+      against `userspace/libjackpotlte` instead of libdrm, and
+      `.github/workflows/mesa.yml` builds `out/libOSMesa.8.dylib` on
+      `macos-15`. The patches apply to a pristine tarball, but the build has
+      not run green yet and the library has never been on the phone: the first
+      real claim needs a boot and a photo.
 - [ ] Open question for the owner: what to reuse from the reference's Mali
-      side. The provenance has been checked and written down in
+      side. The provenance has been checked, re-checked and written down in
       `docs/mali-userland-provenance.md`: the AIR frontend
       (`tools/mesa/air/*`) carries a per-file MIT grant and the SoC driver
       (`hakios-mt6768/kernel/`) is APSL 2.0, the same licence our `xnu/patches/`
       already carry - but the Metal driver itself (`redwoodmetal.m` +
-      `userland/src/metal/*.cpp`, ~470 KB) has no licence header and no licence
-      in the snapshot it comes from, and the reference's own `COMPLIANCE.md`
-      lists its plug-in as "to verify". Three options are set out there;
-      **option 1 (take the frontend and the driver, write our own Metal side) is
-      the recommendation**, and the call is the owner's.
+      `userland/src/metal/*.cpp`, ~470 KB) has no licence header and its branch
+      (`mtk`, 7 commits, HEAD `a962798418fa`) carries no licence file at all,
+      and the reference's own `COMPLIANCE.md` lists its plug-in as "to verify".
+      Three options are set out there; **option 1 (take the frontend and the
+      driver, write our own Metal side) is the recommendation**, and the call
+      is the owner's.
