@@ -42,6 +42,11 @@
 #                              Skipped when the built copy is absent: it is
 #                              arm64 iOS, so it comes from the userspace CI
 #                              job, not from this host.
+#   /usr/local/lib/libjackpotlte-gl.dylib + libOSMesa.8.dylib
+#                              the EAGL shim and the Mesa it sits on, for the
+#                              kernel's exec-time injection into backboardd
+#                              (0157; docs/jackpotlte-mali.md sec. 9).  Same
+#                              CI-origin note as the probe.
 #
 # Why the app move: SpringBoard showed only ~7 icons because iOS 16 ships the
 # 32 user apps (Maps, Music, Weather, Clock, Calculator, Files, Books, Notes,
@@ -159,6 +164,21 @@ if [ -f "$probe/maliprobe" ]; then
 	echo "installed maliprobe + its LaunchDaemon"
 else
 	echo "note: no $probe/maliprobe (the userspace CI job builds it); skipping the probe"
+fi
+
+# The GLES shim and the OSMesa it sits on, for the kernel's exec-time injection
+# (0157; docs/jackpotlte-mali.md sec. 9).  They share one directory: the shim
+# opens Mesa by @loader_path first, so /usr/local/lib holding both is enough and
+# the injection names the shim by absolute path (boot-arg jtexecinject).  Both
+# are arm64 iOS dylibs, so like the probe they come from CI, not this host.
+shim=${GL_OUT:-$repo/userspace/out}
+if [ -f "$shim/libjackpotlte-gl.dylib" ] && [ -f "$shim/libOSMesa.8.dylib" ]; then
+	install -d -m 0755 "$mnt/usr/local/lib"
+	install -m 0755 "$shim/libjackpotlte-gl.dylib" "$shim/libOSMesa.8.dylib" \
+	    "$mnt/usr/local/lib/"
+	echo "installed libjackpotlte-gl.dylib + libOSMesa.8.dylib into /usr/local/lib"
+else
+	echo "note: no GLES shim/Mesa in $shim (both from CI); skipping the loader payload"
 fi
 
 umount "$mnt"

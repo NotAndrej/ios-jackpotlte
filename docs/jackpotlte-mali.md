@@ -433,8 +433,10 @@ Pieces for this port:
    is `LIBRARY[,NAME...][;LIBRARY[,NAME...]]` — commas and semicolons, not the
    reference's spaces, because a boot-arg's value ends at the first space
    (`pexpert/gen/bootargs.c`, `argstrcpy2()`). It applies to the pristine tree
-   with `patch -p1 --dry-run`; it has not been compiled and nothing has been on
-   the phone;
+   (`patch -p1 --dry-run`) and the kernel builds with it: CI `43496663209` on
+   `5d7765c` produced `kernel.development.a5xelte`, 16,602,208 bytes, with all
+   157 project patches applied. Building is not booting: nothing has been on the
+   phone;
 
    The code-signing half is not what the reference's comment makes it.
    `cs_require_lv()` (`bsd/kern/kern_cs.c`) has **no caller anywhere in
@@ -457,6 +459,37 @@ Pieces for this port:
 Deployment goes into the iOS root (the existing `userdata` partition), which
 `AGENTS.md` says needs the owner's confirmation before writing; it is not a BOOT
 change.
+
+### The phone test, once the root write is approved
+
+The two artifacts are `out/libjackpotlte-gl.dylib` (userspace CI, arm64 iOS) and
+`out/libOSMesa.8.dylib` (Mesa CI, arm64 iOS). They go into the **same directory**
+in the iOS root: the shim loads Mesa by `@loader_path/libOSMesa.8.dylib` first
+(`jackpotlte_gl_osmesa.c`, `open_library()`), so a directory holding both is
+enough and its own path need not be known. The injected value is an absolute
+path, so dyld does no search of its own (the directory beside the probe's
+`/usr/local/bin` keeps it out of the system's own `/usr/lib`):
+
+    jtexecinject=/usr/local/lib/libjackpotlte-gl.dylib,backboardd
+
+The kernel code takes several names per library and several `LIBRARY,NAME...`
+groups separated by `;`, so `,SpringBoard` can be added to the same group if
+CoreAnimation there turns out to need it too.
+
+The steps, none of which has been run:
+
+1. install both dylibs into the root at that path (a `userdata` write: owner's
+   word first), the way `tools/jackpotlte/apply-root-tweaks.sh` already installs
+   the probe;
+2. pack a BOOT image whose kernel is the one CI `43496663209` built and whose
+   cmdline carries the boot-arg above (`tools/jackpotlte/make-boot.sh`);
+3. `fastboot flash BOOT`, boot, photograph the screen;
+4. read the console for `jackpotlte-gl:` lines — the ones it always prints
+   (`GL_VERSION`, `GL_RENDERER`) and `... is ours: n of 10 methods` — and, for a
+   surface it refuses, that refusal's own line. A frame on the panel is the
+   claim; the lines are only how it is reached.
+
+Nothing has been built with that cmdline and nothing has been on the phone.
 
 Licence: this is our own code (the chosen route). The reference's `eagl.c` is
 under the same README-only MIT statement as the rest of its Mali userland
