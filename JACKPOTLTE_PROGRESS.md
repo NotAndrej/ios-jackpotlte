@@ -2848,3 +2848,90 @@ The Mesa build status is unchanged in substance: run `43478062666` was
 **cancelled** after 15 minutes in the queue with no runner assigned (zero steps,
 `runner_id` 0 — GitHub's macOS queue, not the build). It was re-queued; nothing
 has built green, and nothing has been on the phone.
+
+### The EAGL shim is written, and the Mesa build's first real failures are fixed (2026-11-13)
+
+The first Mesa run that actually reached the compiler stopped in the driver's
+dependencies, not in the driver. `src/gallium/auxiliary/renderonly/renderonly.c`
+came back with `variable has incomplete type 'struct drm_mode_destroy_dumb'` and
+`use of undeclared identifier DRM_IOCTL_MODE_DESTROY_DUMB` (and the CREATE pair) —
+six errors.
+
+- The file has to be built: `src/gallium/auxiliary/meson.build` adds it whenever
+  `dep_libdrm` is found, `0001` makes it found on Darwin, and panfrost itself
+  calls `renderonly_scanout_for_resource` and friends from `pan_resource.c`.
+- It includes only `<xf86drm.h>` and then uses the dumb-buffer request codes.
+  Real libdrm's `xf86drm.h` includes `drm.h`, and Mesa carries that header
+  (`include/drm-uapi/drm.h`, which includes `drm_mode.h`); our stand-in had
+  assumed a caller that includes it first. panfrost does; `renderonly.c` does
+  not.
+- `jackpotlte_drm.h` now includes it too (`7ed0717`), under `__has_include`
+  because `userspace/build.sh` builds the same header for the phone, where there
+  is no `drm-uapi` copy and nothing asks for `DRM_IOCTL_MODE_*`. The only macro
+  the two headers share (`DRM_CLOEXEC`, `DRM_RDWR`) is textually identical.
+- Checked on the build machine for both branches `drm.h` takes (Linux, and with
+  `__linux__` undefined — the branch Darwin takes), and that the phone build
+  skips the include. Whether the iPhoneOS SDK's `<sys/ioccom.h>` gives the BSD
+  branch what it wants is still only answerable by a Mesa run.
+
+`0004-osmesa-es-profile.patch` was added (`6da7e9e`). OSMesa makes desktop GL
+contexts only; the EAGL shim behind CoreAnimation has to make an OpenGL ES
+context of the version it was asked for, and with `OSMesaCreateContextAttribs`
+the only way to ask is `OSMESA_PROFILE`, which refused anything but the two
+desktop values. The patch accepts a third, `OSMESA_ES_PROFILE` (0x38), and maps
+it to `API_OPENGLES2` — the same state tracker with another profile. The
+four-patch series applies in order to a pristine 25.0.7 tree.
+
+The shim itself is written: `userspace/jackpotlte-gl/` holds the `EAGLContext`
+implementation (`eagl.c`), the OSMesa backend behind it
+(`jackpotlte_gl_osmesa.c`), the interface between them (`jackpotlte_gl.h`), and
+the generated dispatch table. `userspace/build.sh` builds it as
+`out/libjackpotlte-gl.dylib` (arm64 iOS).
+
+- **No `gl*` function is called by name.** iOS's `OpenGLES.framework` is in the
+  dyld shared cache and defines every one of them, so a by-name call would bind
+  Apple's driver, which knows nothing of these contexts. Everything is resolved
+  through `jackpotlte_gl_proc`, which is OSMesa's own `OSMesaGetProcAddress`.
+  The build fails if `nm -u` on the dylib shows a ` _gl[A-Z]` name.
+- The dispatch table's entries call `jackpotlte_gl_use(context)` before passing
+  the call on: OSMesa's current context is per thread, and the display server's
+  renderer is not always the thread that made the context.
+- Ten `EAGLContext` methods are installed with `method_setImplementation` (the
+  class's own encodings stay; a selector iOS does not have is logged, not added
+  with a guessed signature): the six CoreAnimation's renderer asks, the two
+  public initialisers (`initWithAPI:`, `initWithAPI:sharegroup:` — an object made
+  by Apple's would have none of the shim's state), `-sharegroup` (nil; CoreImage
+  asks, and the reference crashed there for want of it) and `-dealloc`.
+- A surface becomes a texture by handing its ID to
+  `glEGLImageTargetTexture2DOES`, which `0003`'s frontend hook turns into a
+  buffer of that surface (`0154`'s `0x7e`) — the display's memory itself, no
+  copy. A surface that cannot be one (not one plane of 32-bit BGRA pixels) is
+  refused with a log line; a copy would be a different picture and a different
+  bug. `-setParameter:to:` notes its parameter without reading the value,
+  because what the caller passes it as has not been established here.
+
+Three CI failures were found by reading the logs rather than guessing, and fixed:
+the iPhoneOS SDK ships `IOSurface.framework` without a header (the six accessors
+are declared in the file, as the iOS backend already does for IOKit);
+`<objc/message.h>` declares `objc_msgSendSuper` as `void (void)`, so the union
+member has to be that declaration and not a prototyped one; and `-Wextra`'s
+`-Wcast-function-type-mismatch` rejects the `gl*` function-pointer casts, which
+are unions now.
+
+**Userspace CI `43488007184` is green on `a1a5a7f`** — all eleven steps, the
+dylib compiled and linked for arm64 iOS with no `gl*` by name. The build's own
+checks were then tightened (`069825f`): the no-`gl*`-by-name assertion no longer
+sits in `if nm … | grep …` where a failing `nm` under `set -o pipefail` made it
+pass by not running, the dylib is in the closing `file`/`lipo`/`ls -l`, and the
+workflow's arm64 step checks it too.
+
+Nothing has built green for Mesa: the two runs since the renderonly fix
+(`43485844894`, `43486044591`) were both **cancelled after exactly 15 minutes in
+the queue** with no runner assigned (`runner_name` empty). `43486044591` was
+re-queued. Nothing has drawn a frame and nothing new has been on the phone.
+
+The next thing is the loader: how `libjackpotlte-gl.dylib` gets inside
+`backboardd`. This root has no `libredwood.dylib`, so the candidates are a
+launchd `EnvironmentVariables` insert, a dyld interpose, or replacing
+`OpenGLES` (cache-only). Settling it is a `userdata` change and a phone test, and
+that needs the owner's word before anything is written.
