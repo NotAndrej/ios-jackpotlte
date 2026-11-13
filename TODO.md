@@ -108,10 +108,16 @@ deleted on 2026-11-10); build results and the image details live in
       `/var/tmp/a8-xnu-jt42-gpum3.img` (sha256 `536ab7ed...4a120901`).  What
       is left is the boot: read `JACKPOTLTE MALI: engine up` plus
       `JackpotlteMali: the GPU is there for programs to draw with`.
-- [ ] M4: the `JackpotlteMetal` bundle (Metal plug-in + AIR frontend) and Mesa
-      built with Bifrost **v6**.  Its first step is written: `0155` publishes
-      the `IOAcceleratorES` service and, under boot-arg `jtmetal=1`, the two
-      properties that name the plug-in (`docs/gpu-bringup.md`).
+- [ ] M4: **route decided 2026-11-13 — GLES via Mesa panfrost.** The reference's
+      own Metal analysis (`hakios-xnu-kernel/mtk docs/metal.md` §3/§4/§7) shows
+      Metal is walled off by Apple's AIR shader format (no AIR reader exists; a
+      Metal driver needs an AIR→NIR compiler) while CoreAnimation's window-server
+      renderer falls back to EAGL/OpenGL ES — the path that actually draws the
+      UI and wallpaper — and CoreImage's default backend already goes to GLES.
+      So the CPU-rendering fix is Mesa panfrost v6 (below) plus an EAGLContext
+      shim, not the Metal plug-in. The Metal plug-in (`0155`'s
+      `JackpotlteMetal` bundle and the reference's AIR frontend) is deferred, and
+      the licence question for its reuse is parked with it.
 - [ ] M4 userspace, started: `userspace/jackpotlte-maliprobe` is the first tool
       that speaks the `0154` ABI from a Darwin client (`userspace/README.md`,
       built in CI by `.github/workflows/userspace.yml`, whose `--abi` step
@@ -130,15 +136,22 @@ deleted on 2026-11-10); build results and the image details live in
       `macos-15`. The patches apply to a pristine tarball, but the build has
       not run green yet and the library has never been on the phone: the first
       real claim needs a boot and a photo.
-- [ ] Open question for the owner: what to reuse from the reference's Mali
-      side. The provenance has been checked, re-checked and written down in
-      `docs/mali-userland-provenance.md`: the AIR frontend
-      (`tools/mesa/air/*`) carries a per-file MIT grant and the SoC driver
-      (`hakios-mt6768/kernel/`) is APSL 2.0, the same licence our `xnu/patches/`
-      already carry - but the Metal driver itself (`redwoodmetal.m` +
-      `userland/src/metal/*.cpp`, ~470 KB) has no licence header and its branch
-      (`mtk`, 7 commits, HEAD `a962798418fa`) carries no licence file at all,
-      and the reference's own `COMPLIANCE.md` lists its plug-in as "to verify".
-      Three options are set out there; **option 1 (take the frontend and the
-      driver, write our own Metal side) is the recommendation**, and the call
-      is the owner's.
+- [ ] M4 GLES: after the panfrost library builds, the missing piece is the
+      CoreAnimation path. On iOS the window server draws through `EAGLContext`
+      (`QuartzCore`'s `EAGLServer::renderer()` tries Metal first, then EAGL), and
+      `CoreImage` reaches GLES through `+[CIContext contextWithEAGLContext:]`.
+      The reference did this with its own `userland/src/eagl.c`, which replaces
+      a handful of `EAGLContext` methods and backs them with Mesa (its
+      `libredwood-gl.dylib`); ours would back them with this port's panfrost
+      library. Its recorded obstacle — CoreImage stopping on `-[EAGLContext
+      sharegroup]`, which it never replaced — is the kind of thing to expect.
+      Nothing of this is written yet.
+- [x] Route question settled (2026-11-13): GLES via Mesa panfrost. The licence
+      work in `docs/mali-userland-provenance.md` stands as evidence, but the
+      choice it fed (which reference Metal files to reuse) is deferred with the
+      Metal plug-in: the GLES route takes only Mesa (upstream) and our own shim,
+      so no reference Mali userland is needed for it. If the Metal plug-in is
+      picked up later, **option 1 (take the granted frontend and driver, write
+      our own Metal side) remains the recommendation**; the branch `mtk` carries
+      no licence file and the reference's own `COMPLIANCE.md` lists its plug-in
+      as "to verify".

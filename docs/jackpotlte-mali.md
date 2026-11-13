@@ -297,15 +297,23 @@ touches the boot path except where noted.
 - **M3 — user client + surfaces.** A `RedwoodMali`-shaped user client whose
   BOs are `SweetSurface`s, reachable through a `redwood_drm.c`-shaped shim.
   Proves the userland contract before any Metal.
-- **M4 — Metal.** Build the plug-in + AIR frontend + Mesa with v6 enabled; put
-  the two properties on the accelerator service under a boot-arg; draw a
-  triangle. This is where the reference's userland is reused rather than
-  rewritten.
+- **M4 — GPU rendering in the compositor (route decided 2026-11-13: GLES, not
+  Metal).** Get CoreAnimation drawing through Mesa: build panfrost v6 for iOS
+  (written, `tools/mesa-jackpotlte/`) and back `EAGLContext` with it, so
+  QuartzCore's EAGL renderer — the one it falls back to when there is no Metal —
+  and CoreImage's GL backend run on the Mali. Draw a triangle first, then the
+  wallpaper. The reason this is GLES and not Metal is the reference's own Metal
+  analysis (`hakios-xnu-kernel` branch `mtk`, `docs/metal.md` §3/§4/§7): Metal is
+  handed shaders as Apple's AIR bitcode, which has no reader anywhere, while the
+  compositor's CPU rendering — the problem here — is on the GLES path and does
+  not need Metal. The Metal plug-in (`0155`'s bundle plus the reference's AIR
+  frontend) is a later, separate milestone; that is the part that would reuse the
+  reference's Mali userland, and its licence question is parked with it.
 
 Estimated shape: M0-M1 are small (one driver file + board.h facts); M2-M3 are
 medium (the port of a 1146-line driver to a new register map + a new surface
-binding); M4 is mostly integration and the v6 build, plus whatever Darwin
-surprises the v6 command stream holds.
+binding); M4 is mostly integration and the v6 build, plus the EAGL shim and
+whatever Darwin surprises the v6 command stream holds.
 
 ---
 
@@ -320,8 +328,10 @@ surprises the v6 command stream holds.
 
 The licence side of this table is checked, file by file and commit by commit, in
 `docs/mali-userland-provenance.md`: the AIR frontend and the SoC-side driver have
-a grant that travels with them, the Metal driver and the plug-in do not, and the
-decision on those two is the owner's.
+a grant that travels with them, the Metal driver and the plug-in do not. With the
+GLES route chosen (§6, M4), none of those are needed yet — Mesa is upstream and
+the drm face is ours — so the decision on the Metal files is deferred with the
+Metal plug-in.
 
 ---
 

@@ -2792,4 +2792,26 @@ branch is 7 commits, not one, and `vcvkk/darwin-redwood` (the origin the
 reference points to) is gone from GitHub with no archive, so its terms cannot be
 confirmed by anyone. `docs/mali-userland-provenance.md` now carries this, the
 APSL 2.0 obligations for the kernel half, and the four internal contradictions a
-written reuse request would settle. The recommended option is unchanged.
+written reuse request would settle.
+
+### Route decided: GLES via Mesa panfrost, not Metal (2026-11-13)
+
+The owner chose the GLES route. The reason is the reference's own Metal analysis
+(`hakios-xnu-kernel` branch `mtk`, `docs/metal.md`): Metal's shader input is
+Apple's AIR bitcode, for which no reader exists anywhere (§4, "no ready AIR
+reader in the world"), so a Metal driver needs an AIR→NIR compiler bigger than
+everything else in that project's graphics work; and CoreAnimation's
+window-server renderer (`§3`) tries Metal first and **falls back to
+EAGL/OpenGL ES**, which is the renderer that draws the UI and wallpaper.
+CoreImage's default backend already goes to GLES too (§7). So the CPU-rendering
+problem is fixed on the GLES path — Mesa panfrost v6 (above) plus an
+`EAGLContext` shim to CoreAnimation — and does not need Metal at all.
+
+Consequences: the Metal plug-in (`0155`'s bundle and the reference's AIR
+frontend) is deferred, and the licence question about reusing the reference's
+Metal userland is parked with it. The GLES route takes only Mesa (upstream) and
+our own shim, so nothing from the reference's Mali userland is needed for it.
+If the Metal plug-in is picked up later, licence **option 1** (take the granted
+frontend and driver, write our own Metal side) remains the recommendation.
+
+`jt44` stays parked (the owner's call); it is not needed for the GLES route.
