@@ -347,6 +347,60 @@ powered). Until it is done, every later milestone's feasibility is assumed.
 
 ---
 
+## 9. The EAGL shim (GLES route, M4b)
+
+The route chosen for M4 (§6) puts CoreAnimation on Mesa. The library M4 builds
+(`tools/mesa-jackpotlte/`, `libOSMesa.8.dylib`) is the bottom of it: Mesa's
+panfrost v6 behind an OpenGL ES entry point. The piece above it is an
+`EAGLContext` implementation of our own, loaded into the window server
+(`backboardd`), because this port's CoreAnimation currently draws in software
+(`docs/upstream-README.md`).
+
+How the reference does it, from `userland/src/eagl.c`'s own header (HakiOS,
+branch `mtk` @`620c775`) — this is a description of *their* design, not a plan
+we have to copy:
+
+- `libredwood-gl.dylib` is "an OpenGL ES implementation behind iOS's
+  EAGLContext, inside the window server (backboardd; libredwood.dylib loads this
+  when the image has it: build.sh GL=1)".
+- CoreAnimation "asks six things" of an `EAGLContext`, and all six are replaced:
+  `-initWithAPI:properties:` (make a context of the library behind us), `-API`
+  (3), `-setParameter:to:`, `-getMacroContextPrivate` (a table of GL functions at
+  iOS's own `OpenGLES` entry offsets), `-texImageIOSurface:…` and
+  `-attachImage:toCoreSurface:…` (the IOSurface's memory becomes the texture;
+  where it cannot, the texture is copied in and out).
+- The table's offsets are per iOS build: the reference generates
+  `src/eagl_slots.txt` (409 entries, 62 used by QuartzCore) with `mkeagl.py` from
+  *its* shared cache. **Ours must be generated from this port's cache** (iOS
+  16.7.16, 20H392), not copied — the reference's is iOS 16.5 (20F66).
+- The reference's CoreImage failure was `-[EAGLContext sharegroup]`, which it had
+  not replaced; CoreAnimation and CoreImage ask for different methods, so a shim
+  that satisfies the first need not satisfy the second.
+
+Pieces for this port, none written yet:
+
+1. an `EAGLContext` replacement that calls Mesa (OSMesa), in `userspace/` beside
+   `libjackpotlte`;
+2. the GL entry-point table, generated from the phone's own shared cache by a
+   `tools/` script (the reference's `mkeagl.py` is the shape, not the source);
+3. a loader that puts the replacement inside `backboardd`. This port has no
+   `libredwood.dylib`, so the mechanism — a launchd environment insert, a dyld
+   interpose, or a replacement `OpenGLES` binary — is an open question to settle
+   against this root;
+4. the verification rule stands: a library that loads is not a frame. The first
+   claim that CoreAnimation draws on the Mali needs a photo.
+
+Deployment goes into the iOS root (the existing `userdata` partition), which
+`AGENTS.md` says needs the owner's confirmation before writing; it is not a BOOT
+change.
+
+Licence: this is our own code (the chosen route). The reference's `eagl.c` is
+under the same README-only MIT statement as the rest of its Mali userland
+(`docs/mali-userland-provenance.md` §2), so nothing from it is needed here — and
+its slot table is for a different iOS build anyway.
+
+---
+
 ## Sources
 
 - HakiOS reference: `github.com/oosexgang/hakios-xnu-kernel` @ `620c775`
