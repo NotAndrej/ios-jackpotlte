@@ -6,7 +6,7 @@ Linux's DRM.  It is the userspace half of M4: what a graphics stack above it
 (the Metal plug-in `0155` names, or an EAGL/GLES one) draws through.
 
 Mesa stays upstream.  Nothing in this directory is a copy of Mesa; the patches
-change twelve files of the release tarball, and the drm face is the live copy in
+change thirteen files of the release tarball, and the drm face is the live copy in
 `userspace/libjackpotlte/`, staged into the tree at build time.
 
 ## Run it
@@ -32,7 +32,7 @@ The tarball is verified against
 | `0001-darwin-drm-standin.patch` | `meson.build`, `src/panfrost/lib/kmod/{meson.build,pan_kmod.h,pan_kmod.c}`, `src/gallium/drivers/panfrost/pan_bo.c` | There is no libdrm and no `mmap()` on a device: `dep_libdrm` becomes a dependency on `src/jackpotlte-drm` (our `userspace/libjackpotlte`, installed as `xf86drm.h`); a buffer is mapped/unmapped by its handle; a SweetSurface's size comes from the kernel's describe request (`0154`'s `0x7e`), not from `lseek()`. |
 | `0002-panfrost-v6-darwin.patch` | `src/panfrost/lib/meson.build`, `src/gallium/drivers/panfrost/meson.build`, `src/panfrost/lib/pan_shader.c`, `src/gallium/drivers/panfrost/pan_screen.c` | The A8's G71 is Bifrost **v6**; the Darwin build compiles that architecture alone, so the other architectures' entry points are neither built nor named, and `pan_raw_format_mask_midgard` is compiled for v6 too. |
 | `0003-osmesa-panfrost-screen.patch` | `src/gallium/targets/osmesa/{osmesa_target.c,meson.build}`, `src/gallium/frontends/osmesa/osmesa.c` | OSMesa asks for the GPU's screen before the processor's (`OSMESA_SOFTWARE=1` still forces softpipe), and turns a SweetSurface's pixels into a texture for the display's own memory. The frontend (`osmesa.c`) is where `glEGLImageTargetTexture2DOES` is answered: without the `get_egl_image`/`validate_egl_image` hook there is no EGL here, so the call could never resolve an image to a texture and the zero-copy path would be dead code. |
-
+| `0004-osmesa-es-profile.patch` | `include/GL/osmesa.h`, `src/gallium/frontends/osmesa/osmesa.c` | OSMesa has no OpenGL ES: it makes a desktop GL compat or core context. The EAGL shim is handed `api` 2 or 3 by CoreAnimation and needs an ES context, so `OSMESA_PROFILE` gains `OSMESA_ES_PROFILE` (0x38), accepted and mapped to `API_OPENGLES2` (the version asked for is the ES version then). Without it `OSMesaCreateContextAttribs` refuses the attribute and no context exists at all. |
 The v6 change is the one specific to this board.  The reference this port
 started from (HakiOS, Mali-G52) builds **v7** alone; `docs/jackpotlte-mali.md`
 §4 records the gap and why it is a build-configuration change rather than a
@@ -75,7 +75,7 @@ asks for those codes, so the include is conditional (`__has_include`).
 
 ## Verification
 
-- The three patches apply with `patch -p1` to a pristine `mesa-25.0.7.tar.xz`
+- The four patches apply with `patch -p1` to a pristine `mesa-25.0.7.tar.xz`
   at the sha256 above (checked 2026-11-13 on the extracted tree).
 - CI builds the library and fails if it is missing or not arm64.
 - The device-side claim is separate and still open (`JACKPOTLTE_PROGRESS.md`).
