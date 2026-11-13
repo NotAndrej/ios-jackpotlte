@@ -18,8 +18,11 @@ remaining distance to a fast home screen is userspace, in three pieces:
    over — a small library of its own that speaks `0154` and hands the GPU to a
    Linux-shaped userspace (Mesa's panfrost) or to Metal, with the requests it
    builds checked on the build machine instead of on the phone.
-3. Mesa with Bifrost **v6**, then the `JackpotlteMetal` bundle
-   (`0155` publishes the service it plugs into; `JackpotlteMetalDevice`).
+3. Mesa with Bifrost **v6** and, above it, `jackpotlte-gl` — an `EAGLContext`
+   implementation that puts CoreAnimation's renderer on the GPU. That is the
+   chosen route (`docs/jackpotlte-mali.md` §6, §9); the `JackpotlteMetal`
+   bundle (`0155` publishes the service it plugs into) is the later, separate
+   Metal milestone.
 
 ## jackpotlte-maliprobe
 
@@ -105,6 +108,16 @@ problem; whether the GPU answers is a question only the phone can answer.
 The archive is built for arm64 iOS as `out/libjackpotlte.a` with
 `out/jackpotlte_gpu.h`. It resolves IOKit at load time, so whatever links it
 needs `-Wl,-undefined,dynamic_lookup` the way `maliprobe` does.
+
+## jackpotlte-gl
+
+The GLES side (`userspace/jackpotlte-gl/`): the `EAGLContext` implementation
+that CoreAnimation asks for when there is no Metal, backed by Mesa. It is not
+written yet. Its first piece is, because nothing else can start without it: the
+OpenGL ES dispatch table for this phone's build (`eagl_slots.txt`, 409 entries),
+generated from the 20H392 dyld shared cache by `tools/jackpotlte/eagl-slots.py`.
+The next pieces are the shim itself and a loader route into `backboardd`;
+`docs/jackpotlte-mali.md` §9 has the scope.
 
 ## Build
 

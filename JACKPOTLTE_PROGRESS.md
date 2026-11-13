@@ -2815,3 +2815,36 @@ If the Metal plug-in is picked up later, licence **option 1** (take the granted
 frontend and driver, write our own Metal side) remains the recommendation.
 
 `jt44` stays parked (the owner's call); it is not needed for the GLES route.
+
+### The OpenGL ES dispatch table of this build, generated (2026-11-13)
+
+CoreAnimation is not given GL functions by name: `-[EAGLContext
+getMacroContextPrivate]` returns a table, and its caller runs `entry(table[0],
+arguments...)`. The offsets belong to the build's `OpenGLES.framework` and are
+written down nowhere, so they have to be read off the framework itself.
+
+They now are. `tools/jackpotlte/eagl-slots.py` walks every `_gl*` export of the
+`OpenGLES` image in the dyld shared cache and decodes its trampoline — state from
+`tpidrro_el0+0xf0`, context from `+0x20`, the entry loaded from `+IMM` and
+jumped to (`br`, or `blr` when the arguments need a frame) — so the table offset
+is `IMM-0x20`. The generated table of the phone's build (iOS 16.7.16, 20H392,
+iPhone X) is `userspace/jackpotlte-gl/eagl_slots.txt`: **409 entries, 457
+names**.
+
+Two facts worth having:
+
+- The table was read **in place** out of the 16 GiB HFS+ root image. The cache
+  files there are hard links from the SystemOS cryptex; their link records break
+  a normal HFS+ walk, so the tool finds them as `[HFS+ Private Data]/iNode*`
+  whose first bytes are the cache magic (`--hfs-image`, pytsk3). Nothing had to
+  be extracted on a host that had 2.2 GB free.
+- It is **identical to the reference's iOS 16.5 (20F66) table**: 457 names, 409
+  offsets, no name at a different offset, the same names per entry. The layout
+  did not change between those builds, so the per-build worry was smaller than
+  assumed — but the table in the tree is still the one generated from this
+  phone's build, as it should be.
+
+The Mesa build status is unchanged in substance: run `43478062666` was
+**cancelled** after 15 minutes in the queue with no runner assigned (zero steps,
+`runner_id` 0 — GitHub's macOS queue, not the build). It was re-queued; nothing
+has built green, and nothing has been on the phone.

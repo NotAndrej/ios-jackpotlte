@@ -140,12 +140,20 @@ deleted on 2026-11-10); build results and the image details live in
       CoreAnimation path. On iOS the window server draws through `EAGLContext`
       (`QuartzCore`'s `EAGLServer::renderer()` tries Metal first, then EAGL), and
       `CoreImage` reaches GLES through `+[CIContext contextWithEAGLContext:]`.
-      The reference did this with its own `userland/src/eagl.c`, which replaces
-      a handful of `EAGLContext` methods and backs them with Mesa (its
-      `libredwood-gl.dylib`); ours would back them with this port's panfrost
-      library. Its recorded obstacle — CoreImage stopping on `-[EAGLContext
-      sharegroup]`, which it never replaced — is the kind of thing to expect.
-      Nothing of this is written yet.
+      The shim replaces a handful of `EAGLContext` methods and backs them with
+      Mesa (where the reference's `libredwood-gl.dylib` backs its own); its
+      recorded obstacle — CoreImage stopping on `-[EAGLContext sharegroup]`,
+      which it never replaced — is the kind of thing to expect. Not written yet.
+- [x] M4 GLES, first piece: the OpenGL ES dispatch table of this phone's build
+      (2026-11-13). `-[EAGLContext getMacroContextPrivate]` hands out a table
+      of function pointers and iOS calls `entry(table[0], args...)`; the offsets
+      are not in the SDK, so `tools/jackpotlte/eagl-slots.py` reads them off
+      `OpenGLES.framework`'s own trampolines in the dyld shared cache. Generated
+      for 20H392 (iOS 16.7.16, iPhone X) in place from the root image:
+      `userspace/jackpotlte-gl/eagl_slots.txt`, 409 entries, 457 names. It
+      matches the reference's 16.5 table exactly (no offset differs, same names
+      per entry), so the layout held between the builds; ours is still the one
+      generated from this build.
 - [x] Route question settled (2026-11-13): GLES via Mesa panfrost. The licence
       work in `docs/mali-userland-provenance.md` stands as evidence, but the
       choice it fed (which reference Metal files to reuse) is deferred with the

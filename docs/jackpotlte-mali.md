@@ -371,22 +371,33 @@ we have to copy:
   where it cannot, the texture is copied in and out).
 - The table's offsets are per iOS build: the reference generates
   `src/eagl_slots.txt` (409 entries, 62 used by QuartzCore) with `mkeagl.py` from
-  *its* shared cache. **Ours must be generated from this port's cache** (iOS
-  16.7.16, 20H392), not copied — the reference's is iOS 16.5 (20F66).
+  *its* shared cache (iOS 16.5, 20F66). Ours is now generated from this port's
+  cache (iOS 16.7.16, 20H392) by `tools/jackpotlte/eagl-slots.py`, read in place
+  out of the iOS root image; it is `userspace/jackpotlte-gl/eagl_slots.txt`,
+  409 entries and 457 names. Compared name by name, the two builds' tables are
+  identical — the layout did not change between them — so the per-build worry
+  turned out smaller than expected, but the table in the tree is still the one
+  read from this phone's build.
 - The reference's CoreImage failure was `-[EAGLContext sharegroup]`, which it had
   not replaced; CoreAnimation and CoreImage ask for different methods, so a shim
   that satisfies the first need not satisfy the second.
 
-Pieces for this port, none written yet:
+Pieces for this port:
 
 1. an `EAGLContext` replacement that calls Mesa (OSMesa), in `userspace/` beside
-   `libjackpotlte`;
-2. the GL entry-point table, generated from the phone's own shared cache by a
-   `tools/` script (the reference's `mkeagl.py` is the shape, not the source);
+   `libjackpotlte` — not written;
+2. ~~the GL entry-point table~~ **done**: `userspace/jackpotlte-gl/eagl_slots.txt`
+   (409 entries, 457 names), generated from this build's cache by
+   `tools/jackpotlte/eagl-slots.py`. Each `OpenGLES.framework` export is a
+   trampoline that reads the thread's table at `[tpidrro_el0+0xf0]`, takes the
+   context from `+0x20` and jumps through `[+IMM]`; the entry's table offset is
+   `IMM-0x20`. The table handed to QuartzCore is the array from `+0x20`;
 3. a loader that puts the replacement inside `backboardd`. This port has no
    `libredwood.dylib`, so the mechanism — a launchd environment insert, a dyld
    interpose, or a replacement `OpenGLES` binary — is an open question to settle
-   against this root;
+   against this root. The root already boots with `cs_enforcement_disable=1`
+   and `launchd_unsecure_cache=1` (`userspace/README.md`), which rules nothing
+   out but proves nothing about dyld's own `DYLD_*` policy either;
 4. the verification rule stands: a library that loads is not a frame. The first
    claim that CoreAnimation draws on the Mali needs a photo.
 
