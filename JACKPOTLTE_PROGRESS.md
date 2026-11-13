@@ -2765,7 +2765,7 @@ for both jobs) and M3 (`engine up` plus `JackpotlteMali:`) if those stages run.
 ### M4 userspace: Mesa panfrost v6 for iOS, written (2026-11-13)
 
 The M4 plan chose Mesa's panfrost as the layer below the Metal plug-in, and the
-work to build it is now written: `tools/mesa-jackpotlte/` holds three patches
+work to build it is now written: `tools/mesa-jackpotlte/` holds four patches
 against Mesa 25.0.7 and `.github/workflows/mesa.yml` builds
 `out/libOSMesa.8.dylib` for arm64 iOS on `macos-15`.
 
@@ -2781,11 +2781,18 @@ against Mesa 25.0.7 and `.github/workflows/mesa.yml` builds
 - `0003-osmesa-panfrost-screen.patch` — OSMesa asks for the GPU's screen before
   the processor's (`OSMESA_SOFTWARE=1` still forces softpipe), and turns a
   SweetSurface's pixels into a texture.
+- `0004-osmesa-es-profile.patch` — OSMesa makes desktop GL contexts only; the
+  EAGL shim behind CoreAnimation has to make an OpenGL ES context of the version
+  it was asked for, and `OSMesaCreateContextAttribs` had no way to say so. The
+  patch adds `OSMESA_ES_PROFILE` (`0x38`) and maps it to `API_OPENGLES2`.
 
-All three apply with `patch -p1` to a pristine `mesa-25.0.7.tar.xz`
-(sha256 `592272df…510f8a6`), `bash -n` and the repo validator pass, and the
-workflow has not run yet. **Nothing has been built green and nothing has been on
-the phone**: a library that builds is not a screen.
+All four apply with `patch -p1` to a pristine `mesa-25.0.7.tar.xz`
+(sha256 `592272df…510f8a6`), and the workflow has since built the library:
+**Mesa CI `43491401891` is green on `60aba9d`** — `out/libOSMesa.8.dylib`,
+13,223,048 bytes, arm64 Mach-O, 1296 exported `gl*`, panfrost v6 and the drm
+face in it, uploaded as artifact `mesa-osmesa-panfrost-v6`. That is a library
+that builds, not a screen: nothing has drawn a frame and nothing has been on the
+phone.
 
 The licensing re-check of the same day corrected the earlier note: the `mtk`
 branch is 7 commits, not one, and `vcvkk/darwin-redwood` (the origin the
@@ -2844,12 +2851,13 @@ Two facts worth having:
   assumed — but the table in the tree is still the one generated from this
   phone's build, as it should be.
 
-The Mesa build status is unchanged in substance: run `43478062666` was
+The Mesa build status when the table was generated: run `43478062666` had been
 **cancelled** after 15 minutes in the queue with no runner assigned (zero steps,
-`runner_id` 0 — GitHub's macOS queue, not the build). It was re-queued; nothing
-has built green, and nothing has been on the phone.
+`runner_id` 0 — GitHub's macOS queue, not the build). It has since been built:
+Mesa CI `43491401891` is green on `60aba9d` (see above). Nothing has been on the
+phone.
 
-### The EAGL shim is written, and the Mesa build's first real failures are fixed (2026-11-13)
+### The EAGL shim is written, and the Mesa library now builds green (2026-11-13)
 
 The first Mesa run that actually reached the compiler stopped in the driver's
 dependencies, not in the driver. `src/gallium/auxiliary/renderonly/renderonly.c`
@@ -2925,16 +2933,37 @@ sits in `if nm … | grep …` where a failing `nm` under `set -o pipefail` made
 pass by not running, the dylib is in the closing `file`/`lipo`/`ls -l`, and the
 workflow's arm64 step checks it too.
 
-Nothing has built green for Mesa: the two runs since the renderonly fix
-(`43485844894`, `43486044591`) were both **cancelled after exactly 15 minutes in
-the queue** with no runner assigned (`runner_name` empty). `43486044591` was
-re-queued. Nothing has drawn a frame and nothing new has been on the phone.
+Mesa has since built, and the two runs in between are worth recording. The runs
+after the renderonly fix (`43485844894`, and `43486044591` as re-queued) were
+both first **cancelled after exactly 15 minutes in the queue** with no runner
+assigned (`runner_name` empty) — GitHub's macOS queue, not the build.
+
+`43486044591` then reached the compiler and **built the library**: 13,223,048
+bytes of arm64 `libOSMesa.8.dylib`, 1296 exported `gl*` functions, the renderonly
+fix and `0004` in it. What failed was the workflow's verification step, on
+
+    find "$build" -name 'jackpotlte_drm.c.o' | grep -q .
+
+meson names an out-of-directory source's object after its whole relative path,
+not the file name: `../../../jackpotlte-drm/jackpotlte_drm.c` becomes
+`.._.._.._jackpotlte-drm_jackpotlte_drm.c.o` under `libpankmod_lib.a.p`. That was
+reproduced on a host with a two-directory meson project and a `system=darwin`
+cross file, and the check had never actually run before (the earlier runs died in
+the build, before this step). Fixed in `60aba9d`: the names searched for are
+suffixes, `jackpotlte_gpu.c` is checked too (added by the same hunk), and each
+check names which one failed instead of a bare `exit 1`. The `strings` check for
+`panfrost` was verified sound first — the literal is live in
+`panfrost_screen_create` (`pan_screen.c:888`), not dead code.
+
+**Mesa CI `43491401891` is green on `60aba9d`** — every step: the dylib is the
+phone's, the softpipe fallback is still in it, panfrost v6 and the drm face are
+in it, and `mesa-osmesa-panfrost-v6` was uploaded. Nothing has drawn a frame and
+nothing new has been on the phone.
 
 The next thing is the loader: how `libjackpotlte-gl.dylib` gets inside
 `backboardd`. This root has no `libredwood.dylib`, so the candidates are a
 launchd `EnvironmentVariables` insert, a dyld interpose, or replacing
-`OpenGLES` (cache-only). Settling it is a `userdata` change and a phone test, and
-that needs the owner's word before anything is written.
+`OpenGLES` (cache-only).
 
 The reference's own route settles the first two. `xnu/redwood.patch` adds
 `sysctl kern.exec_inject`, holding `LIBRARY NAME NAME...` groups, and
