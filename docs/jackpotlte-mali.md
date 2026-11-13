@@ -407,14 +407,38 @@ Pieces for this port:
    trampoline that reads the thread's table at `[tpidrro_el0+0xf0]`, takes the
    context from `+0x20` and jumps through `[+IMM]`; the entry's table offset is
    `IMM-0x20`. The table handed to QuartzCore is the array from `+0x20`;
-3. a loader that puts the replacement inside `backboardd`. This port has no
-   `libredwood.dylib`, so the mechanism — a launchd environment insert, a dyld
-   interpose, or a replacement `OpenGLES` binary — is an open question to settle
-   against this root. The root already boots with `cs_enforcement_disable=1`
-   and `launchd_unsecure_cache=1` (`userspace/README.md`), which rules nothing
-   out but proves nothing about dyld's own `DYLD_*` policy either. With the
-   shim written, this is the next thing to answer on the phone, and it needs a
-   `userdata` write (below);
+3. **the loader: how the library gets inside `backboardd`.** The reference's
+   own mechanism is the kernel's, not launchd's. `xnu/redwood.patch` adds
+   `sysctl kern.exec_inject`, a string of `LIBRARY NAME NAME...` groups
+   separated by `;` (`bsd/kern/kern_exec.c`, `exec_inject_env()`), and
+   `exec_extract_strings()` appends `DYLD_INSERT_LIBRARIES=LIBRARY` to the
+   environment of every program whose file name is one of the NAMEs, so dyld
+   loads it at process start. The patch says why it is not done through
+   launchd: *"launchd refuses to pass DYLD_ variables from a job description,
+   which is why the kernel adds this one."* Their `INJECT` default
+   (`userland/build.sh`) is `libredwood.dylib backboardd` among others, written
+   to `etc/inject.conf` and set once by their own init before it hands process 1
+   to launchd. Two consequences for this port:
+   - the launchd-`EnvironmentVariables` insert is out (cited above), and a dyld
+     interpose needs the same `DYLD_*` variable, so it meets the same gate. A
+     replacement `OpenGLES` is cache-only (above). What is left is the kernel;
+   - this port has no init of its own — Apple's launchd is process 1 — so the
+     injection string has to come from the kernel's own configuration. A
+     boot-arg is the deterministic place: a `LaunchDaemon` setting a sysctl
+     would race `backboardd`'s exec, which launchd starts in parallel with it.
+   The other half is code signing. `cs_require_lv()` (`bsd/kern/kern_cs.c`) is
+   what makes a platform binary refuse a library that is not itself
+   platform-signed (the reference's words, with `accountsd`/`akd` as its
+   examples), and our shim is unsigned. The reference turns it off — its patch
+   makes `cs_require_lv()` return 0 everywhere, naming `libredwood.dylib` as the
+   reason. This port does not: `0035`/`0036` mark root-filesystem binaries
+   `CS_SIGNED | CS_PLATFORM_BINARY` and nothing else, and vanilla xnu-8796 has a
+   `cs_library_val_enable` boot-arg that clears only the global half of the
+   check, not the per-process `CS_REQUIRE_LV` flag. So whether dyld honours an
+   injected `DYLD_INSERT_LIBRARIES` for `backboardd` on this kernel, or
+   `cs_require_lv()` has to be turned off first as it did there, is what the
+   phone answers. Both are BOOT-side; only the library's placement in the root
+   is a `userdata` write (below);
 4. the verification rule stands: a library that loads is not a frame. The first
    claim that CoreAnimation draws on the Mali needs a photo.
 
