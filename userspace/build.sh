@@ -63,6 +63,15 @@ sdk=$(xcrun --sdk iphoneos --show-sdk-path)
 xcrun --sdk iphoneos clang "${common[@]}" "${lookup[@]}" -target arm64-apple-ios16.0 \
 	-isysroot "$sdk" -o "$out/maliprobe" "$probe_src"
 
+echo "--- arm64 iOS EAGL shim: the generated dispatch table ---"
+# Not linked into anything yet (the shim's own sources follow): this is the
+# check that the generated table (gl_slots.c from tools/jackpotlte/eagl-glue.py)
+# is C the iPhoneOS SDK takes, under the same -Wall -Wextra -Werror -Wpedantic.
+xcrun --sdk iphoneos clang "${common[@]}" -target arm64-apple-ios16.0 \
+	-isysroot "$sdk" -c "$repo/userspace/jackpotlte-gl/gl_slots.c" \
+	-o "$out/.gl_slots.o"
+rm -f "$out/.gl_slots.o"
+
 echo "--- arm64 iOS libjackpotlte.a ---"
 obj=$out/.obj
 rm -rf "$obj"

@@ -1,0 +1,46 @@
+/* SPDX-License-Identifier: MIT
+ *
+ * What the EAGL shim (userspace/jackpotlte-gl/) asks of the OpenGL ES library
+ * behind it.  One implementation: jackpotlte_gl_osmesa.c, over Mesa's OSMesa as
+ * tools/mesa-jackpotlte/ builds it (panfrost, Bifrost v6).
+ */
+#ifndef JACKPOTLTE_GL_H
+#define JACKPOTLTE_GL_H
+
+#include "gl_slots.h"
+
+#include <stdint.h>
+
+struct jackpotlte_gl;
+
+/*
+ * The library's function of that name, a gl* entry point, or NULL if it has
+ * none.  This is how gl_slots.c's entries are resolved, and the reason they are
+ * not called by name: iOS's own OpenGLES.framework is in the shared cache and
+ * defines every gl* symbol, so a by-name call reaches Apple's driver, which
+ * knows nothing of this context.  The library is asked through its own
+ * OSMesaGetProcAddress instead.
+ */
+typedef void (*jackpotlte_gl_func)(void);
+jackpotlte_gl_func jackpotlte_gl_proc(const char *name);
+
+/* An OpenGL ES 2 or 3 context of the library, or NULL. */
+struct jackpotlte_gl *jackpotlte_gl_create(int version);
+
+/* Make GL the calling thread's (NULL: none).  0: failed. */
+int jackpotlte_gl_make_current(struct jackpotlte_gl *gl);
+
+void jackpotlte_gl_destroy(struct jackpotlte_gl *gl);
+
+/* For the log. */
+const char *jackpotlte_gl_library(void);
+
+/*
+ * Make the memory of the SweetSurface SURFACE the texture bound to
+ * GL_TEXTURE_2D, where the library's driver can (the kernel's GPU driver makes
+ * a buffer of the surface: 0154's 0x7e, through the drm face).  0: not done,
+ * and the caller fills the texture with ordinary calls.
+ */
+int jackpotlte_gl_surface_texture(struct jackpotlte_gl *gl, uint32_t surface);
+
+#endif

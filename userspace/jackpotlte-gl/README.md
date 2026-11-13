@@ -47,6 +47,30 @@ tools/jackpotlte/eagl-slots.py --hfs-image IMAGE -o userspace/jackpotlte-gl/eagl
 `CACHE_DIR` is a directory holding `dyld_shared_cache_arm64` and its `.01`,
 `.02`, … subcaches, as an extracted iOS root or restore image has them.
 
+## `gl_slots.h`, `gl_slots.c`
+
+Generated from `eagl_slots.txt` and the Khronos registry by
+`tools/jackpotlte/eagl-glue.py`, and checked in (the arm64 build has no Mesa
+source at hand to regenerate them):
+
+```
+GL_XML=/path/to/mesa-25.0.7/src/mapi/glapi/registry/gl.xml
+tools/jackpotlte/eagl-glue.py eagl_slots.txt "$GL_XML" --header > gl_slots.h
+tools/jackpotlte/eagl-glue.py eagl_slots.txt "$GL_XML"        > gl_slots.c
+```
+
+`gl_slots.h` has the GL types of the ARM64 ABI and `JACKPOTLTE_GL_SLOTS` (1034
+entries); `gl_slots.c` has one function per named entry that drops the first
+argument (the context) and passes the call on, plus an "unsupported" function
+for every entry the build exports no `_gl*` name for (624 of them), so a call to
+one is noted instead of crashing. Entry 0 is the context and is the caller's to
+set.
+
+The entries do not call the library by name. They ask `jackpotlte_gl_proc` for
+it, once. By name would reach the wrong driver: iOS's own `OpenGLES.framework`
+is in the shared cache and defines every `gl*` symbol, so a direct call lands on
+Apple's, which knows nothing of this context (`jackpotlte_gl.h`).
+
 ## Licence
 
 The generator is MIT, like the rest of `userspace/`. The table is data about the
