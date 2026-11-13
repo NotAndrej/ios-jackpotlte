@@ -1,8 +1,19 @@
 # jackpotlte-gl
 
-The OpenGL ES side of M4 (the GLES route, `docs/jackpotlte-mali.md` §6 and §9).
-What lives here so far is one generated file; the `EAGLContext` implementation
-that uses it is not written yet.
+The OpenGL ES side of M4 (the GLES route, `docs/jackpotlte-mali.md` §6 and §9):
+an `EAGLContext` whose GL calls go to Mesa's OSMesa with the phone's Mali behind
+it, so that CoreAnimation's window-server renderer draws with OpenGL ES when it
+has no Metal. Nothing here has been loaded into the display server or run on
+the phone yet; what is written is the library (`userspace/build.sh` builds it as
+`out/libjackpotlte-gl.dylib`).
+
+| File | What it is |
+|---|---|
+| `eagl_slots.txt` | the build's GL dispatch table, read off its `OpenGLES.framework` |
+| `gl_slots.h`, `gl_slots.c` | generated: the table's entries as C functions |
+| `jackpotlte_gl.h` | what the EAGL face asks of the GL library |
+| `jackpotlte_gl_osmesa.c` | that library: Mesa's OSMesa, dlopen'd |
+| `eagl.c` | the `EAGLContext` methods, installed with the ObjC runtime |
 
 ## `eagl_slots.txt`
 
@@ -70,6 +81,58 @@ The entries do not call the library by name. They ask `jackpotlte_gl_proc` for
 it, once. By name would reach the wrong driver: iOS's own `OpenGLES.framework`
 is in the shared cache and defines every `gl*` symbol, so a direct call lands on
 Apple's, which knows nothing of this context (`jackpotlte_gl.h`).
+
+## `jackpotlte_gl.h`, `jackpotlte_gl_osmesa.c`
+
+The EAGL face is written against six calls, not against OSMesa:
+`jackpotlte_gl_create/make_current/destroy/library/surface_texture`, and
+`jackpotlte_gl_proc` for the `gl*` functions themselves. `eagl.c` is the only
+caller; `jackpotlte_gl_osmesa.c` is the only implementation, and it is the only
+file that knows the library is OSMesa:
+
+- it `dlopen`s `libOSMesa.8.dylib`, looking beside itself (`@loader_path`), then
+  a directory up, then the loader's path; `JACKPOTLTE_GL_LIBRARY` overrides.
+  A phone without the library logs that and draws nothing; this file still loads.
+- `jackpotlte_gl_proc` is the library's own `OSMesaGetProcAddress`, which is why
+  no `gl*` name is ever resolved by the process's symbols (see above).
+- `create` asks for an OpenGL ES context of the version CoreAnimation asked for:
+  `OSMESA_PROFILE` = `OSMESA_ES_PROFILE` (`tools/mesa-jackpotlte/0004`), major 2
+  or 3. OSMesa wants pixels to draw into, and gets a 16×16 window that nothing
+  draws into: what is drawn is drawn into SweetSurfaces (`0003`).
+- `make_current` is per thread (OSMesa's contexts are), so `gl_slots.c`'s entries
+  call `jackpotlte_gl_use(context)` first; the display server's renderer is not
+  always the thread that made the context.
+- `surface_texture` binds a SweetSurface's memory as `GL_TEXTURE_2D` by handing
+  its ID to `glEGLImageTargetTexture2DOES`: with no EGL there is no image object,
+  and `0003`'s frontend hook reads the argument as the surface whose buffer the
+  kernel's driver has made (`0154`'s `0x7e`). It reports what the GL error says.
+
+## `eagl.c`
+
+Two files in one: the `EAGLContext` methods and what they do with the library.
+The methods are installed at load time by `method_setImplementation` on the
+class's own methods (`objc_getClass("EAGLContext")`), so the type encodings stay
+the class's; a selector the build does not have is logged, not added with a
+guessed signature.
+
+Eight methods. The six CoreAnimation's renderer asks
+(`CA::WindowServer::EAGLServer`) are `-initWithAPI:properties:` (make a context of
+that OpenGL ES version), `-API`, `-setParameter:to:` (noted; its value is not
+read, because what the caller passes it as has not been established on this
+build), `-getMacroContextPrivate` (the table), `-texImageIOSurface:...` and
+`-attachImage:toCoreSurface:invertedRender:` (both: bound texture ← the surface's
+memory). The other two are `-sharegroup` (nil: nothing here shares one, and
+CoreImage asks — the reference crashed there for want of it) and `-dealloc`.
+
+The object's Apple ivars are never filled in — there is no call to super's
+`-init` — so any Apple method CoreAnimation reached that is not one of these
+would read nothing. That is the first thing to look for in the log if the
+renderer misbehaves.
+
+`-attachImage:` is also where the display's picture is written: the surface the
+window server hands over is the one on the screen, so a surface that cannot be a
+texture (not one plane of 32-bit BGRA pixels) is refused with a log line rather
+than copied — a copy would be a different picture.
 
 ## Licence
 

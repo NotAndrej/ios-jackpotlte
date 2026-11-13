@@ -648,7 +648,7 @@ jgl_0002(void *context, GLenum func, GLfloat ref)
 {
    static jgl_t_0002 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0002)jackpotlte_gl_proc("glAlphaFunc");
    if (real == NULL)
@@ -663,7 +663,7 @@ jgl_0006(void *context, GLenum target, GLuint texture)
 {
    static jgl_t_0006 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0006)jackpotlte_gl_proc("glBindTexture");
    if (real == NULL)
@@ -678,7 +678,7 @@ jgl_0008(void *context, GLenum sfactor, GLenum dfactor)
 {
    static jgl_t_0008 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0008)jackpotlte_gl_proc("glBlendFunc");
    if (real == NULL)
@@ -693,7 +693,7 @@ jgl_000b(void *context, GLbitfield mask)
 {
    static jgl_t_000b real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_000b)jackpotlte_gl_proc("glClear");
    if (real == NULL)
@@ -708,7 +708,7 @@ jgl_000d(void *context, GLfloat red, GLfloat green, GLfloat blue, GLfloat alpha)
 {
    static jgl_t_000d real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_000d)jackpotlte_gl_proc("glClearColor");
    if (real == NULL)
@@ -723,7 +723,7 @@ jgl_0010(void *context, GLint s)
 {
    static jgl_t_0010 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0010)jackpotlte_gl_proc("glClearStencil");
    if (real == NULL)
@@ -738,7 +738,7 @@ jgl_0026(void *context, GLfloat red, GLfloat green, GLfloat blue, GLfloat alpha)
 {
    static jgl_t_0026 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0026)jackpotlte_gl_proc("glColor4f");
    if (real == NULL)
@@ -753,7 +753,7 @@ jgl_002c(void *context, GLubyte red, GLubyte green, GLubyte blue, GLubyte alpha)
 {
    static jgl_t_002c real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_002c)jackpotlte_gl_proc("glColor4ub");
    if (real == NULL)
@@ -768,7 +768,7 @@ jgl_0032(void *context, GLboolean red, GLboolean green, GLboolean blue, GLboolea
 {
    static jgl_t_0032 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0032)jackpotlte_gl_proc("glColorMask");
    if (real == NULL)
@@ -783,7 +783,7 @@ jgl_0034(void *context, GLint size, GLenum type, GLsizei stride, const void *poi
 {
    static jgl_t_0034 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0034)jackpotlte_gl_proc("glColorPointer");
    if (real == NULL)
@@ -798,7 +798,7 @@ jgl_0037(void *context, GLenum target, GLint level, GLenum internalformat, GLint
 {
    static jgl_t_0037 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0037)jackpotlte_gl_proc("glCopyTexImage2D");
    if (real == NULL)
@@ -813,7 +813,7 @@ jgl_0039(void *context, GLenum target, GLint level, GLint xoffset, GLint yoffset
 {
    static jgl_t_0039 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0039)jackpotlte_gl_proc("glCopyTexSubImage2D");
    if (real == NULL)
@@ -828,7 +828,7 @@ jgl_003a(void *context, GLenum mode)
 {
    static jgl_t_003a real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_003a)jackpotlte_gl_proc("glCullFace");
    if (real == NULL)
@@ -843,7 +843,7 @@ jgl_003c(void *context, GLsizei n, const GLuint *textures)
 {
    static jgl_t_003c real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_003c)jackpotlte_gl_proc("glDeleteTextures");
    if (real == NULL)
@@ -858,7 +858,7 @@ jgl_003d(void *context, GLenum func)
 {
    static jgl_t_003d real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_003d)jackpotlte_gl_proc("glDepthFunc");
    if (real == NULL)
@@ -873,7 +873,7 @@ jgl_003e(void *context, GLboolean flag)
 {
    static jgl_t_003e real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_003e)jackpotlte_gl_proc("glDepthMask");
    if (real == NULL)
@@ -888,7 +888,7 @@ jgl_0040(void *context, GLenum cap)
 {
    static jgl_t_0040 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0040)jackpotlte_gl_proc("glDisable");
    if (real == NULL)
@@ -903,7 +903,7 @@ jgl_0041(void *context, GLenum array)
 {
    static jgl_t_0041 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0041)jackpotlte_gl_proc("glDisableClientState");
    if (real == NULL)
@@ -918,7 +918,7 @@ jgl_0042(void *context, GLenum mode, GLint first, GLsizei count)
 {
    static jgl_t_0042 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0042)jackpotlte_gl_proc("glDrawArrays");
    if (real == NULL)
@@ -933,7 +933,7 @@ jgl_0044(void *context, GLenum mode, GLsizei count, GLenum type, const void *ind
 {
    static jgl_t_0044 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0044)jackpotlte_gl_proc("glDrawElements");
    if (real == NULL)
@@ -948,7 +948,7 @@ jgl_0049(void *context, GLenum cap)
 {
    static jgl_t_0049 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0049)jackpotlte_gl_proc("glEnable");
    if (real == NULL)
@@ -963,7 +963,7 @@ jgl_004a(void *context, GLenum array)
 {
    static jgl_t_004a real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_004a)jackpotlte_gl_proc("glEnableClientState");
    if (real == NULL)
@@ -978,7 +978,7 @@ jgl_005a(void *context)
 {
    static jgl_t_005a real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_005a)jackpotlte_gl_proc("glFinish");
    if (real == NULL)
@@ -993,7 +993,7 @@ jgl_005b(void *context)
 {
    static jgl_t_005b real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_005b)jackpotlte_gl_proc("glFlush");
    if (real == NULL)
@@ -1008,7 +1008,7 @@ jgl_005c(void *context, GLenum pname, GLfloat param)
 {
    static jgl_t_005c real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_005c)jackpotlte_gl_proc("glFogf");
    if (real == NULL)
@@ -1023,7 +1023,7 @@ jgl_005d(void *context, GLenum pname, const GLfloat *params)
 {
    static jgl_t_005d real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_005d)jackpotlte_gl_proc("glFogfv");
    if (real == NULL)
@@ -1038,7 +1038,7 @@ jgl_0060(void *context, GLenum mode)
 {
    static jgl_t_0060 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0060)jackpotlte_gl_proc("glFrontFace");
    if (real == NULL)
@@ -1053,7 +1053,7 @@ jgl_0063(void *context, GLsizei n, GLuint *textures)
 {
    static jgl_t_0063 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0063)jackpotlte_gl_proc("glGenTextures");
    if (real == NULL)
@@ -1068,7 +1068,7 @@ jgl_0064(void *context, GLenum pname, GLboolean *data)
 {
    static jgl_t_0064 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0064)jackpotlte_gl_proc("glGetBooleanv");
    if (real == NULL)
@@ -1083,7 +1083,7 @@ jgl_0067(void *context)
 {
    static jgl_t_0067 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0067)jackpotlte_gl_proc("glGetError");
    if (real == NULL)
@@ -1098,7 +1098,7 @@ jgl_0068(void *context, GLenum pname, GLfloat *data)
 {
    static jgl_t_0068 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0068)jackpotlte_gl_proc("glGetFloatv");
    if (real == NULL)
@@ -1113,7 +1113,7 @@ jgl_0069(void *context, GLenum pname, GLint *data)
 {
    static jgl_t_0069 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0069)jackpotlte_gl_proc("glGetIntegerv");
    if (real == NULL)
@@ -1128,7 +1128,7 @@ jgl_006a(void *context, GLenum light, GLenum pname, GLfloat *params)
 {
    static jgl_t_006a real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_006a)jackpotlte_gl_proc("glGetLightfv");
    if (real == NULL)
@@ -1143,7 +1143,7 @@ jgl_006f(void *context, GLenum face, GLenum pname, GLfloat *params)
 {
    static jgl_t_006f real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_006f)jackpotlte_gl_proc("glGetMaterialfv");
    if (real == NULL)
@@ -1158,7 +1158,7 @@ jgl_0074(void *context, GLenum pname, void **params)
 {
    static jgl_t_0074 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0074)jackpotlte_gl_proc("glGetPointerv");
    if (real == NULL)
@@ -1173,7 +1173,7 @@ jgl_0076(void *context, GLenum name)
 {
    static jgl_t_0076 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0076)jackpotlte_gl_proc("glGetString");
    if (real == NULL)
@@ -1188,7 +1188,7 @@ jgl_0077(void *context, GLenum target, GLenum pname, GLfloat *params)
 {
    static jgl_t_0077 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0077)jackpotlte_gl_proc("glGetTexEnvfv");
    if (real == NULL)
@@ -1203,7 +1203,7 @@ jgl_0078(void *context, GLenum target, GLenum pname, GLint *params)
 {
    static jgl_t_0078 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0078)jackpotlte_gl_proc("glGetTexEnviv");
    if (real == NULL)
@@ -1218,7 +1218,7 @@ jgl_007c(void *context, GLenum target, GLint level, GLenum format, GLenum type, 
 {
    static jgl_t_007c real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_007c)jackpotlte_gl_proc("glGetTexImage");
    if (real == NULL)
@@ -1233,7 +1233,7 @@ jgl_007d(void *context, GLenum target, GLint level, GLenum pname, GLfloat *param
 {
    static jgl_t_007d real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_007d)jackpotlte_gl_proc("glGetTexLevelParameterfv");
    if (real == NULL)
@@ -1248,7 +1248,7 @@ jgl_007e(void *context, GLenum target, GLint level, GLenum pname, GLint *params)
 {
    static jgl_t_007e real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_007e)jackpotlte_gl_proc("glGetTexLevelParameteriv");
    if (real == NULL)
@@ -1263,7 +1263,7 @@ jgl_007f(void *context, GLenum target, GLenum pname, GLfloat *params)
 {
    static jgl_t_007f real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_007f)jackpotlte_gl_proc("glGetTexParameterfv");
    if (real == NULL)
@@ -1278,7 +1278,7 @@ jgl_0080(void *context, GLenum target, GLenum pname, GLint *params)
 {
    static jgl_t_0080 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0080)jackpotlte_gl_proc("glGetTexParameteriv");
    if (real == NULL)
@@ -1293,7 +1293,7 @@ jgl_0081(void *context, GLenum target, GLenum mode)
 {
    static jgl_t_0081 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0081)jackpotlte_gl_proc("glHint");
    if (real == NULL)
@@ -1308,7 +1308,7 @@ jgl_0090(void *context, GLenum cap)
 {
    static jgl_t_0090 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0090)jackpotlte_gl_proc("glIsEnabled");
    if (real == NULL)
@@ -1323,7 +1323,7 @@ jgl_0092(void *context, GLuint texture)
 {
    static jgl_t_0092 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0092)jackpotlte_gl_proc("glIsTexture");
    if (real == NULL)
@@ -1338,7 +1338,7 @@ jgl_0093(void *context, GLenum pname, GLfloat param)
 {
    static jgl_t_0093 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0093)jackpotlte_gl_proc("glLightModelf");
    if (real == NULL)
@@ -1353,7 +1353,7 @@ jgl_0094(void *context, GLenum pname, const GLfloat *params)
 {
    static jgl_t_0094 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0094)jackpotlte_gl_proc("glLightModelfv");
    if (real == NULL)
@@ -1368,7 +1368,7 @@ jgl_0097(void *context, GLenum light, GLenum pname, GLfloat param)
 {
    static jgl_t_0097 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0097)jackpotlte_gl_proc("glLightf");
    if (real == NULL)
@@ -1383,7 +1383,7 @@ jgl_0098(void *context, GLenum light, GLenum pname, const GLfloat *params)
 {
    static jgl_t_0098 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0098)jackpotlte_gl_proc("glLightfv");
    if (real == NULL)
@@ -1398,7 +1398,7 @@ jgl_009c(void *context, GLfloat width)
 {
    static jgl_t_009c real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_009c)jackpotlte_gl_proc("glLineWidth");
    if (real == NULL)
@@ -1413,7 +1413,7 @@ jgl_009e(void *context)
 {
    static jgl_t_009e real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_009e)jackpotlte_gl_proc("glLoadIdentity");
    if (real == NULL)
@@ -1428,7 +1428,7 @@ jgl_00a0(void *context, const GLfloat *m)
 {
    static jgl_t_00a0 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_00a0)jackpotlte_gl_proc("glLoadMatrixf");
    if (real == NULL)
@@ -1443,7 +1443,7 @@ jgl_00a2(void *context, GLenum opcode)
 {
    static jgl_t_00a2 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_00a2)jackpotlte_gl_proc("glLogicOp");
    if (real == NULL)
@@ -1458,7 +1458,7 @@ jgl_00ab(void *context, GLenum face, GLenum pname, GLfloat param)
 {
    static jgl_t_00ab real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_00ab)jackpotlte_gl_proc("glMaterialf");
    if (real == NULL)
@@ -1473,7 +1473,7 @@ jgl_00ac(void *context, GLenum face, GLenum pname, const GLfloat *params)
 {
    static jgl_t_00ac real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_00ac)jackpotlte_gl_proc("glMaterialfv");
    if (real == NULL)
@@ -1488,7 +1488,7 @@ jgl_00af(void *context, GLenum mode)
 {
    static jgl_t_00af real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_00af)jackpotlte_gl_proc("glMatrixMode");
    if (real == NULL)
@@ -1503,7 +1503,7 @@ jgl_00b1(void *context, const GLfloat *m)
 {
    static jgl_t_00b1 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_00b1)jackpotlte_gl_proc("glMultMatrixf");
    if (real == NULL)
@@ -1518,7 +1518,7 @@ jgl_00b7(void *context, GLfloat nx, GLfloat ny, GLfloat nz)
 {
    static jgl_t_00b7 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_00b7)jackpotlte_gl_proc("glNormal3f");
    if (real == NULL)
@@ -1533,7 +1533,7 @@ jgl_00bd(void *context, GLenum type, GLsizei stride, const void *pointer)
 {
    static jgl_t_00bd real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_00bd)jackpotlte_gl_proc("glNormalPointer");
    if (real == NULL)
@@ -1548,7 +1548,7 @@ jgl_00c4(void *context, GLenum pname, GLint param)
 {
    static jgl_t_00c4 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_00c4)jackpotlte_gl_proc("glPixelStorei");
    if (real == NULL)
@@ -1563,7 +1563,7 @@ jgl_00c8(void *context, GLfloat size)
 {
    static jgl_t_00c8 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_00c8)jackpotlte_gl_proc("glPointSize");
    if (real == NULL)
@@ -1578,7 +1578,7 @@ jgl_00ca(void *context, GLfloat factor, GLfloat units)
 {
    static jgl_t_00ca real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_00ca)jackpotlte_gl_proc("glPolygonOffset");
    if (real == NULL)
@@ -1593,7 +1593,7 @@ jgl_00ce(void *context)
 {
    static jgl_t_00ce real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_00ce)jackpotlte_gl_proc("glPopMatrix");
    if (real == NULL)
@@ -1608,7 +1608,7 @@ jgl_00d3(void *context)
 {
    static jgl_t_00d3 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_00d3)jackpotlte_gl_proc("glPushMatrix");
    if (real == NULL)
@@ -1623,7 +1623,7 @@ jgl_00ed(void *context, GLenum src)
 {
    static jgl_t_00ed real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_00ed)jackpotlte_gl_proc("glReadBuffer");
    if (real == NULL)
@@ -1638,7 +1638,7 @@ jgl_00ee(void *context, GLint x, GLint y, GLsizei width, GLsizei height, GLenum 
 {
    static jgl_t_00ee real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_00ee)jackpotlte_gl_proc("glReadPixels");
    if (real == NULL)
@@ -1653,7 +1653,7 @@ jgl_00f9(void *context, GLfloat angle, GLfloat x, GLfloat y, GLfloat z)
 {
    static jgl_t_00f9 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_00f9)jackpotlte_gl_proc("glRotatef");
    if (real == NULL)
@@ -1668,7 +1668,7 @@ jgl_00fb(void *context, GLfloat x, GLfloat y, GLfloat z)
 {
    static jgl_t_00fb real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_00fb)jackpotlte_gl_proc("glScalef");
    if (real == NULL)
@@ -1683,7 +1683,7 @@ jgl_00fc(void *context, GLint x, GLint y, GLsizei width, GLsizei height)
 {
    static jgl_t_00fc real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_00fc)jackpotlte_gl_proc("glScissor");
    if (real == NULL)
@@ -1698,7 +1698,7 @@ jgl_00fe(void *context, GLenum mode)
 {
    static jgl_t_00fe real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_00fe)jackpotlte_gl_proc("glShadeModel");
    if (real == NULL)
@@ -1713,7 +1713,7 @@ jgl_00ff(void *context, GLenum func, GLint ref, GLuint mask)
 {
    static jgl_t_00ff real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_00ff)jackpotlte_gl_proc("glStencilFunc");
    if (real == NULL)
@@ -1728,7 +1728,7 @@ jgl_0100(void *context, GLuint mask)
 {
    static jgl_t_0100 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0100)jackpotlte_gl_proc("glStencilMask");
    if (real == NULL)
@@ -1743,7 +1743,7 @@ jgl_0101(void *context, GLenum fail, GLenum zfail, GLenum zpass)
 {
    static jgl_t_0101 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0101)jackpotlte_gl_proc("glStencilOp");
    if (real == NULL)
@@ -1758,7 +1758,7 @@ jgl_0122(void *context, GLint size, GLenum type, GLsizei stride, const void *poi
 {
    static jgl_t_0122 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0122)jackpotlte_gl_proc("glTexCoordPointer");
    if (real == NULL)
@@ -1773,7 +1773,7 @@ jgl_0123(void *context, GLenum target, GLenum pname, GLfloat param)
 {
    static jgl_t_0123 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0123)jackpotlte_gl_proc("glTexEnvf");
    if (real == NULL)
@@ -1788,7 +1788,7 @@ jgl_0124(void *context, GLenum target, GLenum pname, const GLfloat *params)
 {
    static jgl_t_0124 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0124)jackpotlte_gl_proc("glTexEnvfv");
    if (real == NULL)
@@ -1803,7 +1803,7 @@ jgl_0125(void *context, GLenum target, GLenum pname, GLint param)
 {
    static jgl_t_0125 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0125)jackpotlte_gl_proc("glTexEnvi");
    if (real == NULL)
@@ -1818,7 +1818,7 @@ jgl_0126(void *context, GLenum target, GLenum pname, const GLint *params)
 {
    static jgl_t_0126 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0126)jackpotlte_gl_proc("glTexEnviv");
    if (real == NULL)
@@ -1833,7 +1833,7 @@ jgl_012e(void *context, GLenum target, GLint level, GLint internalformat, GLsize
 {
    static jgl_t_012e real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_012e)jackpotlte_gl_proc("glTexImage2D");
    if (real == NULL)
@@ -1848,7 +1848,7 @@ jgl_012f(void *context, GLenum target, GLenum pname, GLfloat param)
 {
    static jgl_t_012f real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_012f)jackpotlte_gl_proc("glTexParameterf");
    if (real == NULL)
@@ -1863,7 +1863,7 @@ jgl_0130(void *context, GLenum target, GLenum pname, const GLfloat *params)
 {
    static jgl_t_0130 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0130)jackpotlte_gl_proc("glTexParameterfv");
    if (real == NULL)
@@ -1878,7 +1878,7 @@ jgl_0131(void *context, GLenum target, GLenum pname, GLint param)
 {
    static jgl_t_0131 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0131)jackpotlte_gl_proc("glTexParameteri");
    if (real == NULL)
@@ -1893,7 +1893,7 @@ jgl_0132(void *context, GLenum target, GLenum pname, const GLint *params)
 {
    static jgl_t_0132 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0132)jackpotlte_gl_proc("glTexParameteriv");
    if (real == NULL)
@@ -1908,7 +1908,7 @@ jgl_0134(void *context, GLenum target, GLint level, GLint xoffset, GLint yoffset
 {
    static jgl_t_0134 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0134)jackpotlte_gl_proc("glTexSubImage2D");
    if (real == NULL)
@@ -1923,7 +1923,7 @@ jgl_0136(void *context, GLfloat x, GLfloat y, GLfloat z)
 {
    static jgl_t_0136 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0136)jackpotlte_gl_proc("glTranslatef");
    if (real == NULL)
@@ -1938,7 +1938,7 @@ jgl_014f(void *context, GLint size, GLenum type, GLsizei stride, const void *poi
 {
    static jgl_t_014f real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_014f)jackpotlte_gl_proc("glVertexPointer");
    if (real == NULL)
@@ -1953,7 +1953,7 @@ jgl_0150(void *context, GLint x, GLint y, GLsizei width, GLsizei height)
 {
    static jgl_t_0150 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0150)jackpotlte_gl_proc("glViewport");
    if (real == NULL)
@@ -1968,7 +1968,7 @@ jgl_0151(void *context, GLenum sfactorRGB, GLenum dfactorRGB, GLenum sfactorAlph
 {
    static jgl_t_0151 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0151)jackpotlte_gl_proc("glBlendFuncSeparate");
    if (real == NULL)
@@ -1983,7 +1983,7 @@ jgl_0152(void *context, GLfloat red, GLfloat green, GLfloat blue, GLfloat alpha)
 {
    static jgl_t_0152 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0152)jackpotlte_gl_proc("glBlendColor");
    if (real == NULL)
@@ -1998,7 +1998,7 @@ jgl_0153(void *context, GLenum mode)
 {
    static jgl_t_0153 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0153)jackpotlte_gl_proc("glBlendEquation");
    if (real == NULL)
@@ -2013,7 +2013,7 @@ jgl_0156(void *context, GLenum texture)
 {
    static jgl_t_0156 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0156)jackpotlte_gl_proc("glClientActiveTexture");
    if (real == NULL)
@@ -2028,7 +2028,7 @@ jgl_0157(void *context, GLenum texture)
 {
    static jgl_t_0157 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0157)jackpotlte_gl_proc("glActiveTexture");
    if (real == NULL)
@@ -2043,7 +2043,7 @@ jgl_0172(void *context, GLenum target, GLfloat s, GLfloat t, GLfloat r, GLfloat 
 {
    static jgl_t_0172 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0172)jackpotlte_gl_proc("glMultiTexCoord4f");
    if (real == NULL)
@@ -2058,7 +2058,7 @@ jgl_017c(void *context, GLenum target, GLint level, GLenum internalformat, GLsiz
 {
    static jgl_t_017c real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_017c)jackpotlte_gl_proc("glCompressedTexImage3D");
    if (real == NULL)
@@ -2073,7 +2073,7 @@ jgl_017d(void *context, GLenum target, GLint level, GLenum internalformat, GLsiz
 {
    static jgl_t_017d real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_017d)jackpotlte_gl_proc("glCompressedTexImage2D");
    if (real == NULL)
@@ -2088,7 +2088,7 @@ jgl_017f(void *context, GLenum target, GLint level, GLint xoffset, GLint yoffset
 {
    static jgl_t_017f real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_017f)jackpotlte_gl_proc("glCompressedTexSubImage3D");
    if (real == NULL)
@@ -2103,7 +2103,7 @@ jgl_0180(void *context, GLenum target, GLint level, GLint xoffset, GLint yoffset
 {
    static jgl_t_0180 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0180)jackpotlte_gl_proc("glCompressedTexSubImage2D");
    if (real == NULL)
@@ -2118,7 +2118,7 @@ jgl_0196(void *context, GLenum mode, GLuint start, GLuint end, GLsizei count, GL
 {
    static jgl_t_0196 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0196)jackpotlte_gl_proc("glDrawRangeElements");
    if (real == NULL)
@@ -2133,7 +2133,7 @@ jgl_01b7(void *context, GLenum target, GLint level, GLint internalformat, GLsize
 {
    static jgl_t_01b7 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_01b7)jackpotlte_gl_proc("glTexImage3D");
    if (real == NULL)
@@ -2148,7 +2148,7 @@ jgl_01b8(void *context, GLenum target, GLint level, GLint xoffset, GLint yoffset
 {
    static jgl_t_01b8 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_01b8)jackpotlte_gl_proc("glTexSubImage3D");
    if (real == NULL)
@@ -2163,7 +2163,7 @@ jgl_01b9(void *context, GLenum target, GLint level, GLint xoffset, GLint yoffset
 {
    static jgl_t_01b9 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_01b9)jackpotlte_gl_proc("glCopyTexSubImage3D");
    if (real == NULL)
@@ -2178,7 +2178,7 @@ jgl_01ba(void *context, GLuint program, GLsizei uniformCount, const GLchar *cons
 {
    static jgl_t_01ba real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_01ba)jackpotlte_gl_proc("glGetUniformIndices");
    if (real == NULL)
@@ -2193,7 +2193,7 @@ jgl_01bb(void *context, GLuint program, GLsizei uniformCount, const GLuint *unif
 {
    static jgl_t_01bb real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_01bb)jackpotlte_gl_proc("glGetActiveUniformsiv");
    if (real == NULL)
@@ -2208,7 +2208,7 @@ jgl_01bd(void *context, GLuint program, const GLchar *uniformBlockName)
 {
    static jgl_t_01bd real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_01bd)jackpotlte_gl_proc("glGetUniformBlockIndex");
    if (real == NULL)
@@ -2223,7 +2223,7 @@ jgl_01be(void *context, GLuint program, GLuint uniformBlockIndex, GLenum pname, 
 {
    static jgl_t_01be real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_01be)jackpotlte_gl_proc("glGetActiveUniformBlockiv");
    if (real == NULL)
@@ -2238,7 +2238,7 @@ jgl_01bf(void *context, GLuint program, GLuint uniformBlockIndex, GLsizei bufSiz
 {
    static jgl_t_01bf real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_01bf)jackpotlte_gl_proc("glGetActiveUniformBlockName");
    if (real == NULL)
@@ -2253,7 +2253,7 @@ jgl_01c0(void *context, GLuint program, GLuint uniformBlockIndex, GLuint uniform
 {
    static jgl_t_01c0 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_01c0)jackpotlte_gl_proc("glUniformBlockBinding");
    if (real == NULL)
@@ -2268,7 +2268,7 @@ jgl_01cb(void *context, GLenum modeRGB, GLenum modeAlpha)
 {
    static jgl_t_01cb real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_01cb)jackpotlte_gl_proc("glBlendEquationSeparate");
    if (real == NULL)
@@ -2283,7 +2283,7 @@ jgl_01cc(void *context, GLfloat value, GLboolean invert)
 {
    static jgl_t_01cc real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_01cc)jackpotlte_gl_proc("glSampleCoverage");
    if (real == NULL)
@@ -2298,7 +2298,7 @@ jgl_01d0(void *context, GLsizei n, GLuint *fences)
 {
    static jgl_t_01d0 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_01d0)jackpotlte_gl_proc("glGenFencesAPPLE");
    if (real == NULL)
@@ -2313,7 +2313,7 @@ jgl_01d1(void *context, GLsizei n, const GLuint *fences)
 {
    static jgl_t_01d1 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_01d1)jackpotlte_gl_proc("glDeleteFencesAPPLE");
    if (real == NULL)
@@ -2328,7 +2328,7 @@ jgl_01d2(void *context, GLuint fence)
 {
    static jgl_t_01d2 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_01d2)jackpotlte_gl_proc("glSetFenceAPPLE");
    if (real == NULL)
@@ -2343,7 +2343,7 @@ jgl_01d3(void *context, GLuint fence)
 {
    static jgl_t_01d3 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_01d3)jackpotlte_gl_proc("glIsFenceAPPLE");
    if (real == NULL)
@@ -2358,7 +2358,7 @@ jgl_01d4(void *context, GLuint fence)
 {
    static jgl_t_01d4 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_01d4)jackpotlte_gl_proc("glTestFenceAPPLE");
    if (real == NULL)
@@ -2373,7 +2373,7 @@ jgl_01d5(void *context, GLuint fence)
 {
    static jgl_t_01d5 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_01d5)jackpotlte_gl_proc("glFinishFenceAPPLE");
    if (real == NULL)
@@ -2388,7 +2388,7 @@ jgl_01d6(void *context, GLenum object, GLuint name)
 {
    static jgl_t_01d6 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_01d6)jackpotlte_gl_proc("glTestObjectAPPLE");
    if (real == NULL)
@@ -2403,7 +2403,7 @@ jgl_01d7(void *context, GLenum object, GLint name)
 {
    static jgl_t_01d7 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_01d7)jackpotlte_gl_proc("glFinishObjectAPPLE");
    if (real == NULL)
@@ -2418,7 +2418,7 @@ jgl_01dd(void *context, GLuint index, GLfloat x)
 {
    static jgl_t_01dd real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_01dd)jackpotlte_gl_proc("glVertexAttrib1f");
    if (real == NULL)
@@ -2433,7 +2433,7 @@ jgl_01e0(void *context, GLuint index, GLfloat x, GLfloat y)
 {
    static jgl_t_01e0 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_01e0)jackpotlte_gl_proc("glVertexAttrib2f");
    if (real == NULL)
@@ -2448,7 +2448,7 @@ jgl_01e3(void *context, GLuint index, GLfloat x, GLfloat y, GLfloat z)
 {
    static jgl_t_01e3 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_01e3)jackpotlte_gl_proc("glVertexAttrib3f");
    if (real == NULL)
@@ -2463,7 +2463,7 @@ jgl_01e6(void *context, GLuint index, GLfloat x, GLfloat y, GLfloat z, GLfloat w
 {
    static jgl_t_01e6 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_01e6)jackpotlte_gl_proc("glVertexAttrib4f");
    if (real == NULL)
@@ -2478,7 +2478,7 @@ jgl_01ea(void *context, GLuint index, const GLfloat *v)
 {
    static jgl_t_01ea real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_01ea)jackpotlte_gl_proc("glVertexAttrib1fv");
    if (real == NULL)
@@ -2493,7 +2493,7 @@ jgl_01ed(void *context, GLuint index, const GLfloat *v)
 {
    static jgl_t_01ed real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_01ed)jackpotlte_gl_proc("glVertexAttrib2fv");
    if (real == NULL)
@@ -2508,7 +2508,7 @@ jgl_01f0(void *context, GLuint index, const GLfloat *v)
 {
    static jgl_t_01f0 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_01f0)jackpotlte_gl_proc("glVertexAttrib3fv");
    if (real == NULL)
@@ -2523,7 +2523,7 @@ jgl_01f8(void *context, GLuint index, const GLfloat *v)
 {
    static jgl_t_01f8 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_01f8)jackpotlte_gl_proc("glVertexAttrib4fv");
    if (real == NULL)
@@ -2538,7 +2538,7 @@ jgl_0200(void *context, GLuint index, GLint size, GLenum type, GLboolean normali
 {
    static jgl_t_0200 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0200)jackpotlte_gl_proc("glVertexAttribPointer");
    if (real == NULL)
@@ -2553,7 +2553,7 @@ jgl_0201(void *context, GLuint index)
 {
    static jgl_t_0201 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0201)jackpotlte_gl_proc("glEnableVertexAttribArray");
    if (real == NULL)
@@ -2568,7 +2568,7 @@ jgl_0202(void *context, GLuint index)
 {
    static jgl_t_0202 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0202)jackpotlte_gl_proc("glDisableVertexAttribArray");
    if (real == NULL)
@@ -2583,7 +2583,7 @@ jgl_0204(void *context, GLuint index, GLenum pname, GLfloat *params)
 {
    static jgl_t_0204 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0204)jackpotlte_gl_proc("glGetVertexAttribfv");
    if (real == NULL)
@@ -2598,7 +2598,7 @@ jgl_0205(void *context, GLuint index, GLenum pname, GLint *params)
 {
    static jgl_t_0205 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0205)jackpotlte_gl_proc("glGetVertexAttribiv");
    if (real == NULL)
@@ -2613,7 +2613,7 @@ jgl_0206(void *context, GLuint index, GLenum pname, void **pointer)
 {
    static jgl_t_0206 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0206)jackpotlte_gl_proc("glGetVertexAttribPointerv");
    if (real == NULL)
@@ -2628,7 +2628,7 @@ jgl_021d(void *context, GLenum pname, GLfloat param)
 {
    static jgl_t_021d real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_021d)jackpotlte_gl_proc("glPointParameterf");
    if (real == NULL)
@@ -2643,7 +2643,7 @@ jgl_021e(void *context, GLenum pname, const GLfloat *params)
 {
    static jgl_t_021e real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_021e)jackpotlte_gl_proc("glPointParameterfv");
    if (real == NULL)
@@ -2658,7 +2658,7 @@ jgl_024b(void *context, GLenum face, GLenum sfail, GLenum dpfail, GLenum dppass)
 {
    static jgl_t_024b real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_024b)jackpotlte_gl_proc("glStencilOpSeparate");
    if (real == NULL)
@@ -2673,7 +2673,7 @@ jgl_0250(void *context, GLuint program)
 {
    static jgl_t_0250 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0250)jackpotlte_gl_proc("glDeleteProgram");
    if (real == NULL)
@@ -2688,7 +2688,7 @@ jgl_0252(void *context, GLuint program, GLuint shader)
 {
    static jgl_t_0252 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0252)jackpotlte_gl_proc("glDetachShader");
    if (real == NULL)
@@ -2703,7 +2703,7 @@ jgl_0253(void *context, GLenum type)
 {
    static jgl_t_0253 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0253)jackpotlte_gl_proc("glCreateShader");
    if (real == NULL)
@@ -2718,7 +2718,7 @@ jgl_0254(void *context, GLuint shader, GLsizei count, const GLchar *const*string
 {
    static jgl_t_0254 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0254)jackpotlte_gl_proc("glShaderSource");
    if (real == NULL)
@@ -2733,7 +2733,7 @@ jgl_0255(void *context, GLuint shader)
 {
    static jgl_t_0255 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0255)jackpotlte_gl_proc("glCompileShader");
    if (real == NULL)
@@ -2748,7 +2748,7 @@ jgl_0256(void *context)
 {
    static jgl_t_0256 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0256)jackpotlte_gl_proc("glCreateProgram");
    if (real == NULL)
@@ -2763,7 +2763,7 @@ jgl_0257(void *context, GLuint program, GLuint shader)
 {
    static jgl_t_0257 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0257)jackpotlte_gl_proc("glAttachShader");
    if (real == NULL)
@@ -2778,7 +2778,7 @@ jgl_0258(void *context, GLuint program)
 {
    static jgl_t_0258 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0258)jackpotlte_gl_proc("glLinkProgram");
    if (real == NULL)
@@ -2793,7 +2793,7 @@ jgl_0259(void *context, GLuint program)
 {
    static jgl_t_0259 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0259)jackpotlte_gl_proc("glUseProgram");
    if (real == NULL)
@@ -2808,7 +2808,7 @@ jgl_025a(void *context, GLuint program)
 {
    static jgl_t_025a real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_025a)jackpotlte_gl_proc("glValidateProgram");
    if (real == NULL)
@@ -2823,7 +2823,7 @@ jgl_025b(void *context, GLint location, GLfloat v0)
 {
    static jgl_t_025b real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_025b)jackpotlte_gl_proc("glUniform1f");
    if (real == NULL)
@@ -2838,7 +2838,7 @@ jgl_025c(void *context, GLint location, GLfloat v0, GLfloat v1)
 {
    static jgl_t_025c real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_025c)jackpotlte_gl_proc("glUniform2f");
    if (real == NULL)
@@ -2853,7 +2853,7 @@ jgl_025d(void *context, GLint location, GLfloat v0, GLfloat v1, GLfloat v2)
 {
    static jgl_t_025d real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_025d)jackpotlte_gl_proc("glUniform3f");
    if (real == NULL)
@@ -2868,7 +2868,7 @@ jgl_025e(void *context, GLint location, GLfloat v0, GLfloat v1, GLfloat v2, GLfl
 {
    static jgl_t_025e real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_025e)jackpotlte_gl_proc("glUniform4f");
    if (real == NULL)
@@ -2883,7 +2883,7 @@ jgl_025f(void *context, GLint location, GLint v0)
 {
    static jgl_t_025f real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_025f)jackpotlte_gl_proc("glUniform1i");
    if (real == NULL)
@@ -2898,7 +2898,7 @@ jgl_0260(void *context, GLint location, GLint v0, GLint v1)
 {
    static jgl_t_0260 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0260)jackpotlte_gl_proc("glUniform2i");
    if (real == NULL)
@@ -2913,7 +2913,7 @@ jgl_0261(void *context, GLint location, GLint v0, GLint v1, GLint v2)
 {
    static jgl_t_0261 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0261)jackpotlte_gl_proc("glUniform3i");
    if (real == NULL)
@@ -2928,7 +2928,7 @@ jgl_0262(void *context, GLint location, GLint v0, GLint v1, GLint v2, GLint v3)
 {
    static jgl_t_0262 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0262)jackpotlte_gl_proc("glUniform4i");
    if (real == NULL)
@@ -2943,7 +2943,7 @@ jgl_0263(void *context, GLint location, GLsizei count, const GLfloat *value)
 {
    static jgl_t_0263 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0263)jackpotlte_gl_proc("glUniform1fv");
    if (real == NULL)
@@ -2958,7 +2958,7 @@ jgl_0264(void *context, GLint location, GLsizei count, const GLfloat *value)
 {
    static jgl_t_0264 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0264)jackpotlte_gl_proc("glUniform2fv");
    if (real == NULL)
@@ -2973,7 +2973,7 @@ jgl_0265(void *context, GLint location, GLsizei count, const GLfloat *value)
 {
    static jgl_t_0265 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0265)jackpotlte_gl_proc("glUniform3fv");
    if (real == NULL)
@@ -2988,7 +2988,7 @@ jgl_0266(void *context, GLint location, GLsizei count, const GLfloat *value)
 {
    static jgl_t_0266 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0266)jackpotlte_gl_proc("glUniform4fv");
    if (real == NULL)
@@ -3003,7 +3003,7 @@ jgl_0267(void *context, GLint location, GLsizei count, const GLint *value)
 {
    static jgl_t_0267 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0267)jackpotlte_gl_proc("glUniform1iv");
    if (real == NULL)
@@ -3018,7 +3018,7 @@ jgl_0268(void *context, GLint location, GLsizei count, const GLint *value)
 {
    static jgl_t_0268 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0268)jackpotlte_gl_proc("glUniform2iv");
    if (real == NULL)
@@ -3033,7 +3033,7 @@ jgl_0269(void *context, GLint location, GLsizei count, const GLint *value)
 {
    static jgl_t_0269 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0269)jackpotlte_gl_proc("glUniform3iv");
    if (real == NULL)
@@ -3048,7 +3048,7 @@ jgl_026a(void *context, GLint location, GLsizei count, const GLint *value)
 {
    static jgl_t_026a real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_026a)jackpotlte_gl_proc("glUniform4iv");
    if (real == NULL)
@@ -3063,7 +3063,7 @@ jgl_026b(void *context, GLint location, GLsizei count, GLboolean transpose, cons
 {
    static jgl_t_026b real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_026b)jackpotlte_gl_proc("glUniformMatrix2fv");
    if (real == NULL)
@@ -3078,7 +3078,7 @@ jgl_026c(void *context, GLint location, GLsizei count, GLboolean transpose, cons
 {
    static jgl_t_026c real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_026c)jackpotlte_gl_proc("glUniformMatrix3fv");
    if (real == NULL)
@@ -3093,7 +3093,7 @@ jgl_026d(void *context, GLint location, GLsizei count, GLboolean transpose, cons
 {
    static jgl_t_026d real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_026d)jackpotlte_gl_proc("glUniformMatrix4fv");
    if (real == NULL)
@@ -3108,7 +3108,7 @@ jgl_0272(void *context, GLuint program, const GLchar *name)
 {
    static jgl_t_0272 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0272)jackpotlte_gl_proc("glGetUniformLocation");
    if (real == NULL)
@@ -3123,7 +3123,7 @@ jgl_0273(void *context, GLuint program, GLuint index, GLsizei bufSize, GLsizei *
 {
    static jgl_t_0273 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0273)jackpotlte_gl_proc("glGetActiveUniform");
    if (real == NULL)
@@ -3138,7 +3138,7 @@ jgl_0274(void *context, GLuint program, GLint location, GLfloat *params)
 {
    static jgl_t_0274 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0274)jackpotlte_gl_proc("glGetUniformfv");
    if (real == NULL)
@@ -3153,7 +3153,7 @@ jgl_0275(void *context, GLuint program, GLint location, GLint *params)
 {
    static jgl_t_0275 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0275)jackpotlte_gl_proc("glGetUniformiv");
    if (real == NULL)
@@ -3168,7 +3168,7 @@ jgl_0276(void *context, GLuint shader, GLsizei bufSize, GLsizei *length, GLchar 
 {
    static jgl_t_0276 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0276)jackpotlte_gl_proc("glGetShaderSource");
    if (real == NULL)
@@ -3183,7 +3183,7 @@ jgl_0277(void *context, GLuint program, GLuint index, const GLchar *name)
 {
    static jgl_t_0277 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0277)jackpotlte_gl_proc("glBindAttribLocation");
    if (real == NULL)
@@ -3198,7 +3198,7 @@ jgl_0278(void *context, GLuint program, GLuint index, GLsizei bufSize, GLsizei *
 {
    static jgl_t_0278 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0278)jackpotlte_gl_proc("glGetActiveAttrib");
    if (real == NULL)
@@ -3213,7 +3213,7 @@ jgl_0279(void *context, GLuint program, const GLchar *name)
 {
    static jgl_t_0279 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0279)jackpotlte_gl_proc("glGetAttribLocation");
    if (real == NULL)
@@ -3228,7 +3228,7 @@ jgl_027b(void *context, GLsizei n, GLuint *ids)
 {
    static jgl_t_027b real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_027b)jackpotlte_gl_proc("glGenQueries");
    if (real == NULL)
@@ -3243,7 +3243,7 @@ jgl_027c(void *context, GLsizei n, const GLuint *ids)
 {
    static jgl_t_027c real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_027c)jackpotlte_gl_proc("glDeleteQueries");
    if (real == NULL)
@@ -3258,7 +3258,7 @@ jgl_027d(void *context, GLuint id)
 {
    static jgl_t_027d real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_027d)jackpotlte_gl_proc("glIsQuery");
    if (real == NULL)
@@ -3273,7 +3273,7 @@ jgl_027e(void *context, GLenum target, GLuint id)
 {
    static jgl_t_027e real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_027e)jackpotlte_gl_proc("glBeginQuery");
    if (real == NULL)
@@ -3288,7 +3288,7 @@ jgl_027f(void *context, GLenum target)
 {
    static jgl_t_027f real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_027f)jackpotlte_gl_proc("glEndQuery");
    if (real == NULL)
@@ -3303,7 +3303,7 @@ jgl_0280(void *context, GLenum target, GLenum pname, GLint *params)
 {
    static jgl_t_0280 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0280)jackpotlte_gl_proc("glGetQueryiv");
    if (real == NULL)
@@ -3318,7 +3318,7 @@ jgl_0281(void *context, GLuint id, GLenum pname, GLint *params)
 {
    static jgl_t_0281 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0281)jackpotlte_gl_proc("glGetQueryObjectivEXT");
    if (real == NULL)
@@ -3333,7 +3333,7 @@ jgl_0282(void *context, GLuint id, GLenum pname, GLuint *params)
 {
    static jgl_t_0282 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0282)jackpotlte_gl_proc("glGetQueryObjectuiv");
    if (real == NULL)
@@ -3348,7 +3348,7 @@ jgl_0283(void *context, GLenum target, GLuint buffer)
 {
    static jgl_t_0283 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0283)jackpotlte_gl_proc("glBindBuffer");
    if (real == NULL)
@@ -3363,7 +3363,7 @@ jgl_0284(void *context, GLsizei n, const GLuint *buffers)
 {
    static jgl_t_0284 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0284)jackpotlte_gl_proc("glDeleteBuffers");
    if (real == NULL)
@@ -3378,7 +3378,7 @@ jgl_0285(void *context, GLsizei n, GLuint *buffers)
 {
    static jgl_t_0285 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0285)jackpotlte_gl_proc("glGenBuffers");
    if (real == NULL)
@@ -3393,7 +3393,7 @@ jgl_0286(void *context, GLuint buffer)
 {
    static jgl_t_0286 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0286)jackpotlte_gl_proc("glIsBuffer");
    if (real == NULL)
@@ -3408,7 +3408,7 @@ jgl_0287(void *context, GLenum target, GLsizeiptr size, const void *data, GLenum
 {
    static jgl_t_0287 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0287)jackpotlte_gl_proc("glBufferData");
    if (real == NULL)
@@ -3423,7 +3423,7 @@ jgl_0288(void *context, GLenum target, GLintptr offset, GLsizeiptr size, const v
 {
    static jgl_t_0288 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0288)jackpotlte_gl_proc("glBufferSubData");
    if (real == NULL)
@@ -3438,7 +3438,7 @@ jgl_028a(void *context, GLenum target, GLenum access)
 {
    static jgl_t_028a real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_028a)jackpotlte_gl_proc("glMapBufferOES");
    if (real == NULL)
@@ -3453,7 +3453,7 @@ jgl_028b(void *context, GLenum target)
 {
    static jgl_t_028b real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_028b)jackpotlte_gl_proc("glUnmapBuffer");
    if (real == NULL)
@@ -3468,7 +3468,7 @@ jgl_028c(void *context, GLenum target, GLenum pname, GLint *params)
 {
    static jgl_t_028c real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_028c)jackpotlte_gl_proc("glGetBufferParameteriv");
    if (real == NULL)
@@ -3483,7 +3483,7 @@ jgl_028d(void *context, GLenum target, GLenum pname, void **params)
 {
    static jgl_t_028d real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_028d)jackpotlte_gl_proc("glGetBufferPointerv");
    if (real == NULL)
@@ -3498,7 +3498,7 @@ jgl_028f(void *context, GLsizei n, const GLenum *bufs)
 {
    static jgl_t_028f real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_028f)jackpotlte_gl_proc("glDrawBuffers");
    if (real == NULL)
@@ -3513,7 +3513,7 @@ jgl_0290(void *context, GLuint shader)
 {
    static jgl_t_0290 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0290)jackpotlte_gl_proc("glIsShader");
    if (real == NULL)
@@ -3528,7 +3528,7 @@ jgl_0291(void *context, GLuint program)
 {
    static jgl_t_0291 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0291)jackpotlte_gl_proc("glIsProgram");
    if (real == NULL)
@@ -3543,7 +3543,7 @@ jgl_0292(void *context, GLuint shader, GLenum pname, GLint *params)
 {
    static jgl_t_0292 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0292)jackpotlte_gl_proc("glGetShaderiv");
    if (real == NULL)
@@ -3558,7 +3558,7 @@ jgl_0293(void *context, GLuint program, GLenum pname, GLint *params)
 {
    static jgl_t_0293 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0293)jackpotlte_gl_proc("glGetProgramiv");
    if (real == NULL)
@@ -3573,7 +3573,7 @@ jgl_0294(void *context, GLuint shader, GLsizei bufSize, GLsizei *length, GLchar 
 {
    static jgl_t_0294 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0294)jackpotlte_gl_proc("glGetShaderInfoLog");
    if (real == NULL)
@@ -3588,7 +3588,7 @@ jgl_0295(void *context, GLuint program, GLsizei bufSize, GLsizei *length, GLchar
 {
    static jgl_t_0295 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0295)jackpotlte_gl_proc("glGetProgramInfoLog");
    if (real == NULL)
@@ -3603,7 +3603,7 @@ jgl_0296(void *context, GLenum face, GLenum func, GLint ref, GLuint mask)
 {
    static jgl_t_0296 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0296)jackpotlte_gl_proc("glStencilFuncSeparate");
    if (real == NULL)
@@ -3618,7 +3618,7 @@ jgl_0297(void *context, GLenum face, GLuint mask)
 {
    static jgl_t_0297 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0297)jackpotlte_gl_proc("glStencilMaskSeparate");
    if (real == NULL)
@@ -3633,7 +3633,7 @@ jgl_029a(void *context, GLuint renderbuffer)
 {
    static jgl_t_029a real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_029a)jackpotlte_gl_proc("glIsRenderbuffer");
    if (real == NULL)
@@ -3648,7 +3648,7 @@ jgl_029b(void *context, GLenum target, GLuint renderbuffer)
 {
    static jgl_t_029b real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_029b)jackpotlte_gl_proc("glBindRenderbuffer");
    if (real == NULL)
@@ -3663,7 +3663,7 @@ jgl_029c(void *context, GLsizei n, const GLuint *renderbuffers)
 {
    static jgl_t_029c real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_029c)jackpotlte_gl_proc("glDeleteRenderbuffers");
    if (real == NULL)
@@ -3678,7 +3678,7 @@ jgl_029d(void *context, GLsizei n, GLuint *renderbuffers)
 {
    static jgl_t_029d real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_029d)jackpotlte_gl_proc("glGenRenderbuffers");
    if (real == NULL)
@@ -3693,7 +3693,7 @@ jgl_029e(void *context, GLenum target, GLenum internalformat, GLsizei width, GLs
 {
    static jgl_t_029e real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_029e)jackpotlte_gl_proc("glRenderbufferStorage");
    if (real == NULL)
@@ -3708,7 +3708,7 @@ jgl_029f(void *context, GLenum target, GLenum pname, GLint *params)
 {
    static jgl_t_029f real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_029f)jackpotlte_gl_proc("glGetRenderbufferParameteriv");
    if (real == NULL)
@@ -3723,7 +3723,7 @@ jgl_02a0(void *context, GLuint framebuffer)
 {
    static jgl_t_02a0 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_02a0)jackpotlte_gl_proc("glIsFramebuffer");
    if (real == NULL)
@@ -3738,7 +3738,7 @@ jgl_02a1(void *context, GLenum target, GLuint framebuffer)
 {
    static jgl_t_02a1 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_02a1)jackpotlte_gl_proc("glBindFramebuffer");
    if (real == NULL)
@@ -3753,7 +3753,7 @@ jgl_02a2(void *context, GLsizei n, const GLuint *framebuffers)
 {
    static jgl_t_02a2 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_02a2)jackpotlte_gl_proc("glDeleteFramebuffers");
    if (real == NULL)
@@ -3768,7 +3768,7 @@ jgl_02a3(void *context, GLsizei n, GLuint *framebuffers)
 {
    static jgl_t_02a3 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_02a3)jackpotlte_gl_proc("glGenFramebuffers");
    if (real == NULL)
@@ -3783,7 +3783,7 @@ jgl_02a4(void *context, GLenum target)
 {
    static jgl_t_02a4 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_02a4)jackpotlte_gl_proc("glCheckFramebufferStatus");
    if (real == NULL)
@@ -3798,7 +3798,7 @@ jgl_02a6(void *context, GLenum target, GLenum attachment, GLenum textarget, GLui
 {
    static jgl_t_02a6 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_02a6)jackpotlte_gl_proc("glFramebufferTexture2D");
    if (real == NULL)
@@ -3813,7 +3813,7 @@ jgl_02a8(void *context, GLenum target, GLenum attachment, GLenum renderbuffertar
 {
    static jgl_t_02a8 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_02a8)jackpotlte_gl_proc("glFramebufferRenderbuffer");
    if (real == NULL)
@@ -3828,7 +3828,7 @@ jgl_02a9(void *context, GLenum target, GLenum attachment, GLenum pname, GLint *p
 {
    static jgl_t_02a9 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_02a9)jackpotlte_gl_proc("glGetFramebufferAttachmentParameteriv");
    if (real == NULL)
@@ -3843,7 +3843,7 @@ jgl_02aa(void *context, GLenum target)
 {
    static jgl_t_02aa real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_02aa)jackpotlte_gl_proc("glGenerateMipmap");
    if (real == NULL)
@@ -3858,7 +3858,7 @@ jgl_02b2(void *context, GLuint program, GLenum pname, GLint value)
 {
    static jgl_t_02b2 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_02b2)jackpotlte_gl_proc("glProgramParameteri");
    if (real == NULL)
@@ -3873,7 +3873,7 @@ jgl_02b4(void *context, GLenum target, GLenum attachment, GLuint texture, GLint 
 {
    static jgl_t_02b4 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_02b4)jackpotlte_gl_proc("glFramebufferTextureLayer");
    if (real == NULL)
@@ -3888,7 +3888,7 @@ jgl_02b6(void *context, GLenum target, GLuint index, GLuint buffer, GLintptr off
 {
    static jgl_t_02b6 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_02b6)jackpotlte_gl_proc("glBindBufferRange");
    if (real == NULL)
@@ -3903,7 +3903,7 @@ jgl_02b8(void *context, GLenum target, GLuint index, GLuint buffer)
 {
    static jgl_t_02b8 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_02b8)jackpotlte_gl_proc("glBindBufferBase");
    if (real == NULL)
@@ -3918,7 +3918,7 @@ jgl_02b9(void *context, GLenum primitiveMode)
 {
    static jgl_t_02b9 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_02b9)jackpotlte_gl_proc("glBeginTransformFeedback");
    if (real == NULL)
@@ -3933,7 +3933,7 @@ jgl_02ba(void *context)
 {
    static jgl_t_02ba real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_02ba)jackpotlte_gl_proc("glEndTransformFeedback");
    if (real == NULL)
@@ -3948,7 +3948,7 @@ jgl_02bb(void *context, GLuint program, GLsizei count, const GLchar *const*varyi
 {
    static jgl_t_02bb real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_02bb)jackpotlte_gl_proc("glTransformFeedbackVaryings");
    if (real == NULL)
@@ -3963,7 +3963,7 @@ jgl_02bc(void *context, GLuint program, GLuint index, GLsizei bufSize, GLsizei *
 {
    static jgl_t_02bc real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_02bc)jackpotlte_gl_proc("glGetTransformFeedbackVarying");
    if (real == NULL)
@@ -3978,7 +3978,7 @@ jgl_02bd(void *context, GLenum target, GLuint index, GLint *data)
 {
    static jgl_t_02bd real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_02bd)jackpotlte_gl_proc("glGetIntegeri_v");
    if (real == NULL)
@@ -3993,7 +3993,7 @@ jgl_02cb(void *context, GLuint index, GLint x, GLint y, GLint z, GLint w)
 {
    static jgl_t_02cb real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_02cb)jackpotlte_gl_proc("glVertexAttribI4i");
    if (real == NULL)
@@ -4008,7 +4008,7 @@ jgl_02cf(void *context, GLuint index, GLuint x, GLuint y, GLuint z, GLuint w)
 {
    static jgl_t_02cf real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_02cf)jackpotlte_gl_proc("glVertexAttribI4ui");
    if (real == NULL)
@@ -4023,7 +4023,7 @@ jgl_02d3(void *context, GLuint index, const GLint *v)
 {
    static jgl_t_02d3 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_02d3)jackpotlte_gl_proc("glVertexAttribI4iv");
    if (real == NULL)
@@ -4038,7 +4038,7 @@ jgl_02d7(void *context, GLuint index, const GLuint *v)
 {
    static jgl_t_02d7 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_02d7)jackpotlte_gl_proc("glVertexAttribI4uiv");
    if (real == NULL)
@@ -4053,7 +4053,7 @@ jgl_02dc(void *context, GLuint index, GLint size, GLenum type, GLsizei stride, c
 {
    static jgl_t_02dc real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_02dc)jackpotlte_gl_proc("glVertexAttribIPointer");
    if (real == NULL)
@@ -4068,7 +4068,7 @@ jgl_02dd(void *context, GLuint index, GLenum pname, GLint *params)
 {
    static jgl_t_02dd real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_02dd)jackpotlte_gl_proc("glGetVertexAttribIiv");
    if (real == NULL)
@@ -4083,7 +4083,7 @@ jgl_02de(void *context, GLuint index, GLenum pname, GLuint *params)
 {
    static jgl_t_02de real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_02de)jackpotlte_gl_proc("glGetVertexAttribIuiv");
    if (real == NULL)
@@ -4098,7 +4098,7 @@ jgl_02df(void *context, GLint location, GLuint v0)
 {
    static jgl_t_02df real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_02df)jackpotlte_gl_proc("glUniform1ui");
    if (real == NULL)
@@ -4113,7 +4113,7 @@ jgl_02e0(void *context, GLint location, GLuint v0, GLuint v1)
 {
    static jgl_t_02e0 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_02e0)jackpotlte_gl_proc("glUniform2ui");
    if (real == NULL)
@@ -4128,7 +4128,7 @@ jgl_02e1(void *context, GLint location, GLuint v0, GLuint v1, GLuint v2)
 {
    static jgl_t_02e1 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_02e1)jackpotlte_gl_proc("glUniform3ui");
    if (real == NULL)
@@ -4143,7 +4143,7 @@ jgl_02e2(void *context, GLint location, GLuint v0, GLuint v1, GLuint v2, GLuint 
 {
    static jgl_t_02e2 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_02e2)jackpotlte_gl_proc("glUniform4ui");
    if (real == NULL)
@@ -4158,7 +4158,7 @@ jgl_02e3(void *context, GLint location, GLsizei count, const GLuint *value)
 {
    static jgl_t_02e3 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_02e3)jackpotlte_gl_proc("glUniform1uiv");
    if (real == NULL)
@@ -4173,7 +4173,7 @@ jgl_02e4(void *context, GLint location, GLsizei count, const GLuint *value)
 {
    static jgl_t_02e4 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_02e4)jackpotlte_gl_proc("glUniform2uiv");
    if (real == NULL)
@@ -4188,7 +4188,7 @@ jgl_02e5(void *context, GLint location, GLsizei count, const GLuint *value)
 {
    static jgl_t_02e5 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_02e5)jackpotlte_gl_proc("glUniform3uiv");
    if (real == NULL)
@@ -4203,7 +4203,7 @@ jgl_02e6(void *context, GLint location, GLsizei count, const GLuint *value)
 {
    static jgl_t_02e6 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_02e6)jackpotlte_gl_proc("glUniform4uiv");
    if (real == NULL)
@@ -4218,7 +4218,7 @@ jgl_02e7(void *context, GLuint program, GLint location, GLuint *params)
 {
    static jgl_t_02e7 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_02e7)jackpotlte_gl_proc("glGetUniformuiv");
    if (real == NULL)
@@ -4233,7 +4233,7 @@ jgl_02e9(void *context, GLuint program, const GLchar *name)
 {
    static jgl_t_02e9 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_02e9)jackpotlte_gl_proc("glGetFragDataLocation");
    if (real == NULL)
@@ -4248,7 +4248,7 @@ jgl_02ee(void *context, GLint location, GLsizei count, GLboolean transpose, cons
 {
    static jgl_t_02ee real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_02ee)jackpotlte_gl_proc("glUniformMatrix2x3fv");
    if (real == NULL)
@@ -4263,7 +4263,7 @@ jgl_02ef(void *context, GLint location, GLsizei count, GLboolean transpose, cons
 {
    static jgl_t_02ef real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_02ef)jackpotlte_gl_proc("glUniformMatrix3x2fv");
    if (real == NULL)
@@ -4278,7 +4278,7 @@ jgl_02f0(void *context, GLint location, GLsizei count, GLboolean transpose, cons
 {
    static jgl_t_02f0 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_02f0)jackpotlte_gl_proc("glUniformMatrix2x4fv");
    if (real == NULL)
@@ -4293,7 +4293,7 @@ jgl_02f1(void *context, GLint location, GLsizei count, GLboolean transpose, cons
 {
    static jgl_t_02f1 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_02f1)jackpotlte_gl_proc("glUniformMatrix4x2fv");
    if (real == NULL)
@@ -4308,7 +4308,7 @@ jgl_02f2(void *context, GLint location, GLsizei count, GLboolean transpose, cons
 {
    static jgl_t_02f2 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_02f2)jackpotlte_gl_proc("glUniformMatrix3x4fv");
    if (real == NULL)
@@ -4323,7 +4323,7 @@ jgl_02f3(void *context, GLint location, GLsizei count, GLboolean transpose, cons
 {
    static jgl_t_02f3 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_02f3)jackpotlte_gl_proc("glUniformMatrix4x3fv");
    if (real == NULL)
@@ -4338,7 +4338,7 @@ jgl_02f4(void *context, GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1, GLin
 {
    static jgl_t_02f4 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_02f4)jackpotlte_gl_proc("glBlitFramebuffer");
    if (real == NULL)
@@ -4353,7 +4353,7 @@ jgl_02f5(void *context, GLenum target, GLsizei samples, GLenum internalformat, G
 {
    static jgl_t_02f5 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_02f5)jackpotlte_gl_proc("glRenderbufferStorageMultisample");
    if (real == NULL)
@@ -4368,7 +4368,7 @@ jgl_02f8(void *context, GLuint program, GLsizei maxCount, GLsizei *count, GLuint
 {
    static jgl_t_02f8 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_02f8)jackpotlte_gl_proc("glGetAttachedShaders");
    if (real == NULL)
@@ -4383,7 +4383,7 @@ jgl_02fa(void *context, GLuint index, GLuint divisor)
 {
    static jgl_t_02fa real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_02fa)jackpotlte_gl_proc("glVertexAttribDivisor");
    if (real == NULL)
@@ -4398,7 +4398,7 @@ jgl_02fb(void *context, GLenum mode, GLint first, GLsizei count, GLsizei instanc
 {
    static jgl_t_02fb real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_02fb)jackpotlte_gl_proc("glDrawArraysInstanced");
    if (real == NULL)
@@ -4413,7 +4413,7 @@ jgl_02fc(void *context, GLenum mode, GLsizei count, GLenum type, const void *ind
 {
    static jgl_t_02fc real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_02fc)jackpotlte_gl_proc("glDrawElementsInstanced");
    if (real == NULL)
@@ -4428,7 +4428,7 @@ jgl_0301(void *context, GLuint array)
 {
    static jgl_t_0301 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0301)jackpotlte_gl_proc("glBindVertexArray");
    if (real == NULL)
@@ -4443,7 +4443,7 @@ jgl_0302(void *context, GLsizei n, const GLuint *arrays)
 {
    static jgl_t_0302 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0302)jackpotlte_gl_proc("glDeleteVertexArrays");
    if (real == NULL)
@@ -4458,7 +4458,7 @@ jgl_0303(void *context, GLsizei n, GLuint *arrays)
 {
    static jgl_t_0303 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0303)jackpotlte_gl_proc("glGenVertexArrays");
    if (real == NULL)
@@ -4473,7 +4473,7 @@ jgl_0304(void *context, GLuint array)
 {
    static jgl_t_0304 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0304)jackpotlte_gl_proc("glIsVertexArray");
    if (real == NULL)
@@ -4488,7 +4488,7 @@ jgl_0305(void *context, GLenum type, GLsizei stride, const void *pointer)
 {
    static jgl_t_0305 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0305)jackpotlte_gl_proc("glPointSizePointerOES");
    if (real == NULL)
@@ -4503,7 +4503,7 @@ jgl_0307(void *context, GLenum buffer, GLint drawbuffer, const GLint *value)
 {
    static jgl_t_0307 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0307)jackpotlte_gl_proc("glClearBufferiv");
    if (real == NULL)
@@ -4518,7 +4518,7 @@ jgl_0308(void *context, GLenum buffer, GLint drawbuffer, const GLuint *value)
 {
    static jgl_t_0308 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0308)jackpotlte_gl_proc("glClearBufferuiv");
    if (real == NULL)
@@ -4533,7 +4533,7 @@ jgl_0309(void *context, GLenum buffer, GLint drawbuffer, const GLfloat *value)
 {
    static jgl_t_0309 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0309)jackpotlte_gl_proc("glClearBufferfv");
    if (real == NULL)
@@ -4548,7 +4548,7 @@ jgl_030a(void *context, GLenum buffer, GLint drawbuffer, GLfloat depth, GLint st
 {
    static jgl_t_030a real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_030a)jackpotlte_gl_proc("glClearBufferfi");
    if (real == NULL)
@@ -4563,7 +4563,7 @@ jgl_030b(void *context, GLenum name, GLuint index)
 {
    static jgl_t_030b real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_030b)jackpotlte_gl_proc("glGetStringi");
    if (real == NULL)
@@ -4578,7 +4578,7 @@ jgl_030c(void *context, GLenum condition, GLbitfield flags)
 {
    static jgl_t_030c real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_030c)jackpotlte_gl_proc("glFenceSync");
    if (real == NULL)
@@ -4593,7 +4593,7 @@ jgl_030d(void *context, GLsync sync)
 {
    static jgl_t_030d real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_030d)jackpotlte_gl_proc("glIsSync");
    if (real == NULL)
@@ -4608,7 +4608,7 @@ jgl_030e(void *context, GLsync sync)
 {
    static jgl_t_030e real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_030e)jackpotlte_gl_proc("glDeleteSync");
    if (real == NULL)
@@ -4623,7 +4623,7 @@ jgl_030f(void *context, GLsync sync, GLbitfield flags, GLuint64 timeout)
 {
    static jgl_t_030f real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_030f)jackpotlte_gl_proc("glClientWaitSync");
    if (real == NULL)
@@ -4638,7 +4638,7 @@ jgl_0310(void *context, GLsync sync, GLbitfield flags, GLuint64 timeout)
 {
    static jgl_t_0310 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0310)jackpotlte_gl_proc("glWaitSync");
    if (real == NULL)
@@ -4653,7 +4653,7 @@ jgl_0311(void *context, GLenum pname, GLint64 *data)
 {
    static jgl_t_0311 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0311)jackpotlte_gl_proc("glGetInteger64v");
    if (real == NULL)
@@ -4668,7 +4668,7 @@ jgl_0312(void *context, GLsync sync, GLenum pname, GLsizei count, GLsizei *lengt
 {
    static jgl_t_0312 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0312)jackpotlte_gl_proc("glGetSynciv");
    if (real == NULL)
@@ -4683,7 +4683,7 @@ jgl_0318(void *context, GLenum readTarget, GLenum writeTarget, GLintptr readOffs
 {
    static jgl_t_0318 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0318)jackpotlte_gl_proc("glCopyBufferSubData");
    if (real == NULL)
@@ -4698,7 +4698,7 @@ jgl_031c(void *context, GLenum target, GLintptr offset, GLsizeiptr length, GLbit
 {
    static jgl_t_031c real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_031c)jackpotlte_gl_proc("glMapBufferRange");
    if (real == NULL)
@@ -4713,7 +4713,7 @@ jgl_031d(void *context, GLenum target, GLintptr offset, GLsizeiptr length)
 {
    static jgl_t_031d real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_031d)jackpotlte_gl_proc("glFlushMappedBufferRange");
    if (real == NULL)
@@ -4728,7 +4728,7 @@ jgl_031f(void *context, GLenum target, GLuint index, GLint64 *data)
 {
    static jgl_t_031f real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_031f)jackpotlte_gl_proc("glGetInteger64i_v");
    if (real == NULL)
@@ -4743,7 +4743,7 @@ jgl_0320(void *context, GLenum target, GLenum pname, GLint64 *params)
 {
    static jgl_t_0320 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0320)jackpotlte_gl_proc("glGetBufferParameteri64v");
    if (real == NULL)
@@ -4758,7 +4758,7 @@ jgl_0321(void *context, GLsizei count, GLuint *samplers)
 {
    static jgl_t_0321 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0321)jackpotlte_gl_proc("glGenSamplers");
    if (real == NULL)
@@ -4773,7 +4773,7 @@ jgl_0322(void *context, GLsizei count, const GLuint *samplers)
 {
    static jgl_t_0322 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0322)jackpotlte_gl_proc("glDeleteSamplers");
    if (real == NULL)
@@ -4788,7 +4788,7 @@ jgl_0323(void *context, GLuint sampler)
 {
    static jgl_t_0323 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0323)jackpotlte_gl_proc("glIsSampler");
    if (real == NULL)
@@ -4803,7 +4803,7 @@ jgl_0324(void *context, GLuint unit, GLuint sampler)
 {
    static jgl_t_0324 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0324)jackpotlte_gl_proc("glBindSampler");
    if (real == NULL)
@@ -4818,7 +4818,7 @@ jgl_0325(void *context, GLuint sampler, GLenum pname, GLint param)
 {
    static jgl_t_0325 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0325)jackpotlte_gl_proc("glSamplerParameteri");
    if (real == NULL)
@@ -4833,7 +4833,7 @@ jgl_0326(void *context, GLuint sampler, GLenum pname, const GLint *param)
 {
    static jgl_t_0326 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0326)jackpotlte_gl_proc("glSamplerParameteriv");
    if (real == NULL)
@@ -4848,7 +4848,7 @@ jgl_0327(void *context, GLuint sampler, GLenum pname, GLfloat param)
 {
    static jgl_t_0327 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0327)jackpotlte_gl_proc("glSamplerParameterf");
    if (real == NULL)
@@ -4863,7 +4863,7 @@ jgl_0328(void *context, GLuint sampler, GLenum pname, const GLfloat *param)
 {
    static jgl_t_0328 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0328)jackpotlte_gl_proc("glSamplerParameterfv");
    if (real == NULL)
@@ -4878,7 +4878,7 @@ jgl_032b(void *context, GLuint sampler, GLenum pname, GLint *params)
 {
    static jgl_t_032b real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_032b)jackpotlte_gl_proc("glGetSamplerParameteriv");
    if (real == NULL)
@@ -4893,7 +4893,7 @@ jgl_032c(void *context, GLuint sampler, GLenum pname, GLfloat *params)
 {
    static jgl_t_032c real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_032c)jackpotlte_gl_proc("glGetSamplerParameterfv");
    if (real == NULL)
@@ -4908,7 +4908,7 @@ jgl_032f(void *context, GLenum type, GLuint object, GLsizei length, const GLchar
 {
    static jgl_t_032f real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_032f)jackpotlte_gl_proc("glLabelObjectEXT");
    if (real == NULL)
@@ -4923,7 +4923,7 @@ jgl_0330(void *context, GLenum type, GLuint object, GLsizei bufSize, GLsizei *le
 {
    static jgl_t_0330 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0330)jackpotlte_gl_proc("glGetObjectLabelEXT");
    if (real == NULL)
@@ -4938,7 +4938,7 @@ jgl_0331(void *context, GLsizei length, const GLchar *marker)
 {
    static jgl_t_0331 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0331)jackpotlte_gl_proc("glInsertEventMarkerEXT");
    if (real == NULL)
@@ -4953,7 +4953,7 @@ jgl_0332(void *context, GLsizei length, const GLchar *marker)
 {
    static jgl_t_0332 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0332)jackpotlte_gl_proc("glPushGroupMarkerEXT");
    if (real == NULL)
@@ -4968,7 +4968,7 @@ jgl_0333(void *context)
 {
    static jgl_t_0333 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0333)jackpotlte_gl_proc("glPopGroupMarkerEXT");
    if (real == NULL)
@@ -4983,7 +4983,7 @@ jgl_0334(void *context, GLuint pipeline, GLbitfield stages, GLuint program)
 {
    static jgl_t_0334 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0334)jackpotlte_gl_proc("glUseProgramStagesEXT");
    if (real == NULL)
@@ -4998,7 +4998,7 @@ jgl_0335(void *context, GLuint pipeline, GLuint program)
 {
    static jgl_t_0335 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0335)jackpotlte_gl_proc("glActiveShaderProgramEXT");
    if (real == NULL)
@@ -5013,7 +5013,7 @@ jgl_0336(void *context, GLenum type, GLsizei count, const GLchar *const*strings)
 {
    static jgl_t_0336 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0336)jackpotlte_gl_proc("glCreateShaderProgramvEXT");
    if (real == NULL)
@@ -5028,7 +5028,7 @@ jgl_0337(void *context, GLuint pipeline)
 {
    static jgl_t_0337 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0337)jackpotlte_gl_proc("glBindProgramPipelineEXT");
    if (real == NULL)
@@ -5043,7 +5043,7 @@ jgl_0338(void *context, GLsizei n, const GLuint *pipelines)
 {
    static jgl_t_0338 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0338)jackpotlte_gl_proc("glDeleteProgramPipelinesEXT");
    if (real == NULL)
@@ -5058,7 +5058,7 @@ jgl_0339(void *context, GLsizei n, GLuint *pipelines)
 {
    static jgl_t_0339 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0339)jackpotlte_gl_proc("glGenProgramPipelinesEXT");
    if (real == NULL)
@@ -5073,7 +5073,7 @@ jgl_033a(void *context, GLuint pipeline)
 {
    static jgl_t_033a real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_033a)jackpotlte_gl_proc("glIsProgramPipelineEXT");
    if (real == NULL)
@@ -5088,7 +5088,7 @@ jgl_033b(void *context, GLuint pipeline, GLenum pname, GLint *params)
 {
    static jgl_t_033b real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_033b)jackpotlte_gl_proc("glGetProgramPipelineivEXT");
    if (real == NULL)
@@ -5103,7 +5103,7 @@ jgl_033c(void *context, GLuint pipeline)
 {
    static jgl_t_033c real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_033c)jackpotlte_gl_proc("glValidateProgramPipelineEXT");
    if (real == NULL)
@@ -5118,7 +5118,7 @@ jgl_033d(void *context, GLuint pipeline, GLsizei bufSize, GLsizei *length, GLcha
 {
    static jgl_t_033d real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_033d)jackpotlte_gl_proc("glGetProgramPipelineInfoLogEXT");
    if (real == NULL)
@@ -5133,7 +5133,7 @@ jgl_033e(void *context, GLuint program, GLint location, GLint v0)
 {
    static jgl_t_033e real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_033e)jackpotlte_gl_proc("glProgramUniform1iEXT");
    if (real == NULL)
@@ -5148,7 +5148,7 @@ jgl_033f(void *context, GLuint program, GLint location, GLint v0, GLint v1)
 {
    static jgl_t_033f real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_033f)jackpotlte_gl_proc("glProgramUniform2iEXT");
    if (real == NULL)
@@ -5163,7 +5163,7 @@ jgl_0340(void *context, GLuint program, GLint location, GLint v0, GLint v1, GLin
 {
    static jgl_t_0340 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0340)jackpotlte_gl_proc("glProgramUniform3iEXT");
    if (real == NULL)
@@ -5178,7 +5178,7 @@ jgl_0341(void *context, GLuint program, GLint location, GLint v0, GLint v1, GLin
 {
    static jgl_t_0341 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0341)jackpotlte_gl_proc("glProgramUniform4iEXT");
    if (real == NULL)
@@ -5193,7 +5193,7 @@ jgl_0342(void *context, GLuint program, GLint location, GLfloat v0)
 {
    static jgl_t_0342 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0342)jackpotlte_gl_proc("glProgramUniform1fEXT");
    if (real == NULL)
@@ -5208,7 +5208,7 @@ jgl_0343(void *context, GLuint program, GLint location, GLfloat v0, GLfloat v1)
 {
    static jgl_t_0343 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0343)jackpotlte_gl_proc("glProgramUniform2fEXT");
    if (real == NULL)
@@ -5223,7 +5223,7 @@ jgl_0344(void *context, GLuint program, GLint location, GLfloat v0, GLfloat v1, 
 {
    static jgl_t_0344 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0344)jackpotlte_gl_proc("glProgramUniform3fEXT");
    if (real == NULL)
@@ -5238,7 +5238,7 @@ jgl_0345(void *context, GLuint program, GLint location, GLfloat v0, GLfloat v1, 
 {
    static jgl_t_0345 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0345)jackpotlte_gl_proc("glProgramUniform4fEXT");
    if (real == NULL)
@@ -5253,7 +5253,7 @@ jgl_0346(void *context, GLuint program, GLint location, GLsizei count, const GLi
 {
    static jgl_t_0346 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0346)jackpotlte_gl_proc("glProgramUniform1ivEXT");
    if (real == NULL)
@@ -5268,7 +5268,7 @@ jgl_0347(void *context, GLuint program, GLint location, GLsizei count, const GLi
 {
    static jgl_t_0347 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0347)jackpotlte_gl_proc("glProgramUniform2ivEXT");
    if (real == NULL)
@@ -5283,7 +5283,7 @@ jgl_0348(void *context, GLuint program, GLint location, GLsizei count, const GLi
 {
    static jgl_t_0348 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0348)jackpotlte_gl_proc("glProgramUniform3ivEXT");
    if (real == NULL)
@@ -5298,7 +5298,7 @@ jgl_0349(void *context, GLuint program, GLint location, GLsizei count, const GLi
 {
    static jgl_t_0349 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0349)jackpotlte_gl_proc("glProgramUniform4ivEXT");
    if (real == NULL)
@@ -5313,7 +5313,7 @@ jgl_034a(void *context, GLuint program, GLint location, GLsizei count, const GLf
 {
    static jgl_t_034a real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_034a)jackpotlte_gl_proc("glProgramUniform1fvEXT");
    if (real == NULL)
@@ -5328,7 +5328,7 @@ jgl_034b(void *context, GLuint program, GLint location, GLsizei count, const GLf
 {
    static jgl_t_034b real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_034b)jackpotlte_gl_proc("glProgramUniform2fvEXT");
    if (real == NULL)
@@ -5343,7 +5343,7 @@ jgl_034c(void *context, GLuint program, GLint location, GLsizei count, const GLf
 {
    static jgl_t_034c real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_034c)jackpotlte_gl_proc("glProgramUniform3fvEXT");
    if (real == NULL)
@@ -5358,7 +5358,7 @@ jgl_034d(void *context, GLuint program, GLint location, GLsizei count, const GLf
 {
    static jgl_t_034d real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_034d)jackpotlte_gl_proc("glProgramUniform4fvEXT");
    if (real == NULL)
@@ -5373,7 +5373,7 @@ jgl_034e(void *context, GLuint program, GLint location, GLsizei count, GLboolean
 {
    static jgl_t_034e real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_034e)jackpotlte_gl_proc("glProgramUniformMatrix2fvEXT");
    if (real == NULL)
@@ -5388,7 +5388,7 @@ jgl_034f(void *context, GLuint program, GLint location, GLsizei count, GLboolean
 {
    static jgl_t_034f real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_034f)jackpotlte_gl_proc("glProgramUniformMatrix3fvEXT");
    if (real == NULL)
@@ -5403,7 +5403,7 @@ jgl_0350(void *context, GLuint program, GLint location, GLsizei count, GLboolean
 {
    static jgl_t_0350 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0350)jackpotlte_gl_proc("glProgramUniformMatrix4fvEXT");
    if (real == NULL)
@@ -5418,7 +5418,7 @@ jgl_0351(void *context, GLuint program, GLint location, GLuint v0)
 {
    static jgl_t_0351 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0351)jackpotlte_gl_proc("glProgramUniform1uiEXT");
    if (real == NULL)
@@ -5433,7 +5433,7 @@ jgl_0352(void *context, GLuint program, GLint location, GLuint v0, GLuint v1)
 {
    static jgl_t_0352 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0352)jackpotlte_gl_proc("glProgramUniform2uiEXT");
    if (real == NULL)
@@ -5448,7 +5448,7 @@ jgl_0353(void *context, GLuint program, GLint location, GLuint v0, GLuint v1, GL
 {
    static jgl_t_0353 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0353)jackpotlte_gl_proc("glProgramUniform3uiEXT");
    if (real == NULL)
@@ -5463,7 +5463,7 @@ jgl_0354(void *context, GLuint program, GLint location, GLuint v0, GLuint v1, GL
 {
    static jgl_t_0354 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0354)jackpotlte_gl_proc("glProgramUniform4uiEXT");
    if (real == NULL)
@@ -5478,7 +5478,7 @@ jgl_0355(void *context, GLuint program, GLint location, GLsizei count, const GLu
 {
    static jgl_t_0355 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0355)jackpotlte_gl_proc("glProgramUniform1uivEXT");
    if (real == NULL)
@@ -5493,7 +5493,7 @@ jgl_0356(void *context, GLuint program, GLint location, GLsizei count, const GLu
 {
    static jgl_t_0356 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0356)jackpotlte_gl_proc("glProgramUniform2uivEXT");
    if (real == NULL)
@@ -5508,7 +5508,7 @@ jgl_0357(void *context, GLuint program, GLint location, GLsizei count, const GLu
 {
    static jgl_t_0357 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0357)jackpotlte_gl_proc("glProgramUniform3uivEXT");
    if (real == NULL)
@@ -5523,7 +5523,7 @@ jgl_0358(void *context, GLuint program, GLint location, GLsizei count, const GLu
 {
    static jgl_t_0358 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0358)jackpotlte_gl_proc("glProgramUniform4uivEXT");
    if (real == NULL)
@@ -5538,7 +5538,7 @@ jgl_0359(void *context, GLuint program, GLint location, GLsizei count, GLboolean
 {
    static jgl_t_0359 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0359)jackpotlte_gl_proc("glProgramUniformMatrix2x3fvEXT");
    if (real == NULL)
@@ -5553,7 +5553,7 @@ jgl_035a(void *context, GLuint program, GLint location, GLsizei count, GLboolean
 {
    static jgl_t_035a real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_035a)jackpotlte_gl_proc("glProgramUniformMatrix3x2fvEXT");
    if (real == NULL)
@@ -5568,7 +5568,7 @@ jgl_035b(void *context, GLuint program, GLint location, GLsizei count, GLboolean
 {
    static jgl_t_035b real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_035b)jackpotlte_gl_proc("glProgramUniformMatrix2x4fvEXT");
    if (real == NULL)
@@ -5583,7 +5583,7 @@ jgl_035c(void *context, GLuint program, GLint location, GLsizei count, GLboolean
 {
    static jgl_t_035c real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_035c)jackpotlte_gl_proc("glProgramUniformMatrix4x2fvEXT");
    if (real == NULL)
@@ -5598,7 +5598,7 @@ jgl_035d(void *context, GLuint program, GLint location, GLsizei count, GLboolean
 {
    static jgl_t_035d real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_035d)jackpotlte_gl_proc("glProgramUniformMatrix3x4fvEXT");
    if (real == NULL)
@@ -5613,7 +5613,7 @@ jgl_035e(void *context, GLuint program, GLint location, GLsizei count, GLboolean
 {
    static jgl_t_035e real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_035e)jackpotlte_gl_proc("glProgramUniformMatrix4x3fvEXT");
    if (real == NULL)
@@ -5628,7 +5628,7 @@ jgl_036b(void *context)
 {
    static jgl_t_036b real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_036b)jackpotlte_gl_proc("glReleaseShaderCompiler");
    if (real == NULL)
@@ -5643,7 +5643,7 @@ jgl_036c(void *context, GLsizei count, const GLuint *shaders, GLenum binaryForma
 {
    static jgl_t_036c real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_036c)jackpotlte_gl_proc("glShaderBinary");
    if (real == NULL)
@@ -5658,7 +5658,7 @@ jgl_036d(void *context, GLenum shadertype, GLenum precisiontype, GLint *range, G
 {
    static jgl_t_036d real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_036d)jackpotlte_gl_proc("glGetShaderPrecisionFormat");
    if (real == NULL)
@@ -5673,7 +5673,7 @@ jgl_036e(void *context, GLfloat n, GLfloat f)
 {
    static jgl_t_036e real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_036e)jackpotlte_gl_proc("glDepthRangef");
    if (real == NULL)
@@ -5688,7 +5688,7 @@ jgl_036f(void *context, GLfloat d)
 {
    static jgl_t_036f real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_036f)jackpotlte_gl_proc("glClearDepthf");
    if (real == NULL)
@@ -5703,7 +5703,7 @@ jgl_0378(void *context, GLuint program, GLsizei bufSize, GLsizei *length, GLenum
 {
    static jgl_t_0378 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0378)jackpotlte_gl_proc("glGetProgramBinary");
    if (real == NULL)
@@ -5718,7 +5718,7 @@ jgl_0379(void *context, GLuint program, GLenum binaryFormat, const void *binary,
 {
    static jgl_t_0379 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0379)jackpotlte_gl_proc("glProgramBinary");
    if (real == NULL)
@@ -5733,7 +5733,7 @@ jgl_0389(void *context, GLenum target, GLuint id)
 {
    static jgl_t_0389 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0389)jackpotlte_gl_proc("glBindTransformFeedback");
    if (real == NULL)
@@ -5748,7 +5748,7 @@ jgl_038a(void *context, GLsizei n, GLuint *ids)
 {
    static jgl_t_038a real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_038a)jackpotlte_gl_proc("glGenTransformFeedbacks");
    if (real == NULL)
@@ -5763,7 +5763,7 @@ jgl_038b(void *context, GLsizei n, const GLuint *ids)
 {
    static jgl_t_038b real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_038b)jackpotlte_gl_proc("glDeleteTransformFeedbacks");
    if (real == NULL)
@@ -5778,7 +5778,7 @@ jgl_038c(void *context)
 {
    static jgl_t_038c real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_038c)jackpotlte_gl_proc("glPauseTransformFeedback");
    if (real == NULL)
@@ -5793,7 +5793,7 @@ jgl_038d(void *context)
 {
    static jgl_t_038d real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_038d)jackpotlte_gl_proc("glResumeTransformFeedback");
    if (real == NULL)
@@ -5808,7 +5808,7 @@ jgl_038e(void *context, GLuint id)
 {
    static jgl_t_038e real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_038e)jackpotlte_gl_proc("glIsTransformFeedback");
    if (real == NULL)
@@ -5823,7 +5823,7 @@ jgl_03c9(void *context, GLenum func, GLfixed ref)
 {
    static jgl_t_03c9 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_03c9)jackpotlte_gl_proc("glAlphaFuncx");
    if (real == NULL)
@@ -5838,7 +5838,7 @@ jgl_03ca(void *context, GLfixed red, GLfixed green, GLfixed blue, GLfixed alpha)
 {
    static jgl_t_03ca real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_03ca)jackpotlte_gl_proc("glClearColorx");
    if (real == NULL)
@@ -5853,7 +5853,7 @@ jgl_03cb(void *context, GLfixed depth)
 {
    static jgl_t_03cb real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_03cb)jackpotlte_gl_proc("glClearDepthx");
    if (real == NULL)
@@ -5868,7 +5868,7 @@ jgl_03cc(void *context, GLenum p, const GLfloat *eqn)
 {
    static jgl_t_03cc real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_03cc)jackpotlte_gl_proc("glClipPlanef");
    if (real == NULL)
@@ -5883,7 +5883,7 @@ jgl_03cd(void *context, GLenum plane, const GLfixed *equation)
 {
    static jgl_t_03cd real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_03cd)jackpotlte_gl_proc("glClipPlanex");
    if (real == NULL)
@@ -5898,7 +5898,7 @@ jgl_03ce(void *context, GLfixed red, GLfixed green, GLfixed blue, GLfixed alpha)
 {
    static jgl_t_03ce real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_03ce)jackpotlte_gl_proc("glColor4x");
    if (real == NULL)
@@ -5913,7 +5913,7 @@ jgl_03cf(void *context, GLfixed n, GLfixed f)
 {
    static jgl_t_03cf real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_03cf)jackpotlte_gl_proc("glDepthRangex");
    if (real == NULL)
@@ -5928,7 +5928,7 @@ jgl_03d0(void *context, GLenum pname, GLfixed param)
 {
    static jgl_t_03d0 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_03d0)jackpotlte_gl_proc("glFogx");
    if (real == NULL)
@@ -5943,7 +5943,7 @@ jgl_03d1(void *context, GLenum pname, const GLfixed *param)
 {
    static jgl_t_03d1 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_03d1)jackpotlte_gl_proc("glFogxv");
    if (real == NULL)
@@ -5958,7 +5958,7 @@ jgl_03d2(void *context, GLfloat l, GLfloat r, GLfloat b, GLfloat t, GLfloat n, G
 {
    static jgl_t_03d2 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_03d2)jackpotlte_gl_proc("glFrustumf");
    if (real == NULL)
@@ -5973,7 +5973,7 @@ jgl_03d3(void *context, GLfixed l, GLfixed r, GLfixed b, GLfixed t, GLfixed n, G
 {
    static jgl_t_03d3 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_03d3)jackpotlte_gl_proc("glFrustumx");
    if (real == NULL)
@@ -5988,7 +5988,7 @@ jgl_03d4(void *context, GLenum plane, GLfloat *equation)
 {
    static jgl_t_03d4 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_03d4)jackpotlte_gl_proc("glGetClipPlanef");
    if (real == NULL)
@@ -6003,7 +6003,7 @@ jgl_03d5(void *context, GLenum plane, GLfixed *equation)
 {
    static jgl_t_03d5 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_03d5)jackpotlte_gl_proc("glGetClipPlanex");
    if (real == NULL)
@@ -6018,7 +6018,7 @@ jgl_03d6(void *context, GLenum pname, GLfixed *params)
 {
    static jgl_t_03d6 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_03d6)jackpotlte_gl_proc("glGetFixedv");
    if (real == NULL)
@@ -6033,7 +6033,7 @@ jgl_03d7(void *context, GLenum light, GLenum pname, GLfixed *params)
 {
    static jgl_t_03d7 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_03d7)jackpotlte_gl_proc("glGetLightxv");
    if (real == NULL)
@@ -6048,7 +6048,7 @@ jgl_03d8(void *context, GLenum face, GLenum pname, GLfixed *params)
 {
    static jgl_t_03d8 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_03d8)jackpotlte_gl_proc("glGetMaterialxv");
    if (real == NULL)
@@ -6063,7 +6063,7 @@ jgl_03d9(void *context, GLenum target, GLenum pname, GLfixed *params)
 {
    static jgl_t_03d9 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_03d9)jackpotlte_gl_proc("glGetTexEnvxv");
    if (real == NULL)
@@ -6078,7 +6078,7 @@ jgl_03da(void *context, GLenum target, GLenum pname, GLfixed *params)
 {
    static jgl_t_03da real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_03da)jackpotlte_gl_proc("glGetTexParameterxv");
    if (real == NULL)
@@ -6093,7 +6093,7 @@ jgl_03db(void *context, GLenum pname, GLfixed param)
 {
    static jgl_t_03db real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_03db)jackpotlte_gl_proc("glLightModelx");
    if (real == NULL)
@@ -6108,7 +6108,7 @@ jgl_03dc(void *context, GLenum pname, const GLfixed *param)
 {
    static jgl_t_03dc real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_03dc)jackpotlte_gl_proc("glLightModelxv");
    if (real == NULL)
@@ -6123,7 +6123,7 @@ jgl_03dd(void *context, GLenum light, GLenum pname, GLfixed param)
 {
    static jgl_t_03dd real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_03dd)jackpotlte_gl_proc("glLightx");
    if (real == NULL)
@@ -6138,7 +6138,7 @@ jgl_03de(void *context, GLenum light, GLenum pname, const GLfixed *params)
 {
    static jgl_t_03de real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_03de)jackpotlte_gl_proc("glLightxv");
    if (real == NULL)
@@ -6153,7 +6153,7 @@ jgl_03df(void *context, GLfixed width)
 {
    static jgl_t_03df real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_03df)jackpotlte_gl_proc("glLineWidthx");
    if (real == NULL)
@@ -6168,7 +6168,7 @@ jgl_03e0(void *context, const GLfixed *m)
 {
    static jgl_t_03e0 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_03e0)jackpotlte_gl_proc("glLoadMatrixx");
    if (real == NULL)
@@ -6183,7 +6183,7 @@ jgl_03e1(void *context, GLenum face, GLenum pname, GLfixed param)
 {
    static jgl_t_03e1 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_03e1)jackpotlte_gl_proc("glMaterialx");
    if (real == NULL)
@@ -6198,7 +6198,7 @@ jgl_03e2(void *context, GLenum face, GLenum pname, const GLfixed *param)
 {
    static jgl_t_03e2 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_03e2)jackpotlte_gl_proc("glMaterialxv");
    if (real == NULL)
@@ -6213,7 +6213,7 @@ jgl_03e3(void *context, const GLfixed *m)
 {
    static jgl_t_03e3 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_03e3)jackpotlte_gl_proc("glMultMatrixx");
    if (real == NULL)
@@ -6228,7 +6228,7 @@ jgl_03e4(void *context, GLfixed nx, GLfixed ny, GLfixed nz)
 {
    static jgl_t_03e4 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_03e4)jackpotlte_gl_proc("glNormal3x");
    if (real == NULL)
@@ -6243,7 +6243,7 @@ jgl_03e5(void *context, GLfloat l, GLfloat r, GLfloat b, GLfloat t, GLfloat n, G
 {
    static jgl_t_03e5 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_03e5)jackpotlte_gl_proc("glOrthof");
    if (real == NULL)
@@ -6258,7 +6258,7 @@ jgl_03e6(void *context, GLfixed l, GLfixed r, GLfixed b, GLfixed t, GLfixed n, G
 {
    static jgl_t_03e6 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_03e6)jackpotlte_gl_proc("glOrthox");
    if (real == NULL)
@@ -6273,7 +6273,7 @@ jgl_03e7(void *context, GLfixed size)
 {
    static jgl_t_03e7 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_03e7)jackpotlte_gl_proc("glPointSizex");
    if (real == NULL)
@@ -6288,7 +6288,7 @@ jgl_03e8(void *context, GLfixed factor, GLfixed units)
 {
    static jgl_t_03e8 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_03e8)jackpotlte_gl_proc("glPolygonOffsetx");
    if (real == NULL)
@@ -6303,7 +6303,7 @@ jgl_03e9(void *context, GLfixed angle, GLfixed x, GLfixed y, GLfixed z)
 {
    static jgl_t_03e9 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_03e9)jackpotlte_gl_proc("glRotatex");
    if (real == NULL)
@@ -6318,7 +6318,7 @@ jgl_03ea(void *context, GLfixed x, GLfixed y, GLfixed z)
 {
    static jgl_t_03ea real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_03ea)jackpotlte_gl_proc("glScalex");
    if (real == NULL)
@@ -6333,7 +6333,7 @@ jgl_03eb(void *context, GLenum target, GLenum pname, GLfixed param)
 {
    static jgl_t_03eb real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_03eb)jackpotlte_gl_proc("glTexEnvx");
    if (real == NULL)
@@ -6348,7 +6348,7 @@ jgl_03ec(void *context, GLenum target, GLenum pname, const GLfixed *params)
 {
    static jgl_t_03ec real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_03ec)jackpotlte_gl_proc("glTexEnvxv");
    if (real == NULL)
@@ -6363,7 +6363,7 @@ jgl_03ed(void *context, GLenum target, GLenum pname, GLfixed param)
 {
    static jgl_t_03ed real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_03ed)jackpotlte_gl_proc("glTexParameterx");
    if (real == NULL)
@@ -6378,7 +6378,7 @@ jgl_03ee(void *context, GLenum target, GLenum pname, const GLfixed *params)
 {
    static jgl_t_03ee real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_03ee)jackpotlte_gl_proc("glTexParameterxv");
    if (real == NULL)
@@ -6393,7 +6393,7 @@ jgl_03ef(void *context, GLfixed x, GLfixed y, GLfixed z)
 {
    static jgl_t_03ef real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_03ef)jackpotlte_gl_proc("glTranslatex");
    if (real == NULL)
@@ -6408,7 +6408,7 @@ jgl_03f0(void *context, GLenum texture, GLfixed s, GLfixed t, GLfixed r, GLfixed
 {
    static jgl_t_03f0 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_03f0)jackpotlte_gl_proc("glMultiTexCoord4x");
    if (real == NULL)
@@ -6423,7 +6423,7 @@ jgl_03f1(void *context, GLclampx value, GLboolean invert)
 {
    static jgl_t_03f1 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_03f1)jackpotlte_gl_proc("glSampleCoveragex");
    if (real == NULL)
@@ -6438,7 +6438,7 @@ jgl_03f2(void *context, GLenum pname, GLfixed param)
 {
    static jgl_t_03f2 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_03f2)jackpotlte_gl_proc("glPointParameterx");
    if (real == NULL)
@@ -6453,7 +6453,7 @@ jgl_03f3(void *context, GLenum pname, const GLfixed *params)
 {
    static jgl_t_03f3 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_03f3)jackpotlte_gl_proc("glPointParameterxv");
    if (real == NULL)
@@ -6468,7 +6468,7 @@ jgl_03f4(void *context, GLuint matrixpaletteindex)
 {
    static jgl_t_03f4 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_03f4)jackpotlte_gl_proc("glCurrentPaletteMatrixOES");
    if (real == NULL)
@@ -6483,7 +6483,7 @@ jgl_03f5(void *context)
 {
    static jgl_t_03f5 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_03f5)jackpotlte_gl_proc("glLoadPaletteFromModelViewMatrixOES");
    if (real == NULL)
@@ -6498,7 +6498,7 @@ jgl_03f6(void *context, GLint size, GLenum type, GLsizei stride, const void *poi
 {
    static jgl_t_03f6 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_03f6)jackpotlte_gl_proc("glMatrixIndexPointerOES");
    if (real == NULL)
@@ -6513,7 +6513,7 @@ jgl_03f7(void *context, GLint size, GLenum type, GLsizei stride, const void *poi
 {
    static jgl_t_03f7 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_03f7)jackpotlte_gl_proc("glWeightPointerOES");
    if (real == NULL)
@@ -6528,7 +6528,7 @@ jgl_03f8(void *context, GLshort x, GLshort y, GLshort z, GLshort width, GLshort 
 {
    static jgl_t_03f8 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_03f8)jackpotlte_gl_proc("glDrawTexsOES");
    if (real == NULL)
@@ -6543,7 +6543,7 @@ jgl_03f9(void *context, GLint x, GLint y, GLint z, GLint width, GLint height)
 {
    static jgl_t_03f9 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_03f9)jackpotlte_gl_proc("glDrawTexiOES");
    if (real == NULL)
@@ -6558,7 +6558,7 @@ jgl_03fa(void *context, GLfixed x, GLfixed y, GLfixed z, GLfixed width, GLfixed 
 {
    static jgl_t_03fa real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_03fa)jackpotlte_gl_proc("glDrawTexxOES");
    if (real == NULL)
@@ -6573,7 +6573,7 @@ jgl_03fb(void *context, const GLshort *coords)
 {
    static jgl_t_03fb real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_03fb)jackpotlte_gl_proc("glDrawTexsvOES");
    if (real == NULL)
@@ -6588,7 +6588,7 @@ jgl_03fc(void *context, const GLint *coords)
 {
    static jgl_t_03fc real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_03fc)jackpotlte_gl_proc("glDrawTexivOES");
    if (real == NULL)
@@ -6603,7 +6603,7 @@ jgl_03fd(void *context, const GLfixed *coords)
 {
    static jgl_t_03fd real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_03fd)jackpotlte_gl_proc("glDrawTexxvOES");
    if (real == NULL)
@@ -6618,7 +6618,7 @@ jgl_03fe(void *context, GLfloat x, GLfloat y, GLfloat z, GLfloat width, GLfloat 
 {
    static jgl_t_03fe real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_03fe)jackpotlte_gl_proc("glDrawTexfOES");
    if (real == NULL)
@@ -6633,7 +6633,7 @@ jgl_03ff(void *context, const GLfloat *coords)
 {
    static jgl_t_03ff real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_03ff)jackpotlte_gl_proc("glDrawTexfvOES");
    if (real == NULL)
@@ -6648,7 +6648,7 @@ jgl_0400(void *context, GLenum target, GLsizei numAttachments, const GLenum *att
 {
    static jgl_t_0400 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0400)jackpotlte_gl_proc("glDiscardFramebufferEXT");
    if (real == NULL)
@@ -6663,7 +6663,7 @@ jgl_0401(void *context, GLenum target, GLenum pname, GLint param)
 {
    static jgl_t_0401 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0401)jackpotlte_gl_proc("glFramebufferParameteri");
    /* glFramebufferParameteriAPPLE is spelled glFramebufferParameteri here */
@@ -6679,7 +6679,7 @@ jgl_0402(void *context, GLenum target, GLenum pname, GLint *params)
 {
    static jgl_t_0402 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0402)jackpotlte_gl_proc("glGetFramebufferParameteri");
    /* glGetFramebufferParameteriAPPLE is spelled glGetFramebufferParameteri here */
@@ -6695,7 +6695,7 @@ jgl_0403(void *context)
 {
    static jgl_t_0403 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0403)jackpotlte_gl_proc("glResolveMultisampleFramebufferAPPLE");
    if (real == NULL)
@@ -6710,7 +6710,7 @@ jgl_0404(void *context, GLuint destinationTexture, GLuint sourceTexture, GLint s
 {
    static jgl_t_0404 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0404)jackpotlte_gl_proc("glCopyTextureLevelsAPPLE");
    if (real == NULL)
@@ -6725,7 +6725,7 @@ jgl_0405(void *context, GLenum target, GLsizei numAttachments, const GLenum *att
 {
    static jgl_t_0405 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0405)jackpotlte_gl_proc("glInvalidateSubFramebuffer");
    if (real == NULL)
@@ -6740,7 +6740,7 @@ jgl_0406(void *context, GLenum target, GLenum internalformat, GLenum pname, GLsi
 {
    static jgl_t_0406 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0406)jackpotlte_gl_proc("glGetInternalformativ");
    if (real == NULL)
@@ -6755,7 +6755,7 @@ jgl_0408(void *context, GLenum target, GLsizei levels, GLenum internalformat, GL
 {
    static jgl_t_0408 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0408)jackpotlte_gl_proc("glTexStorage2D");
    if (real == NULL)
@@ -6770,7 +6770,7 @@ jgl_0409(void *context, GLenum target, GLsizei levels, GLenum internalformat, GL
 {
    static jgl_t_0409 real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_0409)jackpotlte_gl_proc("glTexStorage3D");
    if (real == NULL)

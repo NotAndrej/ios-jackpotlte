@@ -11,6 +11,7 @@
 #   out/maliprobe            arm64 iOS, for the phone
 #   out/test_gpu_host        host copy of the M4 request layer's test, for CI to run
 #   out/libjackpotlte.a      arm64 iOS: the M4 shim (request layer + iOS backend + libdrm face)
+#   out/libjackpotlte-gl.dylib  arm64 iOS: the EAGL shim (OpenGL ES behind EAGLContext)
 #   out/jackpotlte_gpu.h     the headers that go with the archive
 #   out/jackpotlte_drm.h     (jackpotlte_drm.h is installed as Mesa's xf86drm.h)
 #
@@ -63,14 +64,27 @@ sdk=$(xcrun --sdk iphoneos --show-sdk-path)
 xcrun --sdk iphoneos clang "${common[@]}" "${lookup[@]}" -target arm64-apple-ios16.0 \
 	-isysroot "$sdk" -o "$out/maliprobe" "$probe_src"
 
-echo "--- arm64 iOS EAGL shim: the generated dispatch table ---"
-# Not linked into anything yet (the shim's own sources follow): this is the
-# check that the generated table (gl_slots.c from tools/jackpotlte/eagl-glue.py)
-# is C the iPhoneOS SDK takes, under the same -Wall -Wextra -Werror -Wpedantic.
-xcrun --sdk iphoneos clang "${common[@]}" -target arm64-apple-ios16.0 \
-	-isysroot "$sdk" -c "$repo/userspace/jackpotlte-gl/gl_slots.c" \
-	-o "$out/.gl_slots.o"
-rm -f "$out/.gl_slots.o"
+echo "--- arm64 iOS libjackpotlte-gl.dylib: the EAGL shim ---"
+# A dylib, not an archive: it is loaded into another process (the display server)
+# and calls the OpenGL ES library put beside it on the phone (libOSMesa.8.dylib,
+# tools/mesa-jackpotlte/), which this build does not have.  dynamic_lookup is
+# the same arrangement the iOS backend uses for IOKit: the process that loads
+# this one has the library, libobjc and IOSurface.
+# gl_slots.c is generated (tools/jackpotlte/eagl-glue.py); the other two are
+# the OSMesa backend and the EAGLContext methods (eagl.c).
+gl=$repo/userspace/jackpotlte-gl
+xcrun --sdk iphoneos clang "${common[@]}" "${lookup[@]}" -target arm64-apple-ios16.0 \
+	-isysroot "$sdk" -I "$gl" -dynamiclib -o "$out/libjackpotlte-gl.dylib" \
+	"$gl/gl_slots.c" "$gl/jackpotlte_gl_osmesa.c" "$gl/eagl.c"
+
+# The point of the generated table: no gl* function is called by name.  iOS's own
+# OpenGLES.framework is in the dyld shared cache and defines every one of them,
+# so a by-name reference would bind Apple's driver, which knows nothing of these
+# contexts; everything goes through jackpotlte_gl_proc (OSMesaGetProcAddress).
+if nm -u "$out/libjackpotlte-gl.dylib" | grep -E ' _gl[A-Z]'; then
+	echo "error: the shim refers to an OpenGL ES function by name" >&2
+	exit 1
+fi
 
 echo "--- arm64 iOS libjackpotlte.a ---"
 obj=$out/.obj

@@ -24,6 +24,15 @@ struct jackpotlte_gl;
 typedef void (*jackpotlte_gl_func)(void);
 jackpotlte_gl_func jackpotlte_gl_proc(const char *name);
 
+/*
+ * Called by every entry of the dispatch table before the call is passed on
+ * (gl_slots.c): the table's first argument is the context the caller means, and
+ * a GL call runs on the thread where its context is current.  The display
+ * server's renderer is not always the thread that made the context, so this is
+ * where that is made true again - a comparison when it already is.
+ */
+void jackpotlte_gl_use(void *context);
+
 /* An OpenGL ES 2 or 3 context of the library, or NULL. */
 struct jackpotlte_gl *jackpotlte_gl_create(int version);
 

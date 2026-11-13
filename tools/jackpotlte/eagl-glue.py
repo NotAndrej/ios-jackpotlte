@@ -26,10 +26,12 @@ of this context, not the library beside us.
 
 The table is filled with two sorts of function:
 
-  - one per named entry, which resolves the name the entry carries (the first
-    the registry knows, so an EXT/APPLE alias reaches the core call) and passes
-    the arguments on.  If the library has nothing of that name the entry does
-    nothing and returns zero;
+  - one per named entry, which makes the entry's the calling thread's context
+    (a GL call has to run where its context is current; the display server's
+    renderer is not always the thread that made the context), resolves the name
+    the entry carries (the first the registry knows, so an EXT/APPLE alias
+    reaches the core call) and passes the arguments on.  If the library has
+    nothing of that name the entry does nothing and returns zero;
   - an "unsupported" function for every other entry, which notes the entry and
     returns NULL.  iOS's table has entries no _gl* name is exported for, and a
     call to one is something to find out about rather than to crash on (the
@@ -226,7 +228,7 @@ jgl_%04x(void *context%s%s)
 {
    static jgl_t_%04x real;
 
-   (void)context;
+   jackpotlte_gl_use(context);
    if (real == NULL)
       real = (jgl_t_%04x)jackpotlte_gl_proc(%s);%s
    if (real == NULL)
