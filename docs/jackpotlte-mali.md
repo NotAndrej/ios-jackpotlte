@@ -386,12 +386,14 @@ Pieces for this port:
 
 1. ~~an `EAGLContext` replacement that calls Mesa (OSMesa)~~ **written, not yet
    loaded or run**: `userspace/jackpotlte-gl/` is that library, built by
-   `userspace/build.sh` as `out/libjackpotlte-gl.dylib`. It installs eight
+   `userspace/build.sh` as `out/libjackpotlte-gl.dylib`. It installs ten
    `EAGLContext` methods: the six CoreAnimation's renderer asks
    (`initWithAPI:properties:`, `API`, `setParameter:to:`,
    `getMacroContextPrivate`, `texImageIOSurface:...`,
-   `attachImage:toCoreSurface:invertedRender:`), `-sharegroup` (CoreImage asks
-   it, and the reference crashed there for want of it) and `-dealloc`. GL is
+   `attachImage:toCoreSurface:invertedRender:`), the two public initialisers
+   (`initWithAPI:`, `initWithAPI:sharegroup:` - an object made by Apple's would
+   have none of the shim's state), `-sharegroup` (CoreImage asks it, and the
+   reference crashed there for want of it) and `-dealloc`. GL is
    answered through the table above, whose entries resolve each function through
    OSMesa's own `OSMesaGetProcAddress` — never by name, because iOS's
    `OpenGLES.framework` is in the shared cache and would answer instead. A

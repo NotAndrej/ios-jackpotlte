@@ -157,14 +157,12 @@ resolve_helpers(void)
 
 /* ---- EAGLContext --------------------------------------------------------- */
 
+/* The one initialiser all three selectors end in. */
 static id
-my_initWithAPI(id self, SEL selector, unsigned long api, id properties)
+make_context(id self, unsigned long api)
 {
    struct jackpotlte_eagl *e;
    unsigned place;
-
-   (void)selector;
-   (void)properties;
 
    for (place = 0; place < CONTEXTS && contexts[place] != NULL; place++)
       ;
@@ -197,6 +195,35 @@ my_initWithAPI(id self, SEL selector, unsigned long api, id properties)
           "missing", api, jackpotlte_gl_library());
    }
    return self;
+}
+
+/*
+ * Three ways in.  -initWithAPI:properties: is the one CoreAnimation's renderer
+ * uses; the other two are the public ones, replaced so that a context made with
+ * either is also one of ours - an object made by Apple's initialiser would have
+ * none of this file's state, and -getMacroContextPrivate would answer NULL.
+ */
+static id
+my_initWithAPI_properties(id self, SEL selector, unsigned long api, id properties)
+{
+   (void)selector;
+   (void)properties;
+   return make_context(self, api);
+}
+
+static id
+my_initWithAPI(id self, SEL selector, unsigned long api)
+{
+   (void)selector;
+   return make_context(self, api);
+}
+
+static id
+my_initWithAPI_sharegroup(id self, SEL selector, unsigned long api, id sharegroup)
+{
+   (void)selector;
+   (void)sharegroup;
+   return make_context(self, api);
 }
 
 static unsigned long
@@ -377,7 +404,8 @@ my_dealloc(id self, SEL selector)
  */
 union method_prototype {
    IMP imp;
-   id (*initialise)(id, SEL, unsigned long, id);
+   id (*initialise)(id, SEL, unsigned long, id);          /* with properties or a sharegroup */
+   id (*initialise_simple)(id, SEL, unsigned long);
    unsigned long (*api)(id, SEL);
    id (*sharegroup)(id, SEL);
    unsigned long (*parameter)(id, SEL, unsigned long, void *);
@@ -395,7 +423,9 @@ install(void)
       const char *name;
       union method_prototype ours;
    } methods[] = {
-      { "initWithAPI:properties:", { .initialise = my_initWithAPI } },
+      { "initWithAPI:properties:", { .initialise = my_initWithAPI_properties } },
+      { "initWithAPI:", { .initialise_simple = my_initWithAPI } },
+      { "initWithAPI:sharegroup:", { .initialise = my_initWithAPI_sharegroup } },
       { "API", { .api = my_API } },
       { "sharegroup", { .sharegroup = my_sharegroup } },
       { "setParameter:to:", { .parameter = my_setParameter } },

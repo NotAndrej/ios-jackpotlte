@@ -115,14 +115,17 @@ class's own methods (`objc_getClass("EAGLContext")`), so the type encodings stay
 the class's; a selector the build does not have is logged, not added with a
 guessed signature.
 
-Eight methods. The six CoreAnimation's renderer asks
+Ten methods. The six CoreAnimation's renderer asks
 (`CA::WindowServer::EAGLServer`) are `-initWithAPI:properties:` (make a context of
 that OpenGL ES version), `-API`, `-setParameter:to:` (noted; its value is not
 read, because what the caller passes it as has not been established on this
 build), `-getMacroContextPrivate` (the table), `-texImageIOSurface:...` and
 `-attachImage:toCoreSurface:invertedRender:` (both: bound texture ← the surface's
-memory). The other two are `-sharegroup` (nil: nothing here shares one, and
-CoreImage asks — the reference crashed there for want of it) and `-dealloc`.
+memory). The others are `-initWithAPI:` and `-initWithAPI:sharegroup:` (the
+public initialisers: a context made with either has to be one of ours too, or
+`-getMacroContextPrivate` would answer NULL), `-sharegroup` (nil: nothing here
+shares one, and CoreImage asks — the reference crashed there for want of it) and
+`-dealloc`.
 
 The object's Apple ivars are never filled in — there is no call to super's
 `-init` — so any Apple method CoreAnimation reached that is not one of these
