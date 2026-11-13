@@ -2935,3 +2935,33 @@ The next thing is the loader: how `libjackpotlte-gl.dylib` gets inside
 launchd `EnvironmentVariables` insert, a dyld interpose, or replacing
 `OpenGLES` (cache-only). Settling it is a `userdata` change and a phone test, and
 that needs the owner's word before anything is written.
+
+The reference's own route settles the first two. `xnu/redwood.patch` adds
+`sysctl kern.exec_inject`, holding `LIBRARY NAME NAME...` groups, and
+`exec_inject_env()` in `exec_extract_strings()` (`bsd/kern/kern_exec.c`):
+on exec, a program whose **file name** is one of the NAMEs has
+`DYLD_INSERT_LIBRARIES=LIBRARY` appended to its environment, so dyld loads the
+library at process start. Its own comment gives the reason it is not a launchd
+job: *"launchd refuses to pass DYLD_ variables from a job description, which is
+why the kernel adds this one."* The reference's `INJECT` default
+(`userland/build.sh`) is `libredwood.dylib backboardd` among others, written to
+`etc/inject.conf` and set once by their init before it hands process 1 to
+launchd. So for this port the launchd-list route is out and a dyld interpose
+meets the same gate as the kernel route; what is left is the kernel, and since
+this port has no init of its own (Apple's launchd **is** process 1), the string
+has to come from a boot-arg — a `LaunchDaemon` setting the sysctl would race
+`backboardd`'s exec, which launchd starts in parallel with it.
+
+The half that is not the injection is code signing: `cs_require_lv()`
+(`bsd/kern/kern_cs.c`) is what makes a platform binary refuse a library that is
+not itself platform-signed, and the shim is unsigned. The reference's patch
+makes it return 0 everywhere, naming `libredwood.dylib` as the reason. This
+port does not do that: `0035`/`0036` mark root-filesystem binaries
+`CS_SIGNED | CS_PLATFORM_BINARY` and nothing else, and vanilla xnu-8796's
+`cs_library_val_enable` boot-arg clears only the global half of that check, not
+the per-process `CS_REQUIRE_LV` flag. Both the injection hook and
+`cs_require_lv()` are BOOT-side; only placing the library in the root is a
+`userdata` write, and that is the step that needs the owner's word. What is left
+for the phone to answer: whether dyld honours the injected variable for
+`backboardd` on this kernel, or `cs_require_lv()` has to be turned off first as
+it did there. `docs/jackpotlte-mali.md` §9 item 3 has this with the citations.
