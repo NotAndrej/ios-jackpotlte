@@ -12,7 +12,8 @@ storage, ADT).
 > ⚠️ Early bring-up, but iOS now boots. **On the A8, XNU detects the eMMC,
 > mounts the HFS+ iOS root from `USERDATA`, runs launchd and starts SpringBoard;
 > the panel shows the iOS Apple logo and boot progress bar** (2026-11-08, on one
-> core). Reaching the lock screen is not yet confirmed. Installing the root image
+> core), and the **lock screen is reached** (owner-observed screen output,
+> 2026-11-09; a photo is still wanted). Installing the root image
 > **erases USERDATA** (all Android data). SM-A530F only, other models of the A8
 > might not work properly.
 
@@ -34,7 +35,8 @@ from the phone. Build success is never a boot claim.
 | 4 | XNU prints to the framebuffer | **reached** (screen, 2026-11-08) |
 | 5 | Storage (eMMC) detected | **reached** (screen, 2026-11-08) — `dwmmc0@13500000` maps and the GPT reads |
 | 6 | Root filesystem mounts | **reached** (screen, 2026-11-08) — the HFS+ root mounts from `USERDATA` and `/sbin/launchd` executes |
-| 7 | launchd, then SpringBoard | **reached (screen output, 2026-11-08)** — launchd clears AMFI with `launchd_unsecure_cache=1`, SpringBoard execs and the panel shows the iOS Apple logo + boot progress bar; reaching the lock screen is not yet confirmed |
+| 7 | launchd, then SpringBoard | **reached (screen output, 2026-11-08)** — launchd clears AMFI with `launchd_unsecure_cache=1`, SpringBoard execs and the panel shows the iOS Apple logo + boot progress bar |
+| 8 | DataMigration completes; SpringBoard lock screen | **reached** (owner-observed screen, 2026-11-09) — `jt25-cpus8` (8 cores) runs DataMigration to completion; a photo is still wanted |
 
 ### What the phone actually showed (stages 4–7)
 
@@ -59,8 +61,8 @@ that kill.
 aborts with `Unable to find AMFI` (`namespace 7`, `OS_REASON_LIBXPC`) until
 `launchd_unsecure_cache=1` (the documented S8/A5 fix) is added. With it, on
 `jt10`, SpringBoard execs and the panel switches to the iOS Apple logo with the
-boot progress bar — iOS userland running on the A8, on one core. Whether it
-finishes to the lock screen is not yet confirmed.
+boot progress bar — iOS userland running on the A8, on one core. It does
+finish: the lock screen is stage 8.
 
 ### The `-DJACKPOTLTE=1` build flag is mandatory
 
@@ -73,12 +75,12 @@ component ports — becomes dead code. That is exactly what panicked one boot:
 `0x10970000` and reads it, which external-aborts on the A8. The `xnu` workflow
 now sets `EXTRA_MACHINE_FLAGS: -DJACKPOTLTE=1` for push builds.
 
-### Built, verified on the host, not yet booted
+### Built and verified on the host
 
 The iOS root image (16 GiB, case-sensitive journaled HFS+, label `iOSRoot`,
 built from the iPhone X 16.7.16 DMGs with `tools/mkiosroot.sh`) is complete and
-fsck-verified, and the merged port set (`0001`–`0133`) applies cleanly on a
-pristine `xnu-8796.141.3` tree. Those are host results, not boot claims.
+fsck-verified, and the merged port set (`0001`–`0157`) applies cleanly on a
+pristine `xnu-8796.141.3` tree in CI. Those are host results, not boot claims.
 
 ## What works on the A8
 
@@ -91,13 +93,16 @@ pristine `xnu-8796.141.3` tree. Those are host results, not boot claims.
 | Kernel | xnu-8796 DEVELOPMENT, `MACHINE_CONFIG=A5XELTE` with `-DJACKPOTLTE=1` (mandatory), 4 KiB pages, built on GitHub Actions |
 | Storage | eMMC `dwmmc0@13500000` maps and the GPT reads (`0127`) |
 | Root filesystem | The HFS+ iOS root mounts from `USERDATA` (`rd=emmcroot0 emmcroot=USERDATA`) |
-| Userland | `/sbin/launchd` executes (`unentitled_ios_sim_launch=1`) and starts SpringBoard (`launchd_unsecure_cache=1`); the panel shows the iOS Apple logo + progress bar |
-| Ported drivers | Read-only probes for dwc3 USB (`0128`), the PMIC fuel gauge + charger (`0129`), sec_ts touch (`0130`/`0131`), the gpa1 buttons (`0132`) and the DSIM panel (`0133`, log-only by default) |
+| Userland | `/sbin/launchd` executes (`unentitled_ios_sim_launch=1`) and starts SpringBoard (`launchd_unsecure_cache=1`); the panel shows the iOS Apple logo + progress bar, then the lock screen (owner-observed, 2026-11-09) |
+| Ported drivers | Probes for dwc3 USB (`0128`), the PMIC fuel gauge + charger (`0129`), sec_ts touch (`0130`/`0131`, which also brings up its rail and delivers HID events), the gpa1 buttons (`0132`) and the DSIM panel (`0133`, log-only by default) |
 | RAM | Physmap at `0x880000000`, 512 MiB window (`DRAM_SIZE 0x20000000`) |
 | Timer | 26 MHz arch timer, non-secure physical timer PPI 14 (INTID 30) |
 
 Past SpringBoard — the lock screen and the stock apps — the S8 tree already
-solved it; on the A8 those are what remain to confirm.
+solved it; on the A8 the lock screen is reached (2026-11-09) and the 32 promoted
+apps show on the home screen (2026-11-11), both seen on the phone. What is left
+is mostly the GPU work — M4 in `docs/jackpotlte-mali.md` — plus the smaller open
+ports listed in `TODO.md`.
 
 ## How it boots
 
@@ -111,7 +116,7 @@ S-Boot (stock Samsung bootloader)
            -> GIC + framebuffer console
            -> eMMC (dwmmc0) -> HFS+ root in USERDATA
               -> /sbin/launchd -> SpringBoard (iOS Apple logo + progress bar)
-                 -> [not yet confirmed] lock screen
+                 -> lock screen (owner-observed, 2026-11-09)
 ```
 
 ## Flashing

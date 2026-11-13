@@ -1195,7 +1195,7 @@ contains `'IONameMatch' = ('arm,cortex-a53', 'arm,cortex-a73')` for
 cores, same quiet-log cmdline as jt19 (`sweetfb_noconsole=1`). Not flashed;
 jt19 (6 cores) is what is on the phone.
 
-**No progress bar is expected on this port.** No patch in `xnu/patches/`
+**A logo with no bar is not a fault on this port.** No patch in `xnu/patches/`
 draws a boot progress bar or reports boot progress; the Apple logo is drawn
 by iOS userland through the port's framebuffer. Logo-without-bar therefore
 means launchd is not reporting progress increments -- normal when migration
@@ -1681,7 +1681,7 @@ The remaining `read-only`/`writes nothing` boilerplate was also stripped from th
 probe patches and their on-screen lines (the PMIC line is now
 `JACKPOTLTE PMIC: probe (fuel gauge/charger state)`).
 
-## Hardware facts (from Samsung's own 4.4 source and the mainline DT; NOT yet confirmed on the phone)
+## Hardware facts (from Samsung's own 4.4 source and the mainline DT; confirmed on the phone only where stated)
 
 Source now includes the **Eureka-Kernel** Samsung 4.4 tree for this device
 (`eurekadevelopment/Eureka-Kernel`, tag "Release R24U sources",
@@ -1765,15 +1765,17 @@ Snapdragon A530W/U. The mainline `exynos7885*` values above therefore apply.
 ## Next concrete action
 
 Current state: **stage 8 reached** — `jt25-cpus8` (8 cores) boots past
-DataMigration to the **SpringBoard lock screen** (owner-observed 2026-11-09).
-The blocker is now **touch** (dead), so the next image brings the rail up and
-logs every event. `0137` (one logical cluster) and `0138`/`0139` (WiFi
-transport/glue, gated by `a8wifi=1`) are merged to `main`. The donor root
-tweaks were never applied to the flashed image (see "The flashed iOS root has
-none of the donor tweaks").
+DataMigration to the **SpringBoard lock screen** (owner-observed 2026-11-09), and
+the later `jt43` boot with the prepared root also shows the 32 promoted apps on
+the home screen (2026-11-11). Touch works (`jt36`). The open work is M4 — Mesa
+panfrost v6 plus an `EAGLContext` shim, and the loader that puts the shim inside
+`backboardd` (see the end of this file). `0137` (one logical cluster) and
+`0138`/`0139` (WiFi transport/glue, gated by `a8wifi=1`) are merged to `main`;
+the donor root tweaks are in the flashed image now (see "The app fix and the
+probe are flashed").
 
-1. **Touch (current blocker):** the IC answers (`id after power acb661`) but
-   the boot-status read is flaky, so the driver was sending no
+1. **Touch (the blocker then; fixed in `jt36`):** the IC answers (`id after
+   power acb661`) but the boot-status read is flaky, so the driver was sending no
    `SET_TOUCHFUNCTION`/`SENSE_ON` and could drop movement events. `0147` adds
    the S8's sequence (sent whenever the IC answers) and 10x read retries, and
    logs `A8 TOUCH: moves=%u i2c_retries=%u lost_reads=%u`. The build is green
@@ -1783,27 +1785,24 @@ none of the donor tweaks").
    rebooted 21:00:20** (`/tmp/opencode/touch/flash-jt33.log`); that boot
    logged **no `A8 TOUCH` line at all**, which the probe's single-attempt
    product-id read explains (see "`0148` — the jt33 boot logged nothing at
-   all"). `0148` retries it, recovers the bus and starts the contact path even
-   when the id never reads; build/flash it next and read the unconditional
-   counters line.
-2. **8 cores:** flash **`/var/tmp/a8-xnu-jt14-cpus8.img`** (sha256
-   `aeb3a979...e427a9`, kernel = `0137`) to `BOOT` and look for
-   `requested=8 selected=8` with no ticket-lock panic. If it still panics, the
-   `jt13` image on disk (`0136` kernel) is the control for the single-cluster
-   change. BOOT-only flash; capture a **serial** log, not a photo, to see the
-   MPIDRs attempted.
+   all"). `0148` retried it, recovered the bus and started the contact path even
+   when the id never read; that image (`jt35`) was built and flashed, and touch
+   came alive in `jt36`.
+2. **8 cores:** done — `jt25-cpus8` (8 cores) boots with `requested=8
+   selected=8` and no ticket-lock panic, and `cpus=8` is the default for new
+   images (see "RESULT: `jt25-cpus8` does NOT panic"). The `jt14`/`jt13` trials
+   named here were run earlier (see "jt14 panicked" and "`cpus=4` boots").
 3. **WiFi (compile green, never booted):** CI `42512239378` built
    `0138`+`0139` **success** (Build, stub and LSE gates passed). Boot that
    kernel **without** `a8wifi` and confirm only the
    `A5XELTE SCSC: PMU ...` identity lines appear; then try `a8wifi=1`.
    `/var/tmp/a8-xnu-jt15-cpus8.img` (sha256 `914edae8...c5991a`) is that
    kernel at `cpus=8`.
-4. **iOS root (DataMigration gate):** host side **done** — applied and
-   verified in `/var/tmp/IOSRoot.img` (see "APPLIED to the host image").
-   Remaining: `img2simg /var/tmp/IOSRoot.img /var/tmp/IOSRoot.sparse.img`,
-   then `fastboot flash USERDATA` — destructive, needs the owner's
-   confirmation. This is the host-side fix for the endless progress bar; no
-   kernel change.
+4. **iOS root (DataMigration gate):** done — applied and verified in
+   `/var/tmp/IOSRoot.img`, re-sparsed to `IOSRoot.sparse.img` and flashed to
+   `USERDATA` with the owner's approval on 2026-11-10 (see "The app fix and the
+   probe are flashed"). This was the host-side fix for the endless progress
+   bar; no kernel change.
 5. **DRAM map (for "all 4 GB"):** `shim/fdt.c`'s `fdt_memory_all()` enumerates
    every `/memory` node and `dt_probe()` prints each bank plus the total. Source
    banks (Eureka `exynos7885-jackpotlte_common.dtsi:28-41`): low
@@ -1816,15 +1815,16 @@ none of the donor tweaks").
    (`0128`–`0133`). Their drivers are log-only or read-only by default, so a
    boot should print the USB / PMIC / touch / buttons / panel state — the first
    device evidence for them.
-7. **GPU:** `docs/jackpotlte-mali.md` M0 is the read-only GPU probe (the single
-   biggest unknown is whether S-Boot leaves G3D powered/clocked).
+7. **GPU:** M0/M1 are done on the phone (`jtmaliprobe` showed S-Boot leaves
+   `pd_g3d` powered); M2/M3 build green and the M4 route is Mesa panfrost v6
+   plus an `EAGLContext` shim (see "Route decided: GLES via Mesa panfrost").
 8. Older housekeeping (still open): read the remaining board unknowns (ramoops
    `log_pstore` offset, gpa1 bank offset, eMMC CIU timings) from the live DT /
    Samsung source and fill `board.h`, then enable `JT_HAVE_RAMOOPS`.
 
 ### GPU track started (2026-11-09, branch jackpotlte-gpu)
 
-Branch `jackpotlte-gpu` from main @ 523beb5. First patch `0144-jackpotlte-mali-probe` is the M0 read-only Mali probe (PMU status + PLL_G3D con0 + GPU_ID if domain up), gated by `jtmaliprobe=1`. See `docs/gpu-bringup.md`. Not built/flashed yet.
+Branch `jackpotlte-gpu` from main @ 523beb5. First patch `0144-jackpotlte-mali-probe` is the M0 read-only Mali probe (PMU status + PLL_G3D con0 + GPU_ID if domain up), gated by `jtmaliprobe=1`. See `docs/gpu-bringup.md`. Since built and flashed; see "RESULT on the phone: the panic is gone and the G71 is up".
 
 ## jt28: touch works at the bus level, then panics in our worker (2026-11-09)
 
@@ -2254,7 +2254,7 @@ how many clamped drains happened.
 
 ### GPU 0144 is really in the shippable kernel
 
-CI `42644071418` (main @ `9e2c729`, the GPU merge) completed **success**, and
+CI `42644071418` (main @ `9876e87`, the GPU merge) completed **success**, and
 the downloaded `xnu-kernel` artifact contains the Mali strings
 (`JACKPOTLTE MALI: probe start`, `g3d_config=`, `power request -> status=`,
 `pll_con0 before=`, `GPU_ID=`), so `0144` applied — CI-green is not being
@@ -2358,8 +2358,8 @@ photo/video of this boot.
 The GPU images `jt39`/`jt42` were packed **without** `sweetfb_noconsole=1`
 (`strings` on the image), so every kernel `printf` keeps painting over the GUI
 on the panel - the `exec` lines (`0042`/`0111`), the `SWEET HID`/touch
-counters, the Mali lines. That is what the owner sees as "verbose logging".
-`jt19` was the same situation on 2026-11-08 and the fix was this same boot arg.
+counters, the Mali lines. That is the logging the owner reported as too verbose.
+`jt19` was the same situation on 2026-11-08 and was packed with this same boot arg.
 
 Packed `/var/tmp/a8-xnu-jt43-gpum3-quiet.img` (17,518,608 B, sha256
 `8a30023db26db6293930a8abb37574479f2bed12bd1098747044e19b137508dd`) from the
@@ -2467,15 +2467,15 @@ build reads **`a5fb_noconsole`** — `0109` wraps the argument in
 (`xnu/patches/0109-a5xelte-decon-iosurface-bridge.patch:83`), with the donor's
 `sweetfb_noconsole` in the `#else`. So `jt31`, `jt38` and `jt43`, all packed
 with `sweetfb_noconsole=1`, kept drawing the console over the GUI exactly as
-before, and the "quiet boot" that `jt19` got on 2026-11-08 stopped working when
-`0109` renamed the argument. Any future quiet image must pack
+before; `jt19` on 2026-11-08 was packed the same way. Any future quiet image
+must pack
 `a5fb_noconsole=1` (and `0146`/`0151`'s comments, which said
 `sweetfb_noconsole=1`, now say "the quiet console"; the `0067`/`0109`/`0110`
 comment in `serial_console.c` still names the donor argument).
 
 ### Display scale is an integer, so the mode has to be one UIKit has as well
 
-The owner chose "present 1080x2340, squeeze 5% vertically". Working out how to
+The owner chose to present 1080x2340 and squeeze 5% vertically. Working out how to
 do it turned up a fact that rules it out as written: **`/chosen/display-scale`
 is a `u32`** (`tools/mkadt.py:95-99`, read straight by libMobileGestalt —
 `NOTES.md:89` records SpringBoard failing with "scale 0" when it was missing).
@@ -2960,37 +2960,51 @@ phone's, the softpipe fallback is still in it, panfrost v6 and the drm face are
 in it, and `mesa-osmesa-panfrost-v6` was uploaded. Nothing has drawn a frame and
 nothing new has been on the phone.
 
-The next thing is the loader: how `libjackpotlte-gl.dylib` gets inside
-`backboardd`. This root has no `libredwood.dylib`, so the candidates are a
-launchd `EnvironmentVariables` insert, a dyld interpose, or replacing
-`OpenGLES` (cache-only).
-
-The reference's own route settles the first two. `xnu/redwood.patch` adds
-`sysctl kern.exec_inject`, holding `LIBRARY NAME NAME...` groups, and
-`exec_inject_env()` in `exec_extract_strings()` (`bsd/kern/kern_exec.c`):
-on exec, a program whose **file name** is one of the NAMEs has
-`DYLD_INSERT_LIBRARIES=LIBRARY` appended to its environment, so dyld loads the
-library at process start. Its own comment gives the reason it is not a launchd
-job: *"launchd refuses to pass DYLD_ variables from a job description, which is
-why the kernel adds this one."* The reference's `INJECT` default
-(`userland/build.sh`) is `libredwood.dylib backboardd` among others, written to
-`etc/inject.conf` and set once by their init before it hands process 1 to
-launchd. So for this port the launchd-list route is out and a dyld interpose
-meets the same gate as the kernel route; what is left is the kernel, and since
-this port has no init of its own (Apple's launchd **is** process 1), the string
-has to come from a boot-arg — a `LaunchDaemon` setting the sysctl would race
+The loader, settled and written: `0157-jackpotlte-exec-inject.patch` adds
+`static TUNABLE_STR(exec_inject_conf, 512, "jtexecinject", "")` and
+`exec_inject_env()`, called from `exec_extract_strings()`
+(`bsd/kern/kern_exec.c`). The value is
+`LIBRARY[,NAME...][;LIBRARY[,NAME...]]` -- commas and semicolons rather than the
+reference's spaces, because a boot-arg's value ends at the first space
+(`pexpert/gen/bootargs.c`, `argstrcpy2()`); a group starts with the library and
+continues with the programs' file names (the basename `p_comm` comes from), and
+several groups naming one program join their libraries with `:`. Kernel CI
+`43496663209` is green on `5d7765c`: all 157 patches applied, and the built
+`kernel.development.a5xelte` (16,602,208 B, sha256
+`e51763fa76bac3f187699d6045748609acda224d1543317181fa55852823a6e6`) carries both
+`jtexecinject` and `DYLD_INSERT_LIBRARIES=`, so the code is compiled in and not
+merely applied. The injection is the kernel's and not a launchd job for the
+reason the reference's own comment gives: launchd refuses to pass `DYLD_*`
+variables from a job description, which is why the kernel adds this one. This
+port has no init of its own (Apple's launchd **is** process 1), so the string has
+to come from a boot-arg -- a `LaunchDaemon` setting a sysctl would race
 `backboardd`'s exec, which launchd starts in parallel with it.
 
-The half that is not the injection is code signing: `cs_require_lv()`
-(`bsd/kern/kern_cs.c`) is what makes a platform binary refuse a library that is
-not itself platform-signed, and the shim is unsigned. The reference's patch
-makes it return 0 everywhere, naming `libredwood.dylib` as the reason. This
-port does not do that: `0035`/`0036` mark root-filesystem binaries
+The half that is not the injection is not what the reference's comment makes it.
+`cs_require_lv()` (`bsd/kern/kern_cs.c`) has **no caller anywhere in xnu-8796**:
+it is exported (`config/Private.exports`) for Apple's AMFI kext to ask, and this
+port replaces that kext with the built-in `bsd/kern/sweet_amfi.c`
+(`0025`/`0035`/`0036`), which never calls it. So the kernel does not consult it
+here and the reference's "make it return 0 everywhere" patch would change
+nothing. If the phone refuses the injected library, that refusal is dyld's own
+check -- a userspace question, and the fix belongs on that side with the phone's
+evidence. What does hold: `0035`/`0036` mark root-filesystem binaries
 `CS_SIGNED | CS_PLATFORM_BINARY` and nothing else, and vanilla xnu-8796's
-`cs_library_val_enable` boot-arg clears only the global half of that check, not
-the per-process `CS_REQUIRE_LV` flag. Both the injection hook and
-`cs_require_lv()` are BOOT-side; only placing the library in the root is a
-`userdata` write, and that is the step that needs the owner's word. What is left
-for the phone to answer: whether dyld honours the injected variable for
-`backboardd` on this kernel, or `cs_require_lv()` has to be turned off first as
-it did there. `docs/jackpotlte-mali.md` §9 item 3 has this with the citations.
+`cs_library_val_enable` boot-arg exists only when
+`CONFIG_ENFORCE_LIBRARY_VALIDATION` is undefined, which it is not in this
+configuration.
+
+Deployment is host-side and ready. `tools/jackpotlte/apply-root-tweaks.sh`
+installs `out/libjackpotlte-gl.dylib` + `out/libOSMesa.8.dylib` into the root's
+`/usr/local/lib` (the shim loads Mesa by `@loader_path/libOSMesa.8.dylib`, so one
+directory holding both is enough), and the BOOT image
+`/var/tmp/a8-xnu-jt45-gles-inject.img` (17,522,704 B, sha256
+`5529f02861e59ebda048c446f2ef021db2efc2569230974e49d5740a37cadbbb`) is packed:
+CI `43496663209`'s kernel, the `jt43`/`jt44` cmdline with its Mali gates and
+`a5fb_noconsole=1`, plus
+`jtexecinject=/usr/local/lib/libjackpotlte-gl.dylib,backboardd` (364 bytes, read
+back out of the image). It is not flashed. What is left is the owner's word for
+the `userdata` write, then the flash, the boot and a photo; the phone answers
+whether dyld honours the injected variable for `backboardd`, and only a frame on
+the panel is a draw claim. `docs/jackpotlte-mali.md` §9 has this with the
+citations.
