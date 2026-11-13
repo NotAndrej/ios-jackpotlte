@@ -54,15 +54,29 @@ jobs:
 
       - name: Panfrost v6 is what was built, and the drm face is in it
         run: |
-          set -e
           build="$RUNNER_TEMP/mesa-build/build"
-          grep -q 'pan-arch-v6' "$build/build.ninja"
+          lib="$RUNNER_TEMP/mesa-build/out/libOSMesa.8.dylib"
+          fail() { echo "::error::$1" >&2; exit 1; }
+          grep -q 'pan-arch-v6' "$build/build.ninja" ||
+            fail "the v6 architecture is not in the build graph: pan-arch-v6 says nothing"
           # The drm face's request translation is what panfrost calls instead
-          # of libdrm; the object has to exist in the panfrost kmod library.
-          find "$build" -name 'jackpotlte_drm.c.o' | grep -q .
-          find "$build" -name 'pan_kmod.c.o' | grep -q .
-          # The architecture is compiled in: the arm64 dylib names the v6 path.
-          strings "$RUNNER_TEMP/mesa-build/out/libOSMesa.8.dylib" | grep -q 'panfrost'
+          # of libdrm; the objects have to exist in the panfrost kmod library.
+          # meson names an out-of-directory source's object after its whole
+          # relative path, not the bare file name: ../../../
+          # jackpotlte-drm/jackpotlte_drm.c becomes
+          # .._.._.._jackpotlte-drm_jackpotlte_drm.c.o.  So the name searched
+          # for is a suffix.  (The bare name never matches, which is how this
+          # check passed nothing on its first real run.)
+          find "$build" -name '*jackpotlte_drm.c.o' | grep -q . ||
+            fail "jackpotlte_drm.c was not compiled into the panfrost kmod library"
+          find "$build" -name '*jackpotlte_gpu.c.o' | grep -q . ||
+            fail "jackpotlte_gpu.c was not compiled into the panfrost kmod library"
+          find "$build" -name 'pan_kmod.c.o' | grep -q . ||
+            fail "pan_kmod.c was not compiled into the panfrost kmod library"
+          # The architecture is compiled in: the dylib names the v6 path
+          # (panfrost_screen_create's own "panfrost" driver name).
+          strings "$lib" | grep -q 'panfrost' ||
+            fail "the dylib names no panfrost string: the driver is not in it"
 
       - name: The softpipe fallback is still there
         run: |
