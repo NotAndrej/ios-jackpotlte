@@ -426,19 +426,31 @@ Pieces for this port:
      injection string has to come from the kernel's own configuration. A
      boot-arg is the deterministic place: a `LaunchDaemon` setting a sysctl
      would race `backboardd`'s exec, which launchd starts in parallel with it.
-   The other half is code signing. `cs_require_lv()` (`bsd/kern/kern_cs.c`) is
-   what makes a platform binary refuse a library that is not itself
-   platform-signed (the reference's words, with `accountsd`/`akd` as its
-   examples), and our shim is unsigned. The reference turns it off — its patch
-   makes `cs_require_lv()` return 0 everywhere, naming `libredwood.dylib` as the
-   reason. This port does not: `0035`/`0036` mark root-filesystem binaries
-   `CS_SIGNED | CS_PLATFORM_BINARY` and nothing else, and vanilla xnu-8796 has a
-   `cs_library_val_enable` boot-arg that clears only the global half of the
-   check, not the per-process `CS_REQUIRE_LV` flag. So whether dyld honours an
-   injected `DYLD_INSERT_LIBRARIES` for `backboardd` on this kernel, or
-   `cs_require_lv()` has to be turned off first as it did there, is what the
-   phone answers. Both are BOOT-side; only the library's placement in the root
-   is a `userdata` write (below);
+   The injection hook is written: `0157-jackpotlte-exec-inject.patch` adds
+   `TUNABLE_STR(exec_inject_conf, 512, "jtexecinject", "")` and
+   `exec_inject_env()`, called from `exec_extract_strings()`, which appends
+   `DYLD_INSERT_LIBRARIES` for a program whose basename a group names. The value
+   is `LIBRARY[,NAME...][;LIBRARY[,NAME...]]` — commas and semicolons, not the
+   reference's spaces, because a boot-arg's value ends at the first space
+   (`pexpert/gen/bootargs.c`, `argstrcpy2()`). It applies to the pristine tree
+   with `patch -p1 --dry-run`; it has not been compiled and nothing has been on
+   the phone;
+
+   The code-signing half is not what the reference's comment makes it.
+   `cs_require_lv()` (`bsd/kern/kern_cs.c`) has **no caller anywhere in
+   xnu-8796**: it is exported (`config/Private.exports`) for Apple's AMFI kext
+   to ask, and this port replaces that kext with the built-in
+   `bsd/kern/sweet_amfi.c` (`0025`/`0035`/`0036`), which never calls it. So the
+   kernel does not consult it here, and the reference's "make it return 0
+   everywhere" patch would change nothing. If the phone shows the injected
+   library refused, that refusal is dyld's own check — a userspace question —
+   and the fix belongs on that side, with the phone's evidence, not a
+   `cs_require_lv()` change copied from the reference. What does hold:
+   `0035`/`0036` mark root-filesystem binaries `CS_SIGNED | CS_PLATFORM_BINARY`
+   and nothing else, and vanilla's `cs_library_val_enable` boot-arg exists only
+   when `CONFIG_ENFORCE_LIBRARY_VALIDATION` is undefined, which it is not in
+   this configuration. Only the library's placement in the root is a `userdata`
+   write (below);
 4. the verification rule stands: a library that loads is not a frame. The first
    claim that CoreAnimation draws on the Mali needs a photo.
 

@@ -124,12 +124,15 @@ else can start without them: the OpenGL ES dispatch table for this phone's build
 The loader, from the reference's own kernel: it is not launchd and not a dyld
 insert from a job, because launchd refuses `DYLD_*` in a job description. The
 kernel adds `DYLD_INSERT_LIBRARIES` itself, on exec, for a named program
-(`xnu/redwood.patch`'s `kern.exec_inject`). For this port that means a BOOT-side
-kernel change (a boot-arg naming the library and `backboardd`) and turning off
-`cs_require_lv()`, which is what stops a platform binary loading an unsigned
-library. Only putting the library into the root is a `userdata` change, and it
-needs the owner's word first; `docs/jackpotlte-mali.md` §9 has the scope and the
-citations. Nothing here has drawn a frame.
+(`xnu/redwood.patch`'s `kern.exec_inject`). For this port that is
+`0157-jackpotlte-exec-inject.patch`: a boot-arg (`jtexecinject`) naming the
+library and `backboardd`, parsed with `TUNABLE_STR` and applied in
+`exec_extract_strings()`. Only putting the library into the root is a `userdata`
+change, and it needs the owner's word first. The reference also turns off
+`cs_require_lv()`, but that function has no caller in xnu-8796 (our built-in
+AMFI never calls it), so it is not the gate here; if the phone refuses the
+library it is dyld's check, and `docs/jackpotlte-mali.md` §9 has the scope and
+the citations. Nothing here has drawn a frame.
 
 ## Build
 
