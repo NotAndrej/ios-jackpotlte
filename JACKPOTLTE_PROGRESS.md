@@ -3116,3 +3116,44 @@ with the patch.
 If SpringBoard still asks for a bounding-path bitmap it cannot find with the
 panel presented 1:1, then the asset is missing (or unreadable) for this root and
 the mode was only part of it; the next boot's console will say which.
+
+### The injector is proven on the phone (`jt47`, 2026-11-14)
+
+The recording of the `jt47` boot (`VID_20261114_093551770.mp4`, 118 s) shows the
+kernel doing its half of the GL path, read off the screen (the line wraps on the
+console):
+
+```
+JT INJECT: backboardd -> DYLD_INSERT_LIBRARIES=/usr/local/lib/libjackpotlte-gl.dylib
+```
+
+Every other exec in the recording prints `JT INJECT: <name> -> (no match)`, which
+is the design -- the boot-arg names only `backboardd`. So the basename match and
+the variable really are set on the exec of the display server: `jtexecinject` is
+no longer a string that is merely present in the kernel (`xnu/patches/0156`).
+The switch itself (`jtgllog=1`, `0158`) works as intended, one line per exec.
+
+This is **loaded, not drawn**. The `libjackpotlte-gl.dylib` in the root predates
+the console sink (`0158`'s shim half), so the shim cannot say anything on the
+console yet -- that needs the new dylib in a `USERDATA` sparse reflash. What the
+recording does show is that the injection did not kill `backboardd`: it execs
+once and there is no `CRSH backboardd`, so dyld got past the inserted library.
+
+The rest of the recording is the boot as it has been:
+
+- the loader, then 8 cores coming online one at a time (`A5XELTE CPU: cpus N
+  cluster=... PSCI CPU_ON rc=0`), `libignition` at level 1, launchd;
+- no panic anywhere, and no `SWEET FB: iPhone X mode ... squeezed onto` line --
+  the presented mode is really gone from this image;
+- `driverkitd` is killed near the end (`CRSH driverkitd[68] sig 9 code 0x0` with
+  its backtrace); that is the documented non-fatal one (`RunAtLoad`, no
+  `KeepAlive`, `_PanicOnCrasX`), not a regression.
+
+**SpringBoard never appears in the 118 s.** The tail is
+`xpcproxy`/`bluetoothd`/`fairplayd.H2` repeating -- the pre-SpringBoard state the
+donor history describes (see "Observed boot state at 21:4x") -- and the last ~15 s
+print nothing at all. So this recording says nothing about the bounding-path
+crash: it ends before SpringBoard would run. The open question from the entry
+above (does SpringBoard still ask for a bitmap it cannot find, now that the panel
+is presented 1080x2220) still needs a later look at the same boot: a photo of the
+phone once it settles, or the persistent console ring.

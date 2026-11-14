@@ -158,26 +158,26 @@ deleted on 2026-11-10); build results and the image details live in
       `069825f`) and installs ten `EAGLContext` methods. It sits in the root's
       `/usr/local/lib` and is on the phone as of 2026-11-14 (sparse `USERDATA`
       flash), but no frame has been drawn: that waits on the loader.
-- [ ] M4 loader + first frame: `0156-jackpotlte-exec-inject.patch` adds the
-      boot-arg `jtexecinject`, which the kernel applies in `exec_extract_strings()`
-      (kernel CI `43496663209` green on `5d7765c`; the binary carries both
-      `jtexecinject` and `DYLD_INSERT_LIBRARIES=`), and
-      `tools/jackpotlte/apply-root-tweaks.sh` put the two dylibs into the master
-      root's `/usr/local/lib` on 2026-11-13 (hash-matched to the CI copies), and
-      the BOOT image is packed: `/var/tmp/a8-xnu-jt45-gles-inject.img` — the CI
-      kernel, the Mali gates plus `a5fb_noconsole=1`, and the injection boot-arg.
-      Both are on the phone since 2026-11-14: the master went to `USERDATA` as a
-      **sparse** image (`img2simg` + `verify-sparse.py`, 47/47 chunks,
-      `USERDATA rc=0`) and the image above to `BOOT` (`BOOT rc=0`). What is left
-      is the phone: boot, photograph, read the console. Loaded is not drawn: the
-      first draw claim is a frame on the panel.
+- [ ] M4 loader + first frame: `0156-jackpotlte-exec-inject.patch` (renumbered
+      from `0157`) adds the boot-arg `jtexecinject`, which the kernel applies in
+      `exec_extract_strings()`. **The kernel half is proven on the phone
+      (2026-11-14):** `jt47`'s recording (`VID_20261114_093551770.mp4`) shows
+      `JT INJECT: backboardd -> DYLD_INSERT_LIBRARIES=/usr/local/lib/libjackpotlte-gl.dylib`
+      and `(no match)` for every other exec — the basename match and the
+      variable are real, not just the strings in the binary. Both images are on
+      the phone (master root as a **sparse** `USERDATA`, `img2simg` +
+      `verify-sparse.py`, 47/47 chunks, `USERDATA rc=0`; kernel as `BOOT`). What
+      is left is the shim half: the dylib in the root predates the console sink,
+      so its own lines need the `USERDATA` sparse reflash, and no frame has been
+      drawn.
 - [ ] M4 GL-path log switch (2026-11-14): `jtgllog=1`
       (`0158-jackpotlte-gl-path-log.patch` + the shim). The kernel's injector
-      prints one `JT INJECT: <name> -> <env>` line per exec, and the shim reads
-      `kern.bootargs` and puts its `say()` lines on `/dev/console` (the kernel
-      console) as well as stderr, so a program that never got the library can be
-      told from one that did. Off by default; nothing is opened or printed
-      without the switch. Written, not on the phone yet.
+      prints one `JT INJECT: <name> -> <env>` line per exec (on the phone and
+      printing, `jt47`), and the shim reads `kern.bootargs` and puts its `say()`
+      lines on `/dev/console` (the kernel console) as well as stderr, so a
+      program that never got the library can be told from one that did. Off by
+      default; nothing is opened or printed without the switch. The kernel half
+      is on the phone; the shim half waits on the reflash.
 - [x] M4 GLES, first piece: the OpenGL ES dispatch table of this phone's build
       (2026-11-13). `-[EAGLContext getMacroContextPrivate]` hands out a table
       of function pointers and iOS calls `entry(table[0], args...)`; the offsets
