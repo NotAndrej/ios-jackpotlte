@@ -8,16 +8,26 @@
 # IMAGE defaults to /var/tmp/IOSRoot.img, the raw master the sparse image
 # flashed to USERDATA is derived from; OUT defaults to userspace/out, the
 # directory CI's `userspace` artifact unpacks to (or userspace/build.sh's
-# output).  Nothing is installed that is not there, and every file is read
-# back and hashed after the copy, so a half-written image is not left to be
-# flashed.
+# output).  Nothing is installed that is not there, a file whose sha256 already
+# matches is not rewritten, and every file is read back from the mounted volume
+# afterwards, so a half-written image is not left to be flashed.
 #
 # Why a mount: the phone's iOS root lives inside USERDATA as HFS+, and the two
 # libraries that make the GL path are files in it (/usr/local/lib).  The
-# kernel's hfsplus driver is the only writer available here (7z reads HFS+ and
-# hfsutils writes only classic HFS), and mounting needs root.  fsck.hfsplus
-# then re-reads the whole volume, which is what catches a metadata write the
-# driver got wrong before a 12 GB sparse upload spends it on the phone.
+# kernel's hfsplus driver is the only writer available here (7z reads HFS+,
+# hfsutils writes only classic HFS, hfsprogs ships no writer), and it refuses a
+# journaled volume unless told `force`:
+#
+#   hfsplus: write access to a journaled filesystem is not supported, use the
+#            force option at your own risk, mounting read-only.
+#
+# The volume this writes is journaled (kHFSVolumeJournaledBit), so the write is
+# made with `force` and is not recorded in the journal.  That is acceptable
+# here and only here: the volume is unmounted on both sides of it, so the
+# journal is empty and a later mount - on this host or on the phone - replays
+# nothing.  What makes it safe to spend on a 12 GB flash is fsck.hfsplus: the
+# volume is checked before the write and after it, and any problem the write
+# introduces (a line the first check did not print) fails the script.
 set -euo pipefail
 
 repo=$(cd "$(dirname "$0")/../.." && pwd)
@@ -35,9 +45,20 @@ for name in "${files[@]}"; do
 	[ -f "$out/$name" ] || { echo "error: no $out/$name" >&2; exit 1; }
 done
 
+# The problem lines of a read-only check, without the two lines every run
+# prints and without the "(1, 0)" counters, which are not a problem.
+problems() {
+	fsck.hfsplus -fn "$image" 2>&1 |
+	    grep -iE 'corrupt|needs to be repaired|error|invalid|bad |mismatch|orphan|overlap' || true
+}
+
 before=$(sha256sum "$image" | cut -d' ' -f1)
 echo "image  $image"
 echo "before $before"
+
+echo "--- fsck.hfsplus before the write (background: this image already reports"
+echo "    its alternate volume header as stale; that is what mkiosroot left) ---"
+problems | tee /tmp/install-userspace-fsck-before.txt
 
 mountpoint=$(mktemp -d /tmp/jackpotlte-root.XXXXXX)
 cleanup() {
@@ -46,7 +67,8 @@ cleanup() {
 }
 trap cleanup EXIT
 
-mount -t hfsplus -o loop,rw "$image" "$mountpoint"
+mount -t hfsplus -o loop,rw,force "$image" "$mountpoint"
+grep -F "$mountpoint" /proc/mounts || true
 echo "mounted $mountpoint"
 
 install -d -m 0755 "$mountpoint/usr/local/lib"
@@ -62,8 +84,6 @@ for name in "${files[@]}"; do
 done
 sync
 
-# Read every one back from the mounted volume, not from the copy: this is the
-# bytes the phone's kernel will read.
 status=0
 for name in "${files[@]}"; do
 	want=$(sha256sum "$out/$name" | cut -d' ' -f1)
@@ -74,6 +94,7 @@ for name in "${files[@]}"; do
 		echo "BROKEN $name: wrote $want, read $got" >&2
 		status=1
 	fi
+	ls -l "$mountpoint/usr/local/lib/$name"
 done
 
 umount "$mountpoint"
@@ -84,16 +105,20 @@ after=$(sha256sum "$image" | cut -d' ' -f1)
 echo "after  $after"
 [ "$before" != "$after" ] || { echo "error: the image did not change" >&2; exit 1; }
 
-echo "--- fsck.hfsplus (read-only) ---"
-if fsck.hfsplus -fn "$image"; then
-	echo "fsck: clean"
+echo "--- fsck.hfsplus after the write ---"
+problems | tee /tmp/install-userspace-fsck-after.txt
+if new=$(diff /tmp/install-userspace-fsck-before.txt /tmp/install-userspace-fsck-after.txt | grep '^>' || true)
+	[ -z "$new" ]; then
+	echo "fsck: no new problem"
 else
-	echo "error: fsck does not like the image; do not flash it" >&2
+	echo "error: the write introduced a filesystem problem:" >&2
+	echo "$new" >&2
 	status=1
 fi
 
 echo
-echo "next: img2simg $image /var/tmp/IOSRoot.sparse.img"
+echo "next: df -h /   (the sparse needs ~12.15 GB free)"
+echo "      img2simg $image /var/tmp/IOSRoot.sparse.img"
 echo "      tools/jackpotlte/verify-sparse.py $image /var/tmp/IOSRoot.sparse.img"
 echo "      fastboot flash USERDATA /var/tmp/IOSRoot.sparse.img"
 exit $status
