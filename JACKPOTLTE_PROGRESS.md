@@ -4126,3 +4126,41 @@ flashed).
 
 Not yet done at this writing: the install (root), `img2simg`, `verify-sparse.py`,
 `fastboot flash USERDATA` + `BOOT` (`/tmp/opencode/flash-jt60.sh`).
+
+### jt60, the root write: `mount -o force`, and what it cost
+
+The first attempt failed where it matters and taught the rule: Linux's
+hfsplus driver mounts this volume read-only even with `-o rw`, because it is
+journaled -
+
+```
+hfsplus: write access to a journaled filesystem is not supported, use the
+         force option at your own risk, mounting read-only
+```
+
+- `install` then failed with `Read-only file system`, image unchanged
+  (`ba227988…` before and after), nothing to undo.
+- With `-o loop,rw,force` the driver writes (scratch dir create/delete and an
+  in-place rewrite both worked), and the volume's own accounting stayed
+  consistent: the bitmap's free count (1 132 881) equalled the header's
+  `freeBlocks`, and `fsck.hfsplus -fn` printed the same single line before and
+  after the write ("the volume ... was found corrupt and needs to be
+  repaired" - the stale *alternate* volume header `mkiosroot` left behind; the
+  primary header and the bitmap agree with each other).
+- The journal window is safe because the volume is unmounted on both sides:
+  the journal is empty, so a later mount (host or phone) replays nothing.  What
+  makes it safe to spend on 12 GB of flash is the check around it, which is now
+  in `tools/jackpotlte/install-userspace.sh`: fsck before, fsck after, and any
+  problem line the first run did not print fails the script.
+
+Installed: `/usr/local/lib/libjackpotlte-gl.dylib` 196 496 B, sha256
+`a201bb3ae8de2af25eaf149a5929c9577bf7548fdedb706841b687f3ca2b3d4f`, read back
+from the mounted volume; `libOSMesa.8.dylib` unchanged and therefore not
+rewritten.  Image `853f4fec…` -> `e383257e…`.
+
+Remaster: `img2simg` 4m26s -> `/var/tmp/IOSRoot.sparse.img` 12 158 011 068 B
+sha256 `ea59c9b6f4ce97558b5e0b524e12d57b8b343aa4eb811e2a3813373509780641`;
+`verify-sparse.py` printed `OK: 27913 chunks, 4194304 blocks, every data byte
+matches`.  Free space was the tight part: 13 GB before the remaster and 2.4 GB
+after, so seven old `/var/tmp/jt*` build trees were deleted to keep the host
+from filling up mid-write.
