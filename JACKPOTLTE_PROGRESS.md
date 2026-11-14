@@ -3706,6 +3706,42 @@ cast, 0162's caller chain, 0163's buffer log) + `0165`, and the cmdline adds
 packed or flashed: no fastboot device is attached (2026-11-14 17:5x), so the
 phone has to be put in fastboot first.
 
+**The one writer that erases the shim banner: `fbcon_init()` (2026-11-14).**  The
+built tree (`bt54/full`) settles the "black right at handoff" report.  `SWEET`
+is **not** defined for the A5XELTE build (`sweet_early.h` makes every
+`sweet_early_*` a no-op inline, and neither `A5 XNU STAGE` nor `SWEET EARLY` is
+in the linked kernel), so the arm64 early console is compiled out and the shim
+banner is the *only* thing on the panel until the real console is up.  That
+console is `pexpert/arm/pe_serial.c`'s fbcon on `a5xelte-fbcon`
+(`reg = 0xec000000`): `serial_init()` calls `fbcon_probe()` (line 988), which
+registers `sweet_fbcon_serial_functions`, and the generic serial framework then
+calls `.init = fbcon_init()`.  `fbcon_init()` (lines 797-806) is a **full-panel
+wipe to black**:
+
+```
+for (uint32_t r = 0; r < fbcon_rows; r++) {
+	fbcon_clear_row(r);            /* every row -> FBCON_BG = 0xff000000 */
+}
+```
+
+So the observed order is *shim banner → XNU boots → fbcon_init wipes the whole
+panel black → the first kprintf lines draw on top*.  If the console is routed to
+fbcon the text comes back within a line or two (which is exactly what jt53's
+16:21 photo shows); if it is not, the panel stays black with nothing to draw it
+back.  This is the handoff-side candidate, and `0162`/`0163`/`0164` touch none of
+it, so a jt54 regression is unlikely to be the cause — but it is cheap to
+settle: **video the boot** (shim → wipe → text?) rather than rely on a still.
+
+Documentation of the fix attempt that failed and was corrected: CI run
+`43617953811` (0165) failed at `SweetFramebuffer.cpp:273/289`,
+`use of undeclared identifier 'sweet_fb_no_present'` — the two statics were
+defined next to `sweet_fb_swaps_logged` (line ~397), *after* `AppleCLCD::start`
+reads them.  Fixed in `8014ff4` by declaring `sweet_fb_presents_logged` /
+`sweet_fb_no_present` above `AppleCLCD::start`; re-verified to apply to the
+`43613384741` build tree byte-for-byte and to reproduce the target.  New CI run
+`43619257199`; the `loader` workflow (which builds the shim) passed on the logo
+commit.
+
 **Apple logo in the shim (done, 2026-11-14, commit `85930cf`).**  The shim can
 now draw the iOS boot logo behind a cmdline token `jtlogo=1` in the *payload*
 cmdline.  Geometry comes from `IMG_20261108_170011203.jpg`: the body outline is
