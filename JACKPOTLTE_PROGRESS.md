@@ -4169,3 +4169,54 @@ Flashed 21:10-21:19 (`/tmp/opencode/gpu/flash-jt60.log`): USERDATA the 12.16 GB
 sparse, 47/47 chunks, `USERDATA rc=0`, 506 s; then BOOT (`OKAY`), reboot
 `rc=0`.  BOOT only carries the kernel (0168); the dylib came in with USERDATA,
 which is the half that had never been rewritten this way before.
+
+### jt61: where Apple's EAGL ends and ours does not, and the draw that never reached the GPU
+
+Two questions from jt60 are answered offline, and both changed the userspace:
+
+**What the crash's address was.** The trap's first (and only) line on jt60 was
+`lr 0x1e46bffc = IOSurface + 0x4ffc (base 0x1e46b000)`.  The phone's own
+shared cache was extracted from the root image (`[HFS+ Private Data]/iNode*`,
+61 files, 3.2 GB, 46 with `dyld_v1   arm64`) and read with the same reader
+`tools/jackpotlte/eagl-slots.py` uses for the GL table.  IOSurface's `__TEXT`
+is at cache vmaddr `0x1a397f000`, so the reported base is a slide of
+`-0x185514000`, and `+0x4ffc` is
+
+```
+export _IOSurfaceClientGetBulkAttachments (+0x4fb8 from image base)
+       0x44 bytes into it
+```
+
+i.e. the dying instance was in IOSurface's client code, not in ours.  The same
+slide puts the faulting `pc 0x1ef9e9e70` outside every mapped cache image, so it
+was in a dylib loaded beside the cache (ours or OSMesa) - which is exactly what
+jt61's trap now prints a base for.  The reader is `tools/jackpotlte/cache-symbol.py`
+(`--images`, or `--offset NAME OFF`), and the extraction is `7z x` of the
+`[HFS+ Private Data]/iNode*` files named by the root's `listing.txt`.
+
+**What else CoreAnimation can call.** The OpenGLES image's selector strings
+list the whole `EAGLContext` surface (44 selectors), and the shim replaced ten
+of them.  The ones a renderer reaches that were Apple's code on an object
+whose ivars were never filled: `-presentRenderbuffer:` and its `atTime:` and
+`afterMinimumDuration:` forms, `-renderbufferStorage:fromDrawable:`,
+`-getParameter:to:`, `-texImageIOSurface:...plane:` (the form without
+`invert`), `-initWithAPI:sharedWithCompute:`, and `+setCurrentContext:` /
+`+currentContext`.  All are ours now (`userspace/jackpotlte-gl/eagl.c`).
+
+**Why no frame was ever drawn.** Apple's driver hands a draw to the GPU as it
+is made; the library behind our table (Mesa over panfrost) keeps it in a batch
+and submits that only on a flush.  A renderer that draws and does not flush
+therefore draws nowhere - which is what jt60's live instance shows (a whole
+first frame, `glDrawElements` last, no `JackpotlteMali: job` anywhere).  So
+the dispatch table now flushes after the entries that put pixels in a
+framebuffer (`SUBMIT` in `tools/jackpotlte/eagl-glue.py`: `glClear`, the
+clear-buffer calls, the draw calls, `glBlitFramebuffer`), through
+`jackpotlte_gl_after_draw()`, and `-presentRenderbuffer:` flushes too and logs
+the GL error it leaves.  `gl_slots.c` was regenerated from the same Mesa
+`gl.xml` and the diff is those eleven entries and nothing else.
+
+Built (CI userspace `43639283214` green, commit `7581494`):
+`libjackpotlte-gl.dylib` 197 360 B, sha256
+`7266b0cc0e03e2f42de99c92d3023223ce27607618025768c7cc75bd6ac3ca24`, carrying
+both this and jt60's improved trap.  The kernel is unchanged from jt60 (0168),
+so jt61 is a USERDATA flash only.
