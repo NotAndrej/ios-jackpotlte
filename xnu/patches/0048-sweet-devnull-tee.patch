@@ -1,6 +1,6 @@
 --- a/bsd/dev/mem.c
 +++ b/bsd/dev/mem.c
-@@ -153,6 +153,44 @@
+@@ -153,6 +153,50 @@
  	return 0;
  }
  
@@ -51,7 +51,7 @@
  int
  mmrw(dev_t dev, struct uio *uio, enum uio_rw rw)
  {
-@@ -216,6 +254,22 @@
+@@ -216,6 +260,22 @@
  			if (rw == UIO_READ) {
  				return 0;
  			}
