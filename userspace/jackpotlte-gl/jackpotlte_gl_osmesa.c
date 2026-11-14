@@ -68,13 +68,15 @@ static _Thread_local struct jackpotlte_gl *current;
 static void
 say(const char *format, ...)
 {
+   char line[512];
    va_list arguments;
 
-   fputs("jackpotlte-gl: ", stderr);
    va_start(arguments, format);
-   vfprintf(stderr, format, arguments);
+   (void)vsnprintf(line, sizeof(line), format, arguments);
    va_end(arguments);
-   fputc('\n', stderr);
+   fprintf(stderr, "jackpotlte-gl: %s\n", line);
+   /* eagl.c: on the kernel console too when the boot-arg jtgllog=1 is set. */
+   jackpotlte_gl_log(line);
 }
 
 /*

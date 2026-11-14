@@ -45,6 +45,16 @@ void jackpotlte_gl_destroy(struct jackpotlte_gl *gl);
 const char *jackpotlte_gl_library(void);
 
 /*
+ * One log line, on top of stderr (eagl.c and this library each say() to
+ * stderr).  The library is loaded into the display server, whose stderr is not
+ * anywhere a bring-up can read it, so with the boot-arg jtgllog=1 the line also
+ * goes to /dev/console -- the kernel's console, which is where a panic draws
+ * and what the persistent ring keeps.  The switch is read once, from
+ * kern.bootargs; absent, nothing is opened and nothing extra is written.
+ */
+void jackpotlte_gl_log(const char *line);
+
+/*
  * Make the memory of the SweetSurface SURFACE the texture bound to
  * GL_TEXTURE_2D, where the library's driver can (the kernel's GPU driver makes
  * a buffer of the surface: 0154's 0x7e, through the drm face).  0: not done,

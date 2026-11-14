@@ -42,6 +42,7 @@
  */
 #include "jackpotlte_gl.h"
 
+#include <fcntl.h>
 #include <objc/message.h>
 #include <objc/runtime.h>
 #include <stdarg.h>
@@ -49,6 +50,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/sysctl.h>
+#include <unistd.h>
 
 /*
  * IOSurface's accessors, declared here: the iPhoneOS SDK ships no header for
@@ -95,13 +98,54 @@ static struct {
 static void
 say(const char *format, ...)
 {
+   char line[512];
    va_list arguments;
 
-   fputs("jackpotlte-gl: ", stderr);
    va_start(arguments, format);
-   vfprintf(stderr, format, arguments);
+   (void)vsnprintf(line, sizeof(line), format, arguments);
    va_end(arguments);
-   fputc('\n', stderr);
+   fprintf(stderr, "jackpotlte-gl: %s\n", line);
+   jackpotlte_gl_log(line);
+}
+
+/*
+ * The log, doubled onto the kernel console when the boot-arg jtgllog=1 is
+ * there: this library is loaded into the display server, whose stderr is not
+ * anywhere a bring-up can read, while the kernel console is (it is what draws
+ * a panic, and it is what the persistent ring keeps).  The switch is read once,
+ * out of kern.bootargs; with it absent, nothing is opened and nothing extra is
+ * written.  The kernel's own exec injector logs to the same switch.
+ */
+void
+jackpotlte_gl_log(const char *line)
+{
+   static int looked, console = -1;
+
+   if (!looked) {
+      char args[1024];
+      size_t size = sizeof(args);
+      const char *p;
+
+      looked = 1;
+      if (sysctlbyname("kern.bootargs", args, &size, NULL, 0) == 0 && size > 0) {
+         args[size < sizeof(args) ? size : sizeof(args) - 1] = '\0';
+         for (p = strstr(args, "jtgllog="); p != NULL; p = strstr(p + 8, "jtgllog=")) {
+            if (p[8] == '1' && (p[9] == '\0' || p[9] == ' ')) {
+               console = open("/dev/console", O_WRONLY | O_APPEND);
+               break;
+            }
+         }
+      }
+   }
+   if (console >= 0) {
+      char out[600];
+      int n = snprintf(out, sizeof(out), "jackpotlte-gl: %s\n", line);
+
+      if (n > 0) {
+         (void)write(console, out,
+             (size_t)(n < (int)sizeof(out) ? n : (int)sizeof(out) - 1));
+      }
+   }
 }
 
 /* A slot the build exports no _gl* name for was called (gl_slots.c). */
@@ -442,6 +486,7 @@ install(void)
    Class eagl = (Class)objc_getClass("EAGLContext");
    unsigned i, installed = 0;
 
+   say("library loaded into the display server");
    if (eagl == NULL) {
       say("no EAGLContext class: this library is loaded where OpenGL ES is not");
       return;

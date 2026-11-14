@@ -3045,3 +3045,28 @@ touch-log string in them is present in the kernel CI `43496663209` built (the
 dead legacy probe's `A5XELTE TOUCH:` strings are absent from it, as the
 `#if defined(JACKPOTLTE)` early return leaves that code unreachable); it applies
 to that tree with no fuzz. Nothing has run on the phone with it.
+
+### The GL path's log switch (`jtgllog=1`)
+
+The chain that has to work before a frame appears had run on nothing: the kernel
+injects `libjackpotlte-gl.dylib` into `backboardd` (`0157`), and if the injection
+did not happen, it did so silently -- no kernel line, and the display server's
+stderr is nowhere a bring-up can read. `0159-jackpotlte-gl-path-log.patch` adds
+one switch for both halves of that. The kernel's injector takes
+`TUNABLE(uint32_t, jt_gl_log, "jtgllog", 0)` and prints one
+`JT INJECT: <name> -> <env or "(no match)">` line per exec; the shim
+(`userspace/jackpotlte-gl/eagl.c`, `jackpotlte_gl_log()`) reads `kern.bootargs`
+for the same `jtgllog=1` and, when it is there, writes its `say()` lines to
+`/dev/console` (the kernel console the panic draws on and the persistent ring
+keeps) as well as stderr -- which is also where `jackpotlte_gl_osmesa.c`'s own
+`say()` sends them. With the switch absent nothing is opened and nothing extra
+is printed, so a build without it behaves as before. `eagl.c`'s constructor also
+says `library loaded into the display server` first, so a load is visible even if
+the `EAGLContext` hooking goes wrong.
+
+The kernel half was written against the tree CI `43568818902` built (the
+post-`0158` `kern_exec.c` out of that run's `xnu-buildtree` artifact) and applies
+to it with no fuzz; the userspace half is source only. Neither is on the phone
+yet. It tells apart "the loader never put the library in `backboardd`" from
+"the library is there and something later stops", which was the first thing the
+first frame would have had to be guessed at.

@@ -167,6 +167,13 @@ deleted on 2026-11-10); build results and the image details live in
       `USERDATA rc=0`) and the image above to `BOOT` (`BOOT rc=0`). What is left
       is the phone: boot, photograph, read the console. Loaded is not drawn: the
       first draw claim is a frame on the panel.
+- [ ] M4 GL-path log switch (2026-11-14): `jtgllog=1`
+      (`0159-jackpotlte-gl-path-log.patch` + the shim). The kernel's injector
+      prints one `JT INJECT: <name> -> <env>` line per exec, and the shim reads
+      `kern.bootargs` and puts its `say()` lines on `/dev/console` (the kernel
+      console) as well as stderr, so a program that never got the library can be
+      told from one that did. Off by default; nothing is opened or printed
+      without the switch. Written, not on the phone yet.
 - [x] M4 GLES, first piece: the OpenGL ES dispatch table of this phone's build
       (2026-11-13). `-[EAGLContext getMacroContextPrivate]` hands out a table
       of function pointers and iOS calls `entry(table[0], args...)`; the offsets
