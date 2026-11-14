@@ -3251,11 +3251,25 @@ It also prints one `JT ENV: <name> += <variable>` line when it adds something,
 which is the console evidence for the next boot; `jtgllog` stays off, so this is
 one or two lines, not one per exec.
 
-**Next image (not packed yet):** `jt50`'s cmdline with two arguments appended,
+**Packed (not flashed):** `jt50`'s cmdline with two arguments appended,
 
 ```
 dyld_flags=2 jtexecenv=DYLD_AMFI_FAKE=0x2
 ```
+
+CI `43590653776` is green, including the patch gate, and built kernel
+`8cae2718764d0ed4ad70051abe87755d51c383ebe9cd226500bfb8b06a2192eb` (16,619,360 B;
+`JT ENV:` and `jtexecenv` both present in it). The image is
+`/var/tmp/a8-xnu-jt51-dyldfake.img`, 17,553,424 B, sha256
+`76e8fecadd9a1aee7f0cac8dc28adb0e688029cec681085e6f39083a4a7c969c`, from
+`/home/not_andrej/Music/hd/boot_a530f_p.img` (same header as `jt50`: DTB
+`0xd7800`, `SRPRG03A001KU`, second addr `0x10f00000`). Read back out of the
+packed image, the cmdline is 389 bytes and ends
+`... jtexecinject=/usr/local/lib/libjackpotlte-gl.dylib,backboardd
+dyld_flags=2 jtexecenv=DYLD_AMFI_FAKE=0x2` -- both new arguments intact
+(`BOOT_LINE_LENGTH` is 608, so nothing was truncated, and a boot-arg value
+ends only at space/tab/NUL, `pexpert/gen/bootargs.c:308-316`, so the second
+`=` inside `jtexecenv`'s value is kept).
 
 `0x2` = `ALLOW_PATH_VARS` only. `0x22` would add
 `ALLOW_FAILED_LIBRARY_INSERTION`, and with that bit dyld does not print why an
