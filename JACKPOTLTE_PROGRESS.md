@@ -3302,6 +3302,10 @@ their source:
   `eagl.c:234`.
 - `|backboardd| jackpotlte-gl: ... -setParameter:0x268 to:0x16ef1f404` --
   `eagl.c:311`.
+- `|backboardd| EAGLContext is ours: 10 of 10 methods` -- `eagl.c:508`, the
+  constructor's last line (photo `IMG_20261114_133901516.jpg`, 13:39). Every
+  `EAGLContext` method the shim replaces was installed, so nothing is missing
+  from the class and the library is fully in the display server.
 - `JackpotlteMali: a client opened the GPU`, and many `JackpotlteMali: request
   0x44, 16 bytes` -- the kernel: `0154`'s `IOLog` at line 214, and `0x44` =
   `kPanfrostGetParam` at line 75.
