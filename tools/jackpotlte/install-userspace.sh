@@ -51,8 +51,14 @@ echo "mounted $mountpoint"
 
 install -d -m 0755 "$mountpoint/usr/local/lib"
 for name in "${files[@]}"; do
+	want=$(sha256sum "$out/$name" | cut -d' ' -f1)
+	there=$mountpoint/usr/local/lib/$name
+	if [ -f "$there" ] && [ "$(sha256sum "$there" | cut -d' ' -f1)" = "$want" ]; then
+		echo "same  $name $want (already installed, not rewritten)"
+		continue
+	fi
 	echo "install $name ($(stat -c %s "$out/$name") bytes)"
-	install -m 0755 "$out/$name" "$mountpoint/usr/local/lib/$name"
+	install -m 0755 "$out/$name" "$there"
 done
 sync
 

@@ -4080,3 +4080,49 @@ Until userspace can be replaced from the BOOT image alone, no fix that has been
 diagnosed can be tested.  Proposed (not implemented): have the kernel *embed*
 the built dylib and write it to `/usr/local/lib/` before `jtexecinject` adds it,
 so a GL/CA fix costs one `fastboot flash BOOT` and no USERDATA write.
+
+### jt60: the crash has to name its image, and the root has to take a new dylib
+
+The blocker written down above (no way to put a userspace binary on the phone)
+is being removed the heavy way the owner chose: rebuild the HFS+ root inside
+`/var/tmp/IOSRoot.img`, remaster the 12.15 GB sparse, flash USERDATA, flash
+BOOT.  So this iteration carries every userspace diagnostic we have, because
+one root write buys one shot at `far 0x30`.
+
+Three additions to `libjackpotlte-gl.dylib` (commit `364edd9`, `1db9758`; CI
+userspace `43632650336` green, dylib 196 496 B, sha256
+`a201bb3ae8de2af25eaf149a5929c9577bf7548fdedb706841b687f3ca2b3d4f`):
+
+- **`trap.c`: the crash names its images.**  A SIGSEGV/SIGBUS/SIGILL handler
+  (alt stack, SA_SIGINFO) prints `far`, `pc`, `lr`, `sp` and a 24-frame
+  frame-pointer walk, each resolved by walking the loaded Mach-Os' `__TEXT`
+  segments to `image + offset (base)`, then restores SIG_DFL and re-raises so
+  the kernel's own report still follows.  `pc 0x1ef9e9e70` becomes a file and
+  an offset, which is the whole difference between "a NULL+0x30 somewhere" and
+  a place to read.
+- **Load addresses**: eagl.c and jackpotlte_gl_osmesa.c print the base of every
+  image whose path contains `jackpotlte` or `OSMesa`.
+- **GL call order**: `jackpotlte_gl_proc` logs each entry point's name the
+  first time it is resolved.  gl_slots.c resolves lazily on first call, so this
+  is CoreAnimation's actual call order and the last line is the call the crash
+  happened in (or immediately after).
+
+Kernel side, packet `0168` (CI xnu `43632562649` green): the per-request log
+cap goes from 32 to 256, because one frame's setup is longer than 32 and the
+requests just before the death were never printed.  `request 0x70, 48 bytes`
+(not a driver selector) is in that range and its "is not known here" answer is
+what we expect to see.
+
+Packed: `/var/tmp/a8-xnu-jt60-trap.img`, 17 559 568 B, sha256
+`6ab93aaf36c0ed9d15a5b3e98dff23cf747497be6824a654c3e8fa15c515f669`; packer
+asserted 0168 in the built tree, `fRequests++ < 256` (and not 32), the Mali map
+and job logs, the logo hole still absent, and the full jt53 cmdline + `jtlogo=1`
+in the payload.
+
+Root install: `tools/jackpotlte/install-userspace.sh` (needs root only to mount;
+skips a file whose sha256 already matches; reads every file back from the
+mounted volume and runs `fsck.hfsplus -fn` before the image is allowed to be
+flashed).
+
+Not yet done at this writing: the install (root), `img2simg`, `verify-sparse.py`,
+`fastboot flash USERDATA` + `BOOT` (`/tmp/opencode/flash-jt60.sh`).
