@@ -1965,10 +1965,11 @@ the digitizer and the fault is matching/open, not geometry.
 Note the persistent console log (`0047`) records **everything**, muted or not
 (`serial_console.c` calls `sweet_log_append()` before the mute check, and the
 A5XELTE guard is `SWEET || A5XELTE`), so the ring at the tail of `userdata`
-also has the late boot.  Reading it needs ADB in a recovery
-(`tools/sweet-log-pull.sh`); the only recovery here is the stock
-`~/recovery-public-v1.img`, whose ADB is not root-capable, so that route is
-not yet usable on this device.
+also has the late boot.  Reading it needs ADB in a recovery that can `dd` the
+userdata block device (`tools/sweet-log-pull.sh`).  The recovery on disk is a
+Lineage 22.2 build for `jackpotlte` (`ro.product.system.name=lineage_jackpotlte`,
+`ro.adb.secure=1` in its ramdisk); whether its `adbd` runs as root is untested
+here, so do not assume either way.
 
 ### How the other ports do sec_ts touch (research, 2026-11-09)
 
