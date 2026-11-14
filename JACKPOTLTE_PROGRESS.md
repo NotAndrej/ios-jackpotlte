@@ -4220,3 +4220,14 @@ Built (CI userspace `43639283214` green, commit `7581494`):
 `7266b0cc0e03e2f42de99c92d3023223ce27607618025768c7cc75bd6ac3ca24`, carrying
 both this and jt60's improved trap.  The kernel is unchanged from jt60 (0168),
 so jt61 is a USERDATA flash only.
+
+Installed into `/var/tmp/IOSRoot.img` at 21:49 with
+`tools/jackpotlte/install-userspace.sh` (as before: `mount -o loop,rw,force`,
+read back from the volume, fsck before/after): `libjackpotlte-gl.dylib`
+197 360 B sha256 `7266b0cc0e03e2f42de99c92d3023223ce27607618025768c7cc75bd6ac3ca24`,
+`libOSMesa.8.dylib` unchanged; image `e383257e...` -> `5cbfe6ea...`, fsck "no
+new problem".  Remastered: `/var/tmp/IOSRoot.sparse.img` 12 158 015 164 B,
+sha256 `7025a913ddeea058d2ea1bfe83e7d46362f5072a02c8e72d0e5a2b32fc06d353`,
+`verify-sparse.py` "every data byte matches".  The 3.2 GB of extracted cache
+files were deleted first (they come out of the image in three minutes and the
+remaster needs the room).
