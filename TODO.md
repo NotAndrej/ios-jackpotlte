@@ -15,7 +15,7 @@ only for approved destructive steps, never bootloaders / EFS (p3) / recovery
 - [ ] ~~Remove the `SWEET HID: clients buttons=... touch=...` spam.~~ Done in
       `0151` (gated behind `sweethidclients=1`); the boot-arg `sweethidtest`
       no longer emits it.
-- [x] ~~Silence the touch logging.~~ Done in `0158` (2026-11-14): every
+- [x] ~~Silence the touch logging.~~ Done in `0157` (2026-11-14): every
       `A8 TOUCH:` / `A5XELTE TOUCH:` line in `bsd/dev/a5xelte_touch.c` and the
       `SWEET HID: touch ...` contact line in `SweetHID.cpp` route through one
       switch, `a8touchverbose=1`, off unless set.
@@ -26,12 +26,16 @@ only for approved destructive steps, never bootloaders / EFS (p3) / recovery
 ## Status bar
 
 - [ ] Present a real iPhone mode so the status-bar provider is found.
-      **Re-requested by the owner 2026-11-11**, so the drop below is
-      superseded: `0156` presents 1125x2436 on A5XELTE and the owner chose to
-      squeeze the 2436 rows onto the 2220-row panel (not to crop a strip).
-      Details and the phone check are in `JACKPOTLTE_PROGRESS.md`
-      ("The rdar bar fix goes back in"). `sweetfb_native=1` restores the
-      panel geometry from the cmdline alone.
+      **Tried and removed again 2026-11-14.** The presented-mode patch
+      (`0156`, since deleted) made SpringBoard ask the asset manager for
+      `BoundingPathBitmap-1125x2436-375x812-3.00x` and die with an uncaught
+      `NSInternalInconsistencyException`; SpringBoard then crash-loops
+      (`CRSH SpringBoard reason ns 2 code 0x6`, seen on the device). The
+      panel is presented 1080x2220 again (canvas too, in
+      `tools/mkadt_jackpotlte.py`). Details in `JACKPOTLTE_PROGRESS.md`
+      ("The rdar bar fix goes back in" and the entry at the end).
+      ~~Superseded by `0156`: the owner chose to
+      squeeze the 2436 rows onto the 2220-row panel (not to crop a strip).~~
       ~~Dropped (owner, 2026-11-11).~~ The diagnosis is in
       `JACKPOTLTE_PROGRESS.md` ("Why the status bar reads"); nothing was ever
       flashed for it. For the record if it is ever wanted: `display-scale` is
@@ -154,7 +158,7 @@ deleted on 2026-11-10); build results and the image details live in
       `069825f`) and installs ten `EAGLContext` methods. It sits in the root's
       `/usr/local/lib` and is on the phone as of 2026-11-14 (sparse `USERDATA`
       flash), but no frame has been drawn: that waits on the loader.
-- [ ] M4 loader + first frame: `0157-jackpotlte-exec-inject.patch` adds the
+- [ ] M4 loader + first frame: `0156-jackpotlte-exec-inject.patch` adds the
       boot-arg `jtexecinject`, which the kernel applies in `exec_extract_strings()`
       (kernel CI `43496663209` green on `5d7765c`; the binary carries both
       `jtexecinject` and `DYLD_INSERT_LIBRARIES=`), and
@@ -168,7 +172,7 @@ deleted on 2026-11-10); build results and the image details live in
       is the phone: boot, photograph, read the console. Loaded is not drawn: the
       first draw claim is a frame on the panel.
 - [ ] M4 GL-path log switch (2026-11-14): `jtgllog=1`
-      (`0159-jackpotlte-gl-path-log.patch` + the shim). The kernel's injector
+      (`0158-jackpotlte-gl-path-log.patch` + the shim). The kernel's injector
       prints one `JT INJECT: <name> -> <env>` line per exec, and the shim reads
       `kern.bootargs` and puts its `say()` lines on `/dev/console` (the kernel
       console) as well as stderr, so a program that never got the library can be

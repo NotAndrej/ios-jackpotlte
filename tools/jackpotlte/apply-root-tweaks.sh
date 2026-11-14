@@ -45,7 +45,7 @@
 #   /usr/local/lib/libjackpotlte-gl.dylib + libOSMesa.8.dylib
 #                              the EAGL shim and the Mesa it sits on, for the
 #                              kernel's exec-time injection into backboardd
-#                              (0157; docs/jackpotlte-mali.md sec. 9).  Same
+#                              (0156; docs/jackpotlte-mali.md sec. 9).  Same
 #                              CI-origin note as the probe.
 #
 # Why the app move: SpringBoard showed only ~7 icons because iOS 16 ships the
@@ -167,7 +167,7 @@ else
 fi
 
 # The GLES shim and the OSMesa it sits on, for the kernel's exec-time injection
-# (0157; docs/jackpotlte-mali.md sec. 9).  They share one directory: the shim
+# (0156; docs/jackpotlte-mali.md sec. 9).  They share one directory: the shim
 # opens Mesa by @loader_path first, so /usr/local/lib holding both is enough and
 # the injection names the shim by absolute path (boot-arg jtexecinject).  Both
 # are arm64 iOS dylibs, so like the probe they come from CI, not this host.

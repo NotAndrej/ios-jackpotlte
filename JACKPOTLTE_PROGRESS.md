@@ -2458,7 +2458,8 @@ diagnosis above stands as the answer to why the bar reads `rdar:45025538`; the
 change itself is not being pursued.
 
 *(Superseded later the same day: the owner asked for it again and chose the
-squeeze, `0156` - see "The rdar bar fix goes back in" at the end of this
+squeeze, the presented-mode patch (deleted 2026-11-14) - see "The rdar bar fix
+goes back in" at the end of this
 file.)*
 
 **`sweetfb_noconsole=1` has never done anything on this board.** The A5XELTE
@@ -2643,7 +2644,10 @@ solved: present the iPhone X mode **1125x2436** (375x812 points at the ADT's
 rather than cropping a strip off the top or the bottom. Nothing in this
 section is on the phone yet.
 
-`xnu/patches/0156-jackpotlte-presented-iphone-x-mode.patch` is the change, in
+`xnu/patches/0156-jackpotlte-presented-iphone-x-mode.patch` was the change
+(**deleted 2026-11-14**: the squeezed mode has SpringBoard ask the asset manager
+for its bounding-path bitmap — `BoundingPathBitmap-1125x2436-375x812-3.00x` —
+and die on the miss; the patches after it shifted down one number). It was, in
 two files:
 
 - `SweetFramebuffer.cpp`: the A5XELTE branch of `start()` sets
@@ -2680,8 +2684,8 @@ mean the canvas did not reach backboardd; `sweetfb_native=1` puts the old
 geometry back.
 
 This and the quiet console (`a5fb_noconsole=1`) go into one new BOOT. Its
-cmdline is `jt43`'s with that one word changed, but because `0156` is a kernel
-change the image also carries a rebuilt kernel, so it is no longer a
+cmdline is `jt43`'s with that one word changed, but because the mode was a
+kernel change the image also carries a rebuilt kernel, so it is no longer a
 cmdline-only repack.
 
 ### `jt44` built and checked, not yet flashed (2026-11-11)
@@ -2690,8 +2694,8 @@ CI `43033244620` (commit `e219bf1`) finished **success**. The downloaded
 `kernel.development.a5xelte` (16,601,960 B, sha256
 `28228568eb7c8c4d56b08643eca2178011a620207af7266767ff8a2a100f8c50`, matching
 the artifact's own `SHA256SUMS`) carries the string
-`SWEET FB: iPhone X mode %ux%u squeezed onto the %ux%u panel`, so `0156` is in
-the kernel that was packed and not only in the patch series.
+`SWEET FB: iPhone X mode %ux%u squeezed onto the %ux%u panel`, so the patch was
+in the kernel that was packed and not only in the patch series.
 
 `jt44` = that kernel + the regenerated ADT + the `jt43` cmdline with
 `a5fb_noconsole=1` in place of `sweetfb_noconsole=1`, packed with `jt43` as
@@ -2960,7 +2964,7 @@ phone's, the softpipe fallback is still in it, panfrost v6 and the drm face are
 in it, and `mesa-osmesa-panfrost-v6` was uploaded. Nothing has drawn a frame and
 nothing new has been on the phone.
 
-The loader, settled and written: `0157-jackpotlte-exec-inject.patch` adds
+The loader, settled and written: `0156-jackpotlte-exec-inject.patch` adds
 `static TUNABLE_STR(exec_inject_conf, 512, "jtexecinject", "")` and
 `exec_inject_env()`, called from `exec_extract_strings()`
 (`bsd/kern/kern_exec.c`). The value is
@@ -3029,7 +3033,7 @@ for later (`tools/sweet-log-pull.sh` reads it from a temporarily booted recovery
 `/home/not_andrej/recovery-public-v1.img` is on the host). Reaching fastboot
 again takes the button combo.
 
-Touch logging is off as of `0158-jackpotlte-touch-quiet-log.patch` (2026-11-14,
+Touch logging is off as of `0157-jackpotlte-touch-quiet-log.patch` (2026-11-14,
 written at the owner's request for the next build). The touch driver printed on
 every path it took -- the contact worker's `A8 TOUCH: press/release/moves/
 i2c_retries/lost_reads/backlog=` lines, the lift watchdog, the IRQ transitions,
@@ -3049,9 +3053,9 @@ to that tree with no fuzz. Nothing has run on the phone with it.
 ### The GL path's log switch (`jtgllog=1`)
 
 The chain that has to work before a frame appears had run on nothing: the kernel
-injects `libjackpotlte-gl.dylib` into `backboardd` (`0157`), and if the injection
+injects `libjackpotlte-gl.dylib` into `backboardd` (`0156`), and if the injection
 did not happen, it did so silently -- no kernel line, and the display server's
-stderr is nowhere a bring-up can read. `0159-jackpotlte-gl-path-log.patch` adds
+stderr is nowhere a bring-up can read. `0158-jackpotlte-gl-path-log.patch` adds
 one switch for both halves of that. The kernel's injector takes
 `TUNABLE(uint32_t, jt_gl_log, "jtgllog", 0)` and prints one
 `JT INJECT: <name> -> <env or "(no match)">` line per exec; the shim
@@ -3065,8 +3069,50 @@ says `library loaded into the display server` first, so a load is visible even i
 the `EAGLContext` hooking goes wrong.
 
 The kernel half was written against the tree CI `43568818902` built (the
-post-`0158` `kern_exec.c` out of that run's `xnu-buildtree` artifact) and applies
+post-`0157` `kern_exec.c` out of that run's `xnu-buildtree` artifact) and applies
 to it with no fuzz; the userspace half is source only. Neither is on the phone
 yet. It tells apart "the loader never put the library in `backboardd`" from
 "the library is there and something later stops", which was the first thing the
 first frame would have had to be guessed at.
+
+### SpringBoard's bounding path: the presented mode is out (2026-11-14)
+
+With the console unmuted (`a5fb_noconsole=1` off the cmdline, `jt46`), a boot
+photo (`IMG_20261114_083944791.jpg`) finally shows what a quiet image had been
+hiding: iOS reaches userland and **SpringBoard crashes and crash-loops**. The
+last lines before it restarts are
+
+```
+STR SBM terminating app due to uncaught exception 'NSInternalInconsistencyException',
+    reason: 'Failed to load bounding path bitmap data from the asset manager for ...'
+STR failed to load bounding path bitmap data from the asset manager for asset name:
+    BoundingPathBitmap-1125x2436-375x812-3.00x
+CRSH SpringBoard reason ns 2 code 0x6: (none)
+exec fairplayd.H2 / exec bluetoothd / exec SpringBoard
+```
+
+(`STR`/`CRSH`/`exec` are the crash-diagnostics patches' lines: `0051`/`0053`
+scan the dying process's heap for the exception string, `0111` prints the
+`exec`/`CRSH` lines.) The asset name is the iPhone X mode the presented-mode
+patch put in front of UIKit: 1125x2436 pixels = **375x812 points at
+`display-scale 3`** — so SpringBoard's own log (the `375x812@3x 60Hz sRGB SDR`
+line above it) proves the mode reached it, and then the bounding-path bitmap
+lookup for that mode fails and takes the process down.
+
+That is the display mode, not the GPU: nothing in these lines is a kernel panic
+(there is none — the earlier "the console only draws on panic" reading was
+wrong; the mute arms at the GUI's first present, so the text in the 07:56 photo
+was pre-present boot console) and nothing in them is Mali. **Nothing has drawn
+a frame**, and the GL path's own switches are still unexercised.
+
+So the presented-mode patch is **deleted**: `0156-jackpotlte-presented-iphone-x-mode.patch`
+is gone, `0157`/`0158`/`0159` shifted down to `0156`/`0157`/`0158`, and
+`tools/mkadt_jackpotlte.py` puts the canvas back to the panel (1080x2220) so the
+canvas and the presented size cannot disagree. The kernel is back to what the
+A5XELTE branch did before the mode: `fLogicalW/H` = the panel, `fOffX/fOffY` = 0,
+and `SweetHID.cpp` back to `1080/1920/0,0`. The squeeze in `present()` is gone
+with the patch.
+
+If SpringBoard still asks for a bounding-path bitmap it cannot find with the
+panel presented 1:1, then the asset is missing (or unreadable) for this root and
+the mode was only part of it; the next boot's console will say which.

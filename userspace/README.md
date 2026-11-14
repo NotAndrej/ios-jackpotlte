@@ -125,10 +125,10 @@ The loader, from the reference's own kernel: it is not launchd and not a dyld
 insert from a job, because launchd refuses `DYLD_*` in a job description. The
 kernel adds `DYLD_INSERT_LIBRARIES` itself, on exec, for a named program
 (`xnu/redwood.patch`'s `kern.exec_inject`). For this port that is
-`0157-jackpotlte-exec-inject.patch`: a boot-arg (`jtexecinject`) naming the
+`0156-jackpotlte-exec-inject.patch`: a boot-arg (`jtexecinject`) naming the
 library and `backboardd`, parsed with `TUNABLE_STR` and applied in
 `exec_extract_strings()`. A second boot-arg, `jtgllog=1`
-(`0159-jackpotlte-gl-path-log.patch`), puts the loader's decision and the
+(`0158-jackpotlte-gl-path-log.patch`), puts the loader's decision and the
 shim's own log on the kernel console: the kernel prints one `JT INJECT:` line
 per exec, and the shim reads `kern.bootargs` and writes its `say()` lines to
 `/dev/console` as well as stderr. Both are off unless the switch is there.

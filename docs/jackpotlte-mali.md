@@ -426,7 +426,7 @@ Pieces for this port:
      injection string has to come from the kernel's own configuration. A
      boot-arg is the deterministic place: a `LaunchDaemon` setting a sysctl
      would race `backboardd`'s exec, which launchd starts in parallel with it.
-   The injection hook is written: `0157-jackpotlte-exec-inject.patch` adds
+   The injection hook is written: `0156-jackpotlte-exec-inject.patch` adds
    `TUNABLE_STR(exec_inject_conf, 512, "jtexecinject", "")` and
    `exec_inject_env()`, called from `exec_extract_strings()`, which appends
    `DYLD_INSERT_LIBRARIES` for a program whose basename a group names. The value

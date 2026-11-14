@@ -28,11 +28,6 @@ TIMEBASE = 26000000                      # Eureka/mainline oscclk 26 MHz
 GICD, GICC = 0x12301000, 0x12302000      # Eureka gic@123001000
 FB_PHYS = 0xec000000                     # Eureka fb_handover (exynos,dpu_fb_handover)
 FB_W, FB_H = 1080, 2220                  # Eureka panel s6e3fa7 (1080x2220)
-# What the kernel presents, which is not the panel: patches 0124/0156 present
-# the iPhone X mode 1125x2436 (375x812 points at display-scale 3) so UIKit has
-# status-bar geometry. IOMobileFramebuffer and MobileGestalt read the canvas
-# from here, so it is the presented size; the scan-out buffer stays the panel.
-CANVAS_W, CANVAS_H = 1125, 2436
 SOC_BASE = 0x01000000                    # /arm-io ranges base (unchanged from donor)
 
 
@@ -142,13 +137,12 @@ def build():
     # AppleCLCD binds to the S-Boot handover framebuffer at 0xec000000. The
     # panel is the s6e3fa7 at 1080x2220 (Eureka exynos7885-display-lcd.dtsi:
     # 173-193); IOMobileFramebuffer reads canvas-width/height from this node,
-    # so the canvas is the presented 1125x2436, not the panel (0156 squeezes
-    # those rows onto the panel).
+    # so the canvas is the panel.
     arm_io.children.append(mkadt.node('disp0', [
         ('device_type', mkadt.cstr('display-subsystem')),
         ('compatible', mkadt.cstr('samsung,a5xelte-display')),
-        ('canvas-width', mkadt.u32(CANVAS_W)),
-        ('canvas-height', mkadt.u32(CANVAS_H)),
+        ('canvas-width', mkadt.u32(FB_W)),
+        ('canvas-height', mkadt.u32(FB_H)),
     ]))
     # The framebuffer is confirmed live: after the DECON trigger the loader's
     # banner appears at 0xec000000 (phone screen, 2026-11-08). The A5XELTE

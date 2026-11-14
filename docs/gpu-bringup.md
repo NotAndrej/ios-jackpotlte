@@ -169,7 +169,7 @@ no `sweethidtest`; the cmdline was read back out of the image to check).
    `60aba9d`); the `EAGLContext` shim (`userspace/jackpotlte-gl/`) is written
    and its userspace CI green (`43489433732` on `069825f`).  `0155` and the
    `JackpotlteMetal` bundle below are deferred with the Metal route.  What is
-   left: the loader (`0157`) plus a `userdata` write for the two dylibs, then a
+   left: the loader (`0156`) plus a `userdata` write for the two dylibs, then a
    BOOT image and a photo (§9 of that document).
 
 ### Metal route, step 1 in `0155` (written, build-green, not yet on the phone; deferred)

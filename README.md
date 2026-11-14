@@ -79,7 +79,7 @@ now sets `EXTRA_MACHINE_FLAGS: -DJACKPOTLTE=1` for push builds.
 
 The iOS root image (16 GiB, case-sensitive journaled HFS+, label `iOSRoot`,
 built from the iPhone X 16.7.16 DMGs with `tools/mkiosroot.sh`) is complete and
-fsck-verified, and the merged port set (`0001`–`0159`) applies cleanly on a
+fsck-verified, and the merged port set (`0001`–`0158`) applies cleanly on a
 pristine `xnu-8796.141.3` tree in CI. Those are host results, not boot claims.
 
 ## What works on the A8
