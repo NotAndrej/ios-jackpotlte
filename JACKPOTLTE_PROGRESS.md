@@ -3651,3 +3651,64 @@ touches `USERDATA`.  The next evidence is the phone's own console: the expected
 order is the `param` run with `param 0 = 0x6000`, then `request 0x42`, then
 `JackpotlteMali: buffer 1: 134217728 bytes at 0x...` and **no**
 `phystokv_range` panic.
+
+### The black screen after the handoff: the console and the GUI are one buffer (2026-11-14)
+
+The owner's report is that after the shim hands off "the screen goes black like
+no console nothing".  This is a **panel-content** question, and the tree already
+says why it can happen:
+
+* The panel scans out `0xec000000` and **that same buffer is the kernel
+  console**.  `0165`'s build tree carries the packed ADT
+  (`/tmp/opencode/adt53.txt`): `a5xelte-fbcon reg = 0xec000000 0x1400000`,
+  `height = 0x8ac` (2220), `stride = 0x10e0` (4320) — the node `pexpert/arm/pe_serial.c`'s
+  fbcon maps with `ml_io_map_wcomb`.  `disp0` has
+  `compatible = 'samsung,a5xelte-display'`, `canvas-height = 0x8ac`, so
+  `AppleCLCD` binds to the same panel.  `0124` moved *every* XNU framebuffer
+  writer onto `A5_FB_PHYS = 0xec000000`: `sweet_early`'s early console, the
+  `start.s` entry/green/blue blocks, and `AppleCLCD::start`'s `fPhys`.  So the
+  shim banner, the early XNU console, the kernel kprintf console and the
+  IOMobileFramebuffer panel buffer are **one 1080x2220/4320 buffer**.
+* The console therefore cannot lose the screen by itself.  Something has to
+  write black over it, or DECON has to stop scanning.  The writers are:
+  1. `AppleCLCD::present()` (0056/0079/0124) copies each enabled layer's
+     IOSurface over the panel memory.  The console text is overwritten, and a
+     quiet kernel draws no new text, so the screen *is* black afterwards.
+  2. `RequestPowerChange(0)` fades the panel to black (0079); backboardd asks
+     for this on auto-lock.  The tree already has `a5fb_keep_on=1` for
+     `JACKPOTLTE`, which ignores the request and logs `A5XELTE FB: display-off
+     request ignored (a5fb_keep_on)` / `SWEET FB: display off`.
+  3. console muting (`a5fb_noconsole=1`); not in the cmdline, and panics draw
+     regardless.
+* `jt53`'s photo already shows the console surviving the handoff (the whole
+  `param` run, `request 0x42`, the `phystokv_range` panic, `[backboardd]
+  objc[571]`), so the shim→XNU console path is good and the blackout must
+  happen **after** that point, i.e. once userspace presents.
+* **A logged line cannot survive the copy it describes**: the copy overwrites
+  the same memory the console draws into.  So the instrument is two-part, and
+  `0165-jackpotlte-fb-present-log.patch` is exactly that: it logs the first 32
+  copies (`JTFB present N: layer L surface S WxH dst x,y w,h centre 0xRRGGBBAA
+  lit K/N`, a coarse non-black sample of the source) and adds
+  `a5fb_nopresent=1`, which skips the copy so **the console owns the panel**
+  while still logging what was abandoned.
+
+**Next flash is the experiment, not a fix.**  `jt55` = `jt54` (0164's pmap
+cast, 0162's caller chain, 0163's buffer log) + `0165`, and the cmdline adds
+`a5fb_nopresent=1` so the log survives:
+
+* screen keeps the console and the `JTFB present` lines say `lit 0/N` → the
+  black screen is userspace presenting a black frame (the GPU/backboardd path),
+  not a console or handoff failure;
+* screen goes black anyway → DECON/panel or power: read the `SWEET FB: display
+  off` line and retry with `a5fb_keep_on=1`.
+
+`0165` is pushed as `cce3be0`; CI run `43617953811` builds the kernel.  Not yet
+packed or flashed: no fastboot device is attached (2026-11-14 17:5x), so the
+phone has to be put in fastboot first.
+
+**Apple logo in the shim (delegated, in progress).**  A background subagent is
+adding a cmdline-gated Apple logo to the shim's framebuffer console
+(`shim/jackpotlte/**`), matching the iOS userspace logo's position/size on the
+1080x2220 panel, without disturbing the diagnostic text.  It must keep the
+freestanding build gates (`-Werror`, no ABS64 relocations, 16 KiB minimum).  The
+main thread owns this file; the subagent was told not to touch it.
