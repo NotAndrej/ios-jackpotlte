@@ -3028,3 +3028,20 @@ the 4 MiB persistent console ring at the end of `userdata` holds the kernel's lo
 for later (`tools/sweet-log-pull.sh` reads it from a temporarily booted recovery;
 `/home/not_andrej/recovery-public-v1.img` is on the host). Reaching fastboot
 again takes the button combo.
+
+Touch logging is off as of `0158-jackpotlte-touch-quiet-log.patch` (2026-11-14,
+written at the owner's request for the next build). The touch driver printed on
+every path it took -- the contact worker's `A8 TOUCH: press/release/moves/
+i2c_retries/lost_reads/backlog=` lines, the lift watchdog, the IRQ transitions,
+the legacy A5XELTE probe lines -- and `SweetHID.cpp` printed one `SWEET HID:
+touch N down at x,y (n clients)` per contact. All of them now go through one
+switch, `a8touchverbose=1` (the driver's own existing switch, introduced by
+`0150`; off by default). The patch is mechanical (92 `printf(` call sites in
+`bsd/dev/a5xelte_touch.c` renamed to a `jt_log()` macro that checks the switch,
+plus a `sweet_hid_touch_log()` gate in `iokit/Kernel/arm/hid/SweetHID.cpp`), and
+it drops a stale `(read only)` suffix from one legacy probe line. The two files
+it edits were reconstructed by applying the patch series itself, and every
+touch-log string in them is present in the kernel CI `43496663209` built (the
+dead legacy probe's `A5XELTE TOUCH:` strings are absent from it, as the
+`#if defined(JACKPOTLTE)` early return leaves that code unreachable); it applies
+to that tree with no fuzz. Nothing has run on the phone with it.

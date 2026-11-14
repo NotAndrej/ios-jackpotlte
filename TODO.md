@@ -15,6 +15,10 @@ only for approved destructive steps, never bootloaders / EFS (p3) / recovery
 - [ ] ~~Remove the `SWEET HID: clients buttons=... touch=...` spam.~~ Done in
       `0151` (gated behind `sweethidclients=1`); the boot-arg `sweethidtest`
       no longer emits it.
+- [x] ~~Silence the touch logging.~~ Done in `0158` (2026-11-14): every
+      `A8 TOUCH:` / `A5XELTE TOUCH:` line in `bsd/dev/a5xelte_touch.c` and the
+      `SWEET HID: touch ...` contact line in `SweetHID.cpp` route through one
+      switch, `a8touchverbose=1`, off unless set.
 - [ ] I2C4 bus stall (`A8 TOUCH: bus busy stat=0x30, recovering`, SDA held
       low). Recovery works, but the stall itself is still unexplained. Only
       chase if a fast flick still drops events.
