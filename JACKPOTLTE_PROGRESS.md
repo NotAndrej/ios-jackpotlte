@@ -3157,3 +3157,43 @@ crash: it ends before SpringBoard would run. The open question from the entry
 above (does SpringBoard still ask for a bitmap it cannot find, now that the panel
 is presented 1080x2220) still needs a later look at the same boot: a photo of the
 phone once it settles, or the persistent console ring.
+
+### The /dev/null tee was dead on A5XELTE (`0048`), and `jt48` (2026-11-14)
+
+The shim's own lines never appeared on the console, and the cause was not the
+shim. `0048-sweet-devnull-tee.patch` guarded its whole body -- the
+`sweet_null_tee()` helper and the write-path hook in `mmrw()` -- with
+`#if defined(ARM64_BOARD_CONFIG_SWEET)` and nothing else, while
+`makedefs/MakeInc.def:65` defines only `-DARM64_BOARD_CONFIG_A5XELTE` for this
+board. The code was compiled out, and the `jt47` kernel says so: `strings` finds
+`sweetnull` 0 times and `|%s| ` 0 times (the single `backboardd,SpringBoard` is
+`0053`/`0054`'s default, not `0048`'s).
+
+That is what made the display server's stderr unreachable on the A8: `0156`
+loads the GL shim into `backboardd`, its `say()` writes to stderr, launchd points
+that at `/dev/null`, and the tee that would put it on the console was dead. So
+the shim was silent and the GL path could not be read at all -- which is not the
+same as "the shim does nothing".
+
+Fix: widen the guard to the `SWEET || A5XELTE` form the other ported patches use
+(`0041`, `0086`, `0098`, `0109`). CI `43584383469` is green; the kernel
+`ecc708c8ced89980980b3b95a6f21f0012976574b270c59dcfa0cbf02cfd475e` has
+`sweetnull` 1 and `|%s| ` 1.
+
+`jt48` = that kernel inside `jt47`'s exact container (the `jt47` image is the
+stock, so DTB `0xd7800`, the load addresses, the page size and the name are
+unchanged; only kernel and ramdisk differ) with `jt47`'s cmdline -- `jtgllog=1`,
+`jtexecinject=/usr/local/lib/libjackpotlte-gl.dylib,backboardd`, and no
+`a5fb_noconsole`, so the console still draws over iOS. Image:
+`/var/tmp/a8-xnu-jt48-devnulte.img`, 17,537,040 B, sha256
+`328f3176916ca5e566e1d7ba22606e9bec5ff22915a3d7fc03172d34df865253`.
+
+**No `USERDATA` write is needed for this step.** The sparse copy still cannot be
+built (12.1 GB needed, 5.5 GB free), and it is not needed: the shim already on
+the phone predates the `0158` `/dev/console` sink, but its `say()` already goes
+to stderr, so the tee alone surfaces `|backboardd| jackpotlte-gl: EAGLContext is
+ours: N of 10 methods` and the context/surface lines. Whether the GL path is
+reached becomes readable with a BOOT-only flash.
+
+**Not flashed:** the phone left USB (`lsusb` shows no `18d1:`/`04e8:`) before the
+BOOT write could be issued.
