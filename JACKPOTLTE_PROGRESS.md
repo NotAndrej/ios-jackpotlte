@@ -3531,6 +3531,17 @@ ramdisk `0xfd81a0`, second `0x10f00000`, DTB `0xd7800`, `SRPRG03A001KU`, page
 and the mask instruction's encoding (`08 dd 74 92`) is present in `jt53` and
 absent from `jt52`, so the image carries the new kernel.
 
-**Not yet flashed:** the phone is up in `jt52`, not in fastboot, so this is a
-packed image a flash away from being a boot stage.  BOOT only; nothing here
-touches `USERDATA`.
+**Flashed to `BOOT` (2026-11-14 16:16, `/tmp/opencode/gpu/flash-jt53.log`).**
+The owner put the phone in fastboot and
+`fastboot flash BOOT /var/tmp/a8-xnu-jt53-prodid.img` wrote 17142 KB (RC=0),
+then `fastboot reboot` answered OKAY (RC=0).  BOOT only; nothing here touches
+`USERDATA`, and the flash is not by itself a boot stage — the next thing to
+read is what this image prints on the phone.
+
+The phone boots `jt53` now, so the console has to show `JackpotlteMali: param 0
+= 0x6000` (the masked id) rather than `0x60a0`, and then — if the model lookup
+succeeds — a `request 0x42` (`DRM_PANFROST_CREATE_BO`) after the queries:
+Mesa's first BO is the 128 MiB tiler heap (`pan_device.c:118-124`), which this
+client can serve (`MALI_BUFFER_MAX` = 256 MiB, allocator to `JT_GPU_ADDRESS_END`
+= 2^35).  A GL line naming panfrost instead of softpipe, or a `0x42` the client
+refuses, is the wall after that.
