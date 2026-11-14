@@ -3007,10 +3007,16 @@ clean before and after. The BOOT image
 CI `43496663209`'s kernel, the `jt43`/`jt44` cmdline with its Mali gates and
 `a5fb_noconsole=1`, plus
 `jtexecinject=/usr/local/lib/libjackpotlte-gl.dylib,backboardd` (364 bytes, read
-back out of the image). What is left is the two flashes, the boot and a photo.
-The master goes to `USERDATA` raw rather than through a sparse copy: the
-partition is `0x5122FBE00` (20.28 GiB) and the master is 16.0 GiB, while
-re-sparsing would need another 12 GB this host does not have free. The phone
-answers whether dyld honours the injected variable for `backboardd`, and only a
-frame on the panel is a draw claim. `docs/jackpotlte-mali.md` §9 has this with
-the citations.
+back out of the image).
+
+Both went on the phone on 2026-11-14. The root goes to `USERDATA` as an Android
+sparse image, not raw: `img2simg` rebuilt `/var/tmp/IOSRoot.sparse.img`
+(12,158,007,000 B) from the master and `tools/jackpotlte/verify-sparse.py`
+compared every data byte of it against the master before flashing ("OK: 27915
+chunks, 4194304 blocks, every data byte matches"); `fastboot flash USERDATA` then
+sent 47/47 chunks (`USERDATA rc=0`) and `fastboot flash BOOT` the image above
+(`BOOT rc=0`). That write also replaced the partial raw image an interrupted run
+had left in `USERDATA`. What is left is the boot and a photo. The phone answers
+whether dyld honours the injected variable for `backboardd`, and only a frame on
+the panel is a draw claim. `docs/jackpotlte-mali.md` §9 has this with the
+citations.

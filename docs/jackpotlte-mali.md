@@ -478,7 +478,7 @@ The kernel code takes several names per library and several `LIBRARY,NAME...`
 groups separated by `;`, so `,SpringBoard` can be added to the same group if
 CoreAnimation there turns out to need it too.
 
-The steps (1 and 2 are done; the rest are not):
+The steps (1 to 3 are done; step 4 is not):
 
 1. ~~install both dylibs into the root~~ **installed 2026-11-13**:
    `tools/jackpotlte/apply-root-tweaks.sh` patched the master in place; the
@@ -494,17 +494,23 @@ The steps (1 and 2 are done; the rest are not):
    jtmalimetal=1`) and `a5fb_noconsole=1` — with the injection boot-arg above
    appended; read back out of the packed image it is 364 bytes
    (`tools/jackpotlte/make-boot.sh`);
-3. `fastboot flash USERDATA` with the raw master (`/var/tmp/IOSRoot.img`; the
-   partition is 20.28 GiB and the master 16.0 GiB, so no re-sparse is needed),
-   then `fastboot flash BOOT /var/tmp/a8-xnu-jt45-gles-inject.img`, boot,
-   photograph the screen;
-4. read the console for `jackpotlte-gl:` lines — the ones it always prints
-   (`GL_VERSION`, `GL_RENDERER`) and `... is ours: n of 10 methods` — and, for a
-   surface it refuses, that refusal's own line. A frame on the panel is the
-   claim; the lines are only how it is reached.
+3. ~~flash the root and BOOT~~ **flashed 2026-11-14**: the root goes to
+   `USERDATA` as an **Android sparse image**, not raw. `img2simg` made
+   `/var/tmp/IOSRoot.sparse.img` from the master (12,158,007,000 B against the
+   old sparse's 12,145,402,264 — the difference is the two installed dylibs);
+   `tools/jackpotlte/verify-sparse.py RAW SPARSE` walked every chunk and compared
+   every data byte against the master (`OK: 27915 chunks, 4194304 blocks, every
+   data byte matches`) before anything was sent. `fastboot flash USERDATA`
+   followed, 47/47 chunks, `USERDATA rc=0`, then `fastboot flash BOOT` with the
+   image above, `BOOT rc=0`. This also overwrote the partial raw write an
+   interrupted run had left in `USERDATA`;
+4. boot, photograph the screen, and read the console for `jackpotlte-gl:` lines —
+   the ones it always prints (`GL_VERSION`, `GL_RENDERER`) and `... is ours: n of
+   10 methods` — and, for a surface it refuses, that refusal's own line. A frame
+   on the panel is the claim; the lines are only how it is reached.
 
-Nothing has been flashed and nothing has been on the phone. The root carries the
-dylibs as of 2026-11-13; the phone is the blocker.
+Both images are on the phone as of 2026-11-14; nothing has booted yet. The phone
+is the blocker, and a boot is not a frame.
 
 Licence: this is our own code (the chosen route). The reference's `eagl.c` is
 under the same README-only MIT statement as the rest of its Mali userland

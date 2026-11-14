@@ -147,8 +147,9 @@ deleted on 2026-11-10); build results and the image details live in
       stopping on `-[EAGLContext sharegroup]`, which it never replaced — is the
       kind of thing to expect. Written: `userspace/jackpotlte-gl/` builds
       `out/libjackpotlte-gl.dylib` (userspace CI `43489433732`, green on
-      `069825f`) and installs ten `EAGLContext` methods. It is not in the root
-      on the phone and no frame has been drawn: that waits on the loader.
+      `069825f`) and installs ten `EAGLContext` methods. It sits in the root's
+      `/usr/local/lib` and is on the phone as of 2026-11-14 (sparse `USERDATA`
+      flash), but no frame has been drawn: that waits on the loader.
 - [ ] M4 loader + first frame: `0157-jackpotlte-exec-inject.patch` adds the
       boot-arg `jtexecinject`, which the kernel applies in `exec_extract_strings()`
       (kernel CI `43496663209` green on `5d7765c`; the binary carries both
@@ -157,9 +158,11 @@ deleted on 2026-11-10); build results and the image details live in
       root's `/usr/local/lib` on 2026-11-13 (hash-matched to the CI copies), and
       the BOOT image is packed: `/var/tmp/a8-xnu-jt45-gles-inject.img` — the CI
       kernel, the Mali gates plus `a5fb_noconsole=1`, and the injection boot-arg.
-      What is left is the phone: flash `USERDATA` (the raw master) and `BOOT`,
-      boot, photograph. Loaded is not drawn: the first draw claim is a frame on
-      the panel.
+      Both are on the phone since 2026-11-14: the master went to `USERDATA` as a
+      **sparse** image (`img2simg` + `verify-sparse.py`, 47/47 chunks,
+      `USERDATA rc=0`) and the image above to `BOOT` (`BOOT rc=0`). What is left
+      is the phone: boot, photograph, read the console. Loaded is not drawn: the
+      first draw claim is a frame on the panel.
 - [x] M4 GLES, first piece: the OpenGL ES dispatch table of this phone's build
       (2026-11-13). `-[EAGLContext getMacroContextPrivate]` hands out a table
       of function pointers and iOS calls `entry(table[0], args...)`; the offsets
