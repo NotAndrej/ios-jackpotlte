@@ -3384,3 +3384,47 @@ with variant 0 for `panfrost_get_model` to find G71
 (`src/panfrost/lib/pan_props.c:61`; the panfrost kmod never sets `gpu_variant`,
 so `memset` leaves it 0, `panfrost_kmod.c:182`), and a create-BO (`0x42`) has to
 follow the queries at all.
+
+### `0160`: the parameter log, built and packed as `jt52` (2026-11-14)
+
+`0160-jackpotlte-mali-param-log.patch` does exactly that log, in
+`iokit/Kernel/arm/JackpotlteMali.cpp` (created by `0154`):
+
+- `fParams` joins the client's counters (`uint32_t fSubmits, fFailed, fRequests,
+  fParams;`, the same place `fRequests` is counted);
+- in `externalMethod`'s `kPanfrostGetParam` case, each answer is printed for the
+  first 48 parameters of each client:
+  `JackpotlteMali: param %u = %#llx` for an answer and
+  `JackpotlteMali: param %u not answered` when `jackpotlte_mali_parameter`
+  refuses. 48 lines a client is enough for every query the probe makes and few
+  enough not to drown the console.
+
+Validated before spending a CI run: the file was reconstructed from `0154`'s
+creation hunk (627 lines, clean), the patch applies to it with
+`patch -p1 --dry-run` and reverses out of the edited copy, and
+`tools/validate-repo.py` passes the series (160 patches, 0001-0160 contiguous).
+
+CI `43596797092` is green (the patch gate and the stub check included) and built
+`kernel.development.a5xelte` 16,619,360 B with both format strings present and
+`JackpotlteMali: request %#x` still there. The image is
+`/var/tmp/a8-xnu-jt52-paramlog.img`, 17,553,424 B, sha256
+`5edfcd9a546c6816cecfff409a8871ce0d1ce3e145ea4e0358eb72a30c5fe8f1`, packed from
+`/home/not_andrej/Music/hd/boot_a530f_p.img` with `jt51`'s cmdline read back out
+of `/var/tmp/a8-xnu-jt51-dyldfake.img` (`rd=emmcroot0 emmcroot=USERDATA
+emmcwrite=1 ... jtexecinject=...,backboardd dyld_flags=2
+jtexecenv=DYLD_AMFI_FAKE=0x2`), same header as `jt51` (DTB `0xd7800`,
+`SRPRG03A001KU`, second addr `0x10f00000`).
+
+**Not flashed:** no phone is attached (neither `fastboot devices` nor
+`adb devices` lists one). Flash with `fastboot flash BOOT
+/var/tmp/a8-xnu-jt52-paramlog.img` once it is in fastboot. BOOT only: nothing
+here touches `USERDATA`, and the userspace-side fix (an instrumented drm face,
+or an `libOSMesa` built with `MESA_DEBUG`) still waits on the ~28 GiB the packed
+`IOSRoot.img` needs.
+
+What the next photo has to show, in order: `param 0 = 0x6000` (the prod id,
+`0153`'s `jt_gpu_id >> 16`; anything else and `panfrost_get_model` bails on
+`pan_props.c:61` with a message this build cannot print), `param 1`, the
+`MEM_FEATURES`/`MMU_FEATURES` answers, and whether a `request 0x42`
+(create-BO) ever follows them. That last one decides whether the wall is the
+kernel's parameter side or the buffer/VA path.
