@@ -3545,3 +3545,87 @@ Mesa's first BO is the 128 MiB tiler heap (`pan_device.c:118-124`), which this
 client can serve (`MALI_BUFFER_MAX` = 256 MiB, allocator to `JT_GPU_ADDRESS_END`
 = 2^35).  A GL line naming panfrost instead of softpipe, or a `0x42` the client
 refuses, is the wall after that.
+
+### RESULT: `jt53` booted, the mask fixed the model, and the wall is a truncation (2026-11-14 16:21)
+
+Photo `~/Downloads/IMG_20261114_162117357.jpg` (3072x4080) is the console of
+that boot.  Read as one continuous log, oldest at the top: the injected
+`jackpotlte-gl` prints its slot-resolution lines (`sel 27 in 1/8 out 8/8 ->
+0x0`, ...), then `JackpotlteMali: a client opened the GPU`, then
+`request 0x44, 16 bytes` / `param N = ...` pairs, and the first of them is
+
+```
+JackpotlteMali: param 0 = 0x6000
+```
+
+**so `0161` did what it was for: the register now reads as the G71 Mesa's
+exact-match table looks for, and `panfrost_open_device()` passes.**  The whole
+query set follows (`param 2 = 0x3`, `10 = 0x809`, `11 = 0x1`, `12 = 0x2838`,
+`18 = 0xffffffff`, `19 = 0xfff0fff`, `20 = 0xfe3fffff`, `21 = 0`,
+`40 = 0`, `14 = 0x180`, `15 = 0x180`, `13 = 0xa046000`, `39 = 0x180`), each
+`param` preceded by its `request 0x44`.  Then, at the end:
+
+```
+JackpotlteMali: request 0x42, 24 bytes
+Failed to open swap file 2
+panic(cpu 3 caller 0xfffffff007aaabb8): phystokv_range: Illegal PA:
+0x9cdfc000; phys base 0x880000000, size 0x20000000 arm_vm_init.c:
+405
+handshake structure not initialized
+Please go to https://panic.apple.com to report this panic
+Original panic string:
+panic(cpu 3 caller 0xfffffff007aaabb8): phystokv_range: Illegal PA: ...
+```
+
+`request 0x42` is `DRM_PANFROST_CREATE_BO`, i.e. Mesa asked for the 128 MiB
+tiler heap — the first thing after a model is found, so the model wall is down
+and the buffer wall is up.  Two things about the panic itself are worth
+separating from it: **the boot continues past it** (the lines under it are
+`[backboardd] objc[571]` dyld output, and every line below that is ordinary
+userspace logging), and the caller it prints is the panic site inside
+`_phystokv_range.cold.1` (`0xfffffff007aaab70`), not the code that asked, which
+is why one boot could not name the culprit.  `debug=0xc` has no `DB_HALT`, so
+this kernel's panic prints and returns.
+
+**The illegal PA is a 32-bit shift, not a device address.**
+`0x9cdfc000 = (0x89cdfc << 12) & 0xffffffff`, and `0x89cdfc` is the page number
+of PA `0x89cdfc000`, which is 483.9 MiB into the window and therefore *inside*
+`[0x880000000, 0x8a0000000)`.  `ppnum_t` is 32 bits and
+
+```c
+void
+pmap_sync_page_attributes_phys(ppnum_t pp)
+{
+	flush_dcache((vm_offset_t) (pp << PAGE_SHIFT), PAGE_SIZE, TRUE);
+}
+```
+
+(`osfmk/arm/pmap/pmap.c:6877-6881`) shifts it before widening, so **every page
+number above `0x100000` wraps below 4 GiB**, lands under `gPhysBase`
+`0x880000000`, and panics inside `flush_dcache`'s `phystokv_range`.  That is
+every managed page on this port, so *any* cache-attribute sync panics; the
+callers in the built kernel are `vm_fault_page` (`0xfffffff00736092c`),
+`vm_fault_internal` (`0xfffffff007366a24`) and `vm_object_iopl_request`
+(`0xfffffff0073a9b40`) — which is exactly the path a 128 MiB
+`kIOMapWriteCombineCache` `IOBufferMemoryDescriptor` takes.  The built kernel
+agrees with the source: `_pmap_sync_page_attributes_phys`
+(`0xfffffff0073fd8a0`) does `ldr w9, [x9]` / `lsl w0, w0, w9` at
+`0xfffffff0073fd8b4`, a 32-bit shift, where `_cache_sync_page` does
+`lsl x0, x11, x10` and the `pmap_enter_addr` family casts with
+`((pmap_paddr_t) pn) << PAGE_SHIFT`.  So this is one missing cast, not a device
+address used by mistake, and not a porting artifact.
+
+`0164-jackpotlte-pmap-wimg-pa.patch` adds that cast.  The panic is not merely
+noise: `phystokv_range` returns a wrapped VA after panicking, so the caller then
+runs cache maintenance on an address that is not the page it asked about, and
+the attribute change never lands.
+
+Two bring-up aids go in the same build, so one flash answers the next question
+either way: `0162-jackpotlte-pa-caller-trace.patch` prints the frame-pointer
+chain (`JT: illegal PA caller chain: ...`) before both illegal-PA panics, and
+`0163-jackpotlte-mali-buffer-log.patch` logs every accepted create-BO
+(`JackpotlteMali: buffer N: <size> bytes at <gpu address>`).  With `0164` in,
+the expected console for the next image is `JackpotlteMali: buffer 1: 134217728
+bytes at 0x...` after the `0x42`, no panic, and then whatever Mesa does next;
+if the panic is still there, the chain names the flush and `0164` was not the
+whole story.
