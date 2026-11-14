@@ -3888,3 +3888,58 @@ all would say the GL path never reaches the GPU; a submit line is the first
 `jtlogo=1`; flashed **BOOT only** 18:57, rc=0 both (`/tmp/opencode/gpu/flash-jt57.log`).
 It is the image that showed the owner the persisting logo; the next image drops
 the hole patch and keeps the Mali log.
+
+### jt57's photo: the buffer maps, the mapping fails; `0167` fixes the address
+
+`~/Downloads/IMG_20261114_190001561.jpg` (19:00, jt57 swiped through as the owner
+left it; read at 2.2–4x grayscale) shows, in order: the Mali client opens
+(`params 0=0x6000, 1=0x2, 2=0x3, 10=0x999, 11=0x1, 12=0x2030, 18=0xffffffff,
+15=0x100, 13=0x6046000, 39=0x100, 40=0`), `buffer 1: 134217728 bytes at
+0x38100000`, `buffer 2: 4096 bytes at 0x18100000`, then
+**`JackpotlteMali: map 2: ok`** — and only then Mesa's
+`mmap(..., size=4096, prot=3, flags=0x1) failed: Invalid argument`, followed by
+`CRASH backboardd[109] sig 11 code 0x100000001` and a re-exec loop
+(`EAGLContext is ours: 10 of 10 methods`, `JT EXV` repeating).
+
+`map 2: ok` closes the question `0167`(now `0166`) was meant to answer: the
+handle is not stale, `clientMemoryForType()` found and retained the buffer, so
+the `EINVAL` happens after it, inside `IOUserClient::mapClientMemory64()` →
+`createMappingInTask()`.  Reading `xnu/iokit/Kernel/IOUserClient.cpp` and
+`IOMemoryDescriptor.cpp` (tree of CI `43624185705`) gives the mechanism:
+
+- `mapClientMemory64()` takes `clientMemoryForType()`'s options and replaces the
+  low 12 bits (`kIOMapUserOptionsMask = 0xfff`) with the caller's `mapFlags`.
+  `libjackpotlte` calls `IOConnectMapMemory64(..., &mapped, &size, 0)` — mapFlags
+  **0**, so `kIOMapAnywhere` (0x1) is cleared.
+- With no `kIOMapAnywhere`, `IOMemoryDescriptor::memoryReferenceMap()` sets
+  `ref.mapped = addr` (0) and `IOMemoryDescriptorMapAlloc()` calls
+  `vm_map_enter_mem_object()` with `VM_MAP_KERNEL_FLAGS_FIXED()` at address 0.
+  A fixed mapping at 0 in a user task fails, `createMappingInTask()` returns
+  NULL, `is_io_connect_map_memory_into_task()` answers `kIOReturnBadArgument`,
+  and `jt_errno()` turns that into the `-EINVAL` Mesa prints.  (A mapping that
+  *did* land at 0 would also be read as failure by `iokit_map()`, which tests the
+  returned address for NULL.)
+- `clientMemoryForType()` cannot fix this itself: it may set options, but
+  `mapClientMemory64()` overwrites exactly the bits it could set.  So the fix
+  has to be in `mapClientMemory64()`.
+
+`0167-jackpotlte-iokit-map-anywhere.patch` (commit `6e113d6`, CI
+`43625478843`): under `#if defined(JACKPOTLTE)`, `if (atAddress == 0) options |=
+kIOMapAnywhere;` before `createMappingInTask()`, and an `IOLog`
+(`jackpotlte-iokit: map type %u failed: at %#llx, options %#x, length %llu`)
+when the mapping still comes back NULL, so the next boot either succeeds or says
+which type/address/options were refused.  A null `atAddress` from a user client
+is the documented "place it anywhere" request, so this only turns an impossible
+fixed-at-0 mapping into the mapping the client asked for; every other mapping
+is untouched.
+
+`jt58` = `/var/tmp/a8-xnu-jt58-nologo-mali.img`, 17 559 568 B, sha256
+`bf14b81e613ef2e42b9057be5ad2bba8156b52fa01202930c15dddcd7e155f3b` — CI
+`43624185705` (hole patch gone, Mali log), packed and verified but **not
+flashed**: it predates `0167`, so flashing it would spend the phone's flash
+budget on a run that cannot move the GL path.
+
+`jt59` (the next flash) = CI `43625478843` (no hole, Mali log, map fix) + the
+full jt53 cmdline + `jtlogo=1`; packer `/tmp/opencode/jt59-pack.sh` asserts the
+fix is in the built `IOUserClient.cpp`, the hole is absent, the map/job log
+strings are in the kernel binary, and the payload cmdline is intact.
