@@ -3706,9 +3706,21 @@ cast, 0162's caller chain, 0163's buffer log) + `0165`, and the cmdline adds
 packed or flashed: no fastboot device is attached (2026-11-14 17:5x), so the
 phone has to be put in fastboot first.
 
-**Apple logo in the shim (delegated, in progress).**  A background subagent is
-adding a cmdline-gated Apple logo to the shim's framebuffer console
-(`shim/jackpotlte/**`), matching the iOS userspace logo's position/size on the
-1080x2220 panel, without disturbing the diagnostic text.  It must keep the
-freestanding build gates (`-Werror`, no ABS64 relocations, 16 KiB minimum).  The
-main thread owns this file; the subagent was told not to touch it.
+**Apple logo in the shim (done, 2026-11-14, commit `85930cf`).**  The shim can
+now draw the iOS boot logo behind a cmdline token `jtlogo=1` in the *payload*
+cmdline.  Geometry comes from `IMG_20261108_170011203.jpg`: the body outline is
+~1820 px wide for 70.6 mm → the 62.2 mm active area is ~1603 photo px ↔ 1080
+panel px (1 panel px = 1.484 photo px); the logo ink box is 279x335 photo px →
+**190x241 panel px at x 445, y 776** (centre 40.4 % down the panel; the same
+mapping puts the iOS boot bar at ~50 % of panel height, which is where iOS
+draws it).  Cross-checked by eye on the photo: the logo is ~14-18 % of the panel
+width, not the 90-110 px a generic iPhone screenshot would suggest — the photo
+wins.  `shim/jackpotlte/logo.h` holds a 1-bpp array; `gen_logo.py` regenerates
+it from `Apple_logo_black.svg`.  With the token the text console moves to
+y=1041 (logo band 776..1016), so the log can never overwrite the logo; without
+the token the console is byte-for-byte unchanged (y=120, 38 rows).
+`bash shim/jackpotlte/build.sh --probe ...` is `-Werror` clean, 0 ABS64
+relocations, image 58 528 B.  Not yet on hardware: the photo evidence line is
+`logo: on 190x241 at 445,776`, and proving it needs a flash with a real payload
+whose cmdline carries the token (a `--probe` image has no payload, so it always
+prints `logo: off`).
