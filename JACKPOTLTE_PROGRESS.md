@@ -3939,7 +3939,11 @@ is untouched.
 flashed**: it predates `0167`, so flashing it would spend the phone's flash
 budget on a run that cannot move the GL path.
 
-`jt59` (the next flash) = CI `43625478843` (no hole, Mali log, map fix) + the
-full jt53 cmdline + `jtlogo=1`; packer `/tmp/opencode/jt59-pack.sh` asserts the
-fix is in the built `IOUserClient.cpp`, the hole is absent, the map/job log
-strings are in the kernel binary, and the payload cmdline is intact.
+`jt59` = `/var/tmp/a8-xnu-jt59-mapfix.img`, 17 559 568 B, sha256
+`68e93acc986c19600349e36d5c8737e498fddba242392d3a9244e2e9a1fad33b` — CI
+`43625478843` (no hole, Mali log, map fix) + the full jt53 cmdline +
+`jtlogo=1`; packed 19:26 by `/tmp/opencode/jt59-pack.sh`, which asserted the fix
+in the built `IOUserClient.cpp`, the hole absent from `pe_serial.c` and
+`A5XELTE.h`, the `JackpotlteMali: map %u` / `job %u: chain` and
+`jackpotlte-iokit: map type %u failed` strings in the kernel binary, and the
+payload cmdline.
