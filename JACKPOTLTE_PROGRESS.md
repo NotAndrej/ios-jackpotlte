@@ -3950,3 +3950,58 @@ payload cmdline.  Flashed **BOOT only** 19:27, flash rc=0, reboot rc=0
 (`/tmp/opencode/gpu/flash-jt59.log`); no phone evidence yet.  The two lines to
 read: whether the 4 KiB `mmap(..., flags=0x1)` is no longer followed by
 `failed: Invalid argument`, and any new `jackpotlte-iokit: map type ...` line.
+
+### jt59 on the phone: the mapping works, Mesa's context comes up
+
+`~/Downloads/IMG_20261114_193300243.jpg` (19:33) shows the `EINVAL` gone and the
+GL path moving forward for the first time.  Reading bottom-up (newest last
+visible line is the bottom), the *current* backboardd instance does:
+
+```
+JackpotlteMali: request 0x44, 16 bytes
+JackpotlteMali: param 39 = 0x100
+JackpotlteMali: request 0x42, 24 bytes   buffer 1: 134217728 bytes at 0x2c578000
+JackpotlteMali: request 0x42, 24 bytes   buffer 2: 4096 bytes at 0x34578000   map 2: ok
+JackpotlteMali: request 0x42, 24 bytes   buffer 3: 4096 bytes at 0x34580000   map 3: ok
+JackpotlteMali: request 0x42, 24 bytes   buffer 4: 4096 bytes at 0x34590000   map 4: ok
+JackpotlteMali: request 0x42, 24 bytes   buffer 5: 4096 bytes at 0x345a0000   map 5: ok
+JackpotlteMali: request 0x42, 24 bytes   buffer 6: 4096 bytes at 0x345b0000   (not mapped)
+[backboardd] jackpotlte-gl: an OpenGL ES 3 context for CoreAnimation by
+             @loader_path/libOSMesa.8.dylib; OpenGL ES 3.1 Mesa 25.0.7;
+             Mali-G71 (Panfrost)
+[backboardd] -setParameter:0x260 to:0x16f80f404
+SWEET FB: display on
+SWEET FB: backboardd sel 79 ln 2/0 out 0/40 -> 0x0
+SWEET FB: backboardd sel 84 ln 0/4 out 0/0 -> 0x0
+SWEET FB: backboardd sel 68 ln 1/0 out 0/0 -> 0x0
+SWEET SURF: backboardd create ld 7 1080x2220 fmt 0x42475241 bpe 4 bpr 4352
+            planes 0 size 9661440 keys 11 -> 0x0
+```
+
+So `0167` did what it was for: the 4 KiB BOs map (2–5 ok) and Mesa builds a real
+OpenGL ES 3.1 context on Mali-G71/Panfrost inside backboardd, then our IOSurface
+bridge creates the 1080x2220 BGRA scanout surface.  Progress from jt57 is the
+whole gap between "mmap fails" and "CoreAnimation has a GL context and a
+surface".
+
+Above it on the same panel is the *previous* backboardd instance, which got
+further into a frame and then died:
+
+```
+[backboardd] jackpotlte-gl: texture 1 is surface 7, 1080 x 2220, memory shared
+JackpotlteMali: buffer 8/9/10: ... bytes at 0x3xx...   map 8/9/10: ok
+CRASH backboardd[2371] sig 11 code 0x100000001 sub 0x30 slide 0x1dc0000
+CRASH backboardd pc 0x1ef9e9e70 lr 0x1c186bffc sp 0x16f75bde0 fp 0x16f75b9e0 far 0x30
+CRASH backboardd bt 0x1a621f65c 0x1a623d30c 0x1a62f08cc 0x1a62aed78 0x1a620f448
+                    0x1a61d7afc 0x1a61c8bf8 0x1a61bd93c 0x1a61d8344 0x1a61cbc48
+CRASH backboardd reason ns 2 code 0xb (none)
+Process[2371] crashed: backboardd. Too many corpses being created.
+```
+
+`far 0x30` is the fault address: a load through a NULL pointer at offset 0x30,
+i.e. a missing object (context/screen/device), not a bad mapping.  The crash pc
+`0x1ef9e9e70` is outside the shared-cache range the backtrace frames
+(`0x1a62xxxxx`) live in, so it is in a dylib — most likely `libOSMesa.8.dylib`
+or our `libjackpotlte-gl.dylib`.  No `JackpotlteMali: job` line appears within
+reach of the crash, so the GPU has still never been handed a chain: the death is
+in Mesa's texture/first-draw path, before the first submit.
