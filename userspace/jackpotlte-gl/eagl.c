@@ -43,6 +43,7 @@
 #include "jackpotlte_gl.h"
 
 #include <fcntl.h>
+#include <mach-o/dyld.h>
 #include <objc/message.h>
 #include <objc/runtime.h>
 #include <stdarg.h>
@@ -487,6 +488,24 @@ install(void)
    unsigned i, installed = 0;
 
    say("library loaded into the display server");
+   /* Bring-up aid: where this file and the OpenGL ES library beside it were
+    * loaded.  The kernel's crash report prints the faulting pc but no image
+    * base, so these numbers are what turn that pc into an offset into a file
+    * built here (a dylib's __TEXT is at vmaddr 0, so the header address is
+    * the base).  dlsym is not used to find them: a function pointer cast to
+    * void * is a pedantic-C warning, and -Werror is on. */
+   for (uint32_t i = 0, n = _dyld_image_count(); i < n; i++) {
+      const char *where = _dyld_get_image_name(i);
+      const char *base;
+
+      if (where == NULL ||
+          (strstr(where, "OSMesa") == NULL && strstr(where, "jackpotlte") == NULL)) {
+         continue;
+      }
+      base = strrchr(where, '/');
+      say("image %p %s", (void *)_dyld_get_image_header(i),
+          base != NULL ? base + 1 : where);
+   }
    if (eagl == NULL) {
       say("no EAGLContext class: this library is loaded where OpenGL ES is not");
       return;

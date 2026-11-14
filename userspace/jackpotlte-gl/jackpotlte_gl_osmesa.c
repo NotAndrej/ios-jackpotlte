@@ -22,10 +22,12 @@
 #include "jackpotlte_gl.h"
 
 #include <dlfcn.h>
+#include <mach-o/dyld.h>
 #include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 /* GL/osmesa.h's attribute and format values (Mesa 25.0.7, include/GL/osmesa.h;
  * OSMESA_ES_PROFILE is 0004's addition). */
@@ -131,6 +133,22 @@ open_library(void)
       return -1;
    }
    say("the library is %s", lib.where);
+   /* Bring-up aid: where the two images of this GL path sit.  The kernel's
+    * crash report prints the faulting pc but no image base, so these numbers
+    * are what turn that pc into an offset into one of the files built here.
+    * A dylib's __TEXT is at vmaddr 0, so the header address is the base. */
+   for (uint32_t i = 0, n = _dyld_image_count(); i < n; i++) {
+      const char *where = _dyld_get_image_name(i);
+      const char *base;
+
+      if (where == NULL ||
+          (strstr(where, "OSMesa") == NULL && strstr(where, "jackpotlte") == NULL)) {
+         continue;
+      }
+      base = strrchr(where, '/');
+      say("image %p %s", (void *)_dyld_get_image_header(i),
+          base != NULL ? base + 1 : where);
+   }
    return 0;
 }
 
@@ -211,8 +229,28 @@ jackpotlte_gl_destroy(struct jackpotlte_gl *gl)
 jackpotlte_gl_func
 jackpotlte_gl_proc(const char *name)
 {
+   /* Bring-up aid: the first time a name is resolved is the first time the
+    * caller reaches that entry point (gl_slots.c asks once), so this log is
+    * the order CoreAnimation's GL calls are made in -- and the last one before
+    * a crash names the call it died in.  The strings are the table's own
+    * literals; only their addresses are kept. */
+   static const char *seen[96];
+   static unsigned nseen;
+
    if (lib.handle == NULL && open_library() != 0)
       return NULL;
+   if (name != NULL && nseen < sizeof(seen) / sizeof(seen[0])) {
+      unsigned i;
+
+      for (i = 0; i < nseen; i++) {
+         if (strcmp(seen[i], name) == 0)
+            break;
+      }
+      if (i == nseen) {
+         seen[nseen++] = name;
+         say("gl %s", name);
+      }
+   }
    return lib.get_proc(name);
 }
 

@@ -70,12 +70,13 @@ echo "--- arm64 iOS libjackpotlte-gl.dylib: the EAGL shim ---"
 # tools/mesa-jackpotlte/), which this build does not have.  dynamic_lookup is
 # the same arrangement the iOS backend uses for IOKit: the process that loads
 # this one has the library, libobjc and IOSurface.
-# gl_slots.c is generated (tools/jackpotlte/eagl-glue.py); the other two are
-# the OSMesa backend and the EAGLContext methods (eagl.c).
+# gl_slots.c is generated (tools/jackpotlte/eagl-glue.py); the others are
+# the OSMesa backend, the EAGLContext methods (eagl.c) and the crash trap
+# (trap.c) that names the images a crash's addresses are in.
 gl=$repo/userspace/jackpotlte-gl
 xcrun --sdk iphoneos clang "${common[@]}" "${lookup[@]}" -target arm64-apple-ios16.0 \
 	-isysroot "$sdk" -I "$gl" -dynamiclib -o "$out/libjackpotlte-gl.dylib" \
-	"$gl/gl_slots.c" "$gl/jackpotlte_gl_osmesa.c" "$gl/eagl.c"
+	"$gl/gl_slots.c" "$gl/jackpotlte_gl_osmesa.c" "$gl/eagl.c" "$gl/trap.c"
 
 # The point of the generated table: no gl* function is called by name.  iOS's own
 # OpenGLES.framework is in the dyld shared cache and defines every one of them,
