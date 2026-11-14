@@ -1,0 +1,94 @@
+diff --git a/pexpert/pexpert/arm64/A5XELTE.h b/pexpert/pexpert/arm64/A5XELTE.h
+--- a/pexpert/pexpert/arm64/A5XELTE.h
++++ b/pexpert/pexpert/arm64/A5XELTE.h
+@@ -41,6 +41,17 @@
+ #define A5_FB_HEIGHT                  2220
+ #define A5_FB_STRIDE                  4320        /* bytes per row */
+ #define A5_FB_2M_BLOCKS               5           /* 1080*2220*4 = 9,590,400 */
++/*
++ * The iOS userspace boot logo the shim can draw (boot-arg jtlogo=1).
++ * shim/jackpotlte/logo.h is the authority on this rectangle -- these four
++ * values MUST match its LOGO_X/Y/W/H.  pe_serial.c keeps the kernel console
++ * out of it, so the logo survives fbcon's full-panel clear and does not get
++ * kprintf text on top of it.
++ */
++#define A5_LOGO_X                     445
++#define A5_LOGO_Y                     776
++#define A5_LOGO_W                     190
++#define A5_LOGO_H                     241
+ #define A5_ENTRY_MARKER_PHYS          0xc8000000  /* free mid-bank RAM */
+ #define A5_BOOT_MPIDR                 0x100       /* first Cortex-A53 */
+ #define A5_KEYS_DEFAULT               1
+diff --git a/pexpert/arm/pe_serial.c b/pexpert/arm/pe_serial.c
+--- a/pexpert/arm/pe_serial.c
++++ b/pexpert/arm/pe_serial.c
+@@ -774,13 +774,33 @@
+ }
+ #endif
+ 
++/*
++ * The shim may have drawn the Apple boot logo (boot-arg jtlogo=1) into the
++ * panel memory at A5_LOGO_X/Y/W/H.  fbcon_init() clears the whole panel and
++ * the console draws over it, which would erase the logo the moment the kernel
++ * takes the screen.  Nothing is cleared or drawn inside that rectangle
++ * instead, so the shim's pixels stay; jtlogo is what the shim drew behind, so
++ * the two are always set together.  With fbcon_hole 0 this is a no-op.
++ */
++static uint32_t fbcon_hole_x0, fbcon_hole_y0, fbcon_hole_x1, fbcon_hole_y1;
++static int fbcon_hole;
++
++static inline int
++fbcon_in_hole(uint32_t x, uint32_t y)
++{
++	return fbcon_hole && x >= fbcon_hole_x0 && x < fbcon_hole_x1 &&
++	    y >= fbcon_hole_y0 && y < fbcon_hole_y1;
++}
++
+ static void
+ fbcon_clear_row(uint32_t row)
+ {
+ 	for (uint32_t y = row * 16 * FBCON_SCALE; y < (row + 1) * 16 * FBCON_SCALE; y++) {
+ 		volatile uint32_t *line = fbcon_base + y * (fbcon_stride / 4);
+ 		for (uint32_t x = 0; x < fbcon_width; x++) {
+-			line[x] = FBCON_BG;
++			if (!fbcon_in_hole(x, y)) {
++				line[x] = FBCON_BG;
++			}
+ 		}
+ 	}
+ }
+@@ -832,11 +852,14 @@
+ 	uint32_t x0 = fbcon_col * 8 * FBCON_SCALE, y0 = fbcon_row * 16 * FBCON_SCALE;
+ 	for (uint32_t gy = 0; gy < 16; gy++) {
+ 		for (uint32_t sy = 0; sy < FBCON_SCALE; sy++) {
+-			volatile uint32_t *line = fbcon_base + (y0 + gy * FBCON_SCALE + sy) * (fbcon_stride / 4) + x0;
++			uint32_t yy = y0 + gy * FBCON_SCALE + sy;
++			volatile uint32_t *line = fbcon_base + yy * (fbcon_stride / 4) + x0;
+ 			for (uint32_t gx = 0; gx < 8; gx++) {
+ 				uint32_t px = (glyph[gy] & (1u << gx)) ? FBCON_FG : FBCON_BG;
+ 				for (uint32_t sx = 0; sx < FBCON_SCALE; sx++) {
+-					line[gx * FBCON_SCALE + sx] = px;
++					if (!fbcon_in_hole(x0 + gx * FBCON_SCALE + sx, yy)) {
++						line[gx * FBCON_SCALE + sx] = px;
++					}
+ 				}
+ 			}
+ 		}
+@@ -901,6 +924,17 @@
+ #endif
+ 	sweet_early_mark(18, "fbcon mapping returned");
+ 	if (fbcon_base != NULL) {
++#if defined(JACKPOTLTE)
++		/* The shim only draws the logo behind jtlogo=1, so this matches it. */
++		uint32_t jtlogo = 0;
++		if (PE_parse_boot_argn("jtlogo", &jtlogo, sizeof(jtlogo)) && jtlogo != 0) {
++			fbcon_hole_x0 = A5_LOGO_X;
++			fbcon_hole_y0 = A5_LOGO_Y;
++			fbcon_hole_x1 = A5_LOGO_X + A5_LOGO_W;
++			fbcon_hole_y1 = A5_LOGO_Y + A5_LOGO_H;
++			fbcon_hole = 1;
++		}
++#endif
+ 		register_serial_functions(&sweet_fbcon_serial_functions);
+ 	}
+ }
