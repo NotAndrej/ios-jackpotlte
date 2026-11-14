@@ -3871,7 +3871,13 @@ logs `JackpotlteMali: map <handle>: ok|not found` for every mapping request —
 all would say the GL path never reaches the GPU; a submit line is the first
 "the GPU was asked to draw" this port has had.
 
-`jt57` (not flashed as of this writing) = CI `43622937993` (0166 + 0167) + the
-full jt53 cmdline + `jtlogo=1`; packer `/tmp/opencode/jt57-pack.sh` verifies both
-patches in the artifact's tree, the `0167` strings in the kernel, and the packed
-payload cmdline.
+`jt57` = `/var/tmp/a8-xnu-jt57-logohole-maplog.img`, 17 559 568 B, sha256
+`d7da2a99ac904fededc9a44db56abb0b467788008839f889f293caa9b9226c93` — CI
+`43622937993` (0166 + 0167) + the full jt53 cmdline + `jtlogo=1`.  Packer
+`/tmp/opencode/jt57-pack.sh` asserted both patches in the artifact's tree
+(`fbcon_in_hole` in `pe_serial.c`, `A5_LOGO_Y` in `A5XELTE.h`, the 0167
+`map`/`job` strings present in the kernel binary itself) and the packed payload
+cmdline.  Flashed **BOOT only** 18:57, flash rc=0, reboot rc=0
+(`/tmp/opencode/gpu/flash-jt57.log`).  No phone evidence yet — the two things to
+read off the photo are `logo: on 190x241 at 445,776` with no kernel text on the
+logo, and the first `JackpotlteMali: map <n>: ...` / `job ...` lines.
