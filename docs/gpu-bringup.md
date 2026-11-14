@@ -53,9 +53,11 @@ dividers survived the domain being off before anything is reprogrammed.
 Nothing from this branch has been flashed, so M0/M1 have **no device result**.
 (Update 2026-11-09: the `0144` merged into `main` was booted; its console
 printed `g3d_config=0xf status=0xf`, `pll_g3d_con0=0xa1570d11 enable=1
-stable=1`, `GPU_ID=0x60000002 id=0x6000 arch=6 rev=0x2`, and `reset done,
+stable=1`, `GPU_ID=0x60a00002 id=0x60a0 arch=6 rev=0x2`, and `reset done,
 GPU up and cores powered` with `shaders=0x3 tiller=0x1 l2=0x1`, so **M0 and
-M1 are done on hardware**. See `JACKPOTLTE_PROGRESS.md` on `main`.)
+M1 are done on hardware**. See `JACKPOTLTE_PROGRESS.md` on `main`; the id is
+the model's identity only after the arch-rev nibble is masked off, which is
+what patch `0161` does for the DRM parameter — see "jt52 booted" there.)
 
 ### M2 in patch `0152` (green build, image packed, not yet on the phone)
 

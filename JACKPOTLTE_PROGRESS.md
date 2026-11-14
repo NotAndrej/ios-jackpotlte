@@ -2302,7 +2302,7 @@ The combined image (sha256 `4436ac72...`) was flashed at 19:07:06
 JACKPOTLTE MALI: probe start (jtmaliprobe=1)
 JACKPOTLTE MALI: g3d_config=0xf status=0xf
 JACKPOTLTE MALI: pll_g3d_con0=0xa1570d11 enable=1 stable=1
-JACKPOTLTE MALI: GPU_ID=0x60000002 arch=0 rev=0
+JACKPOTLTE MALI: GPU_ID=0x60a00002 arch=0 rev=0
 JACKPOTLTE MALI: present: shaders=0x3 tiller=0x1 l2=0x1
 JACKPOTLTE MALI: reset rawstat=0x100 done=1
 JACKPOTLTE MALI: ready shaders=0x3 tiller=0x1 l2=0x1
@@ -2315,14 +2315,17 @@ What that proves, each against a source:
   `0x1000` PMU window, and the `0x10000` window fixes it.
 - `pll_g3d_con0=0xa1570d11`, bit31 (`PLL_ENABLE`) 1 and bit29 (`PLL_STABLE`) 1
   (`cmucal-sfr.c:712`, `ra.h:37-40`) — PLL_G3D locked.
-- `GPU_ID=0x60000002`.  Linux panfrost splits this as `id = gpu_id >> 16`
-  = **0x6000** and `revision = gpu_id & 0xffff` = 0x0002
+- `GPU_ID=0x60a00002`.  Linux panfrost splits this as `id = gpu_id >> 16`
+  = 0x60a0 and `revision = gpu_id & 0xffff` = 0x0002
   (`drivers/gpu/drm/panfrost/panfrost_gpu.c:316-327`), and its model table
-  maps `0x6000` to **Mali-G71** (`panfrost_gpu.c:222
+  maps **0x6000** — not 0x60a0 — to **Mali-G71** (`panfrost_gpu.c:222
   GPU_MODEL(g71, 0x6000, ...)`), arch 6 = Bifrost v6 (`docs/jackpotlte-mali.md`
-  sec. 4).  The patch's own `arch=%u` was computed from bits 12-15 of the
-  *whole* value and printed 0; that is a log bug, fixed below, not a hardware
-  result.
+  sec. 4).  The difference is the register's arch-rev nibble, which is not part
+  of the product; the vendor's driver masks it (`GPU_ID2_PRODUCT_MODEL`) and
+  this entry originally recorded the value with the `a` missing.  See
+  "jt52 booted" at the end of this file.  The patch's own `arch=%u` was
+  computed from bits 12-15 of the *whole* value and printed 0; that is a log
+  bug, fixed below, not a hardware result.
 - `shaders=0x3` = **2 shader cores** (the A8's G71 is MP2), `tiller=0x1`,
   `l2=0x1`; after the soft reset all three `_READY` masks read back equal, so
   the cores really powered.
@@ -3432,3 +3435,78 @@ What the next photo has to show, in order: `param 0 = 0x6000` (the prod id,
 `MEM_FEATURES`/`MMU_FEATURES` answers, and whether a `request 0x42`
 (create-BO) ever follows them. That last one decides whether the wall is the
 kernel's parameter side or the buffer/VA path.
+
+### jt52 booted: `param 0 = 0x60a0`, and `0161` masks it to the model id (2026-11-14)
+
+The boot the flash was waiting for happened, and its console is in
+`~/Downloads/VID_20261114_143136293.mp4` (190.9 s, 1920x1080@30, taken 14:34).
+Each `backboardd` incarnation prints the shim side of the story and then
+`0160`'s new lines, in this order:
+
+```
+Ibackboardd| Jackpotlte-gl: ...
+JackpotlteMali: a client opened the GPU
+JackpotlteMali: request 0x44, 16 bytes
+JackpotlteMali: param 0 = 0x60a0
+JackpotlteMali: request 0x44, 16 bytes
+JackpotlteMali: param 1 = 0x2
+JackpotlteMali: request 0x44, 16 bytes
+JackpotlteMali: param 2 = 0x3
+JackpotlteMali: request 0x44, 16 bytes
+JackpotlteMali: param 10 = 0x809
+```
+
+read from a 250 % crop of the frames, not from OCR: 1 fps plus tesseract turns
+`0x60a0` into `Gx68aQ`. The four are the first four queries of
+`panfrost_dev_query_props` in its own order — `PROD_ID`, `GPU_REVISION`,
+`SHADER_PRESENT`, `TILER_FEATURES` (`panfrost_kmod.c:177-204`; `0x809` is a
+tiler bin size of 2^9 and 8 levels, which is Bifrost-shaped). The crash loop is
+unchanged to the end of the recording (`SWEET SURF: backboardd` → `CRASH
+backboardd ... sig 11 ... far 0x30` → `JT ENV: backboardd +=
+DYLD_AMFI_FAKE=0x2` respawn), i.e. the refused surface attach is still what
+kills the process, and the GL screen is still `softpipe`.
+
+**So `param 0` is `0x60a0` and that is the whole wall.** What that value is,
+from the vendor kernel for this exact SoC (`/var/tmp/opencode-keep/Eureka-Kernel`,
+`drivers/gpu/arm/b_r26p0`):
+
+- the register's high half is `[arch_major:4][arch_minor:4][arch_rev:4]
+  [product_major:4]` (`GPU_ID2_ARCH_MAJOR_SHIFT` = 28 … `GPU_ID2_PRODUCT_MAJOR_SHIFT`
+  = 16, `mali_kbase_gpu_id.h:39-49`);
+- `0x60a00002` therefore reads as arch major 6, arch minor 0, **arch rev 0xa**,
+  product major 0, version r0p0 status 2 — a Bifrost G71, the same part the
+  11-09 probe read (`~/Downloads/Screenshot_20261109-190908.png`; zoomed, that
+  line says `GPU_ID=0x60a00002 arch=0 rev=0`, and the 11-09 entry above lost
+  the `a`);
+- the vendor's own driver masks the arch bits off before comparing a product id
+  (`GPU_ID2_PRODUCT_MODEL`, `mali_kbase_gpu_id.h:50`, used as `product_id_mask`
+  at `mali_kbase_core_linux.c:2856`), which is why it names this GPU
+  "Mali-G71" rather than failing.
+
+Mesa does not mask: `panfrost_get_model()` is an exact match on both the id and
+the variant (`src/panfrost/lib/pan_props.c:88-98`) and 0x60a0 is not in the
+table, so `dev->model` was NULL, `panfrost_open_device()` took its early bail
+(`pan_device.c:70-72`), `panfrost_create_screen` returned NULL and
+`osmesa_create_gpu_screen()` fell back to softpipe. Nothing was printed because
+the only log on that path is `debug_printf` (`pan_screen.c:905`), which is
+`#if MESA_DEBUG` at *build* time (`src/util/u_debug.h:133`) — the reason this
+boot needed `0160` at all.
+
+`0161-jackpotlte-mali-prod-id.patch` masks in `0153`'s
+`jackpotlte_mali_parameter` case 0: `(jt_gpu_id >> 16) & 0xf00fu`. Param 1
+stays `jt_gpu_id & 0xffff` = 0x2 and `pan_arch(0x6000)` is still 6, so no other
+param changes; the Darwin arch-6 gate is already in
+`tools/mesa-jackpotlte/0002-panfrost-v6-darwin.patch` (`pan_screen.c`'s
+`#ifdef __APPLE__` arm calls `panfrost_cmdstream_screen_init_v6` for
+`dev->arch == 6`), and it sits *after* the model check, so the model was the
+only thing that could refuse the screen.
+
+Nothing downstream of the model check depends on an unasked parameter: the VA
+range panfrost clamps to is the `PANFROST_KMOD_VA_START`/`_END` constants
+(`panfrost_kmod.c:368-379`), not a `DRM_PANFROST_PARAM_*`. So what the next
+boot has to show is `param 0 = 0x6000`, and then a `request 0x42` (create-BO)
+after the queries: Mesa's first BO is the 128 MiB tiler heap
+(`pan_device.c:118-124`, only reachable once a model is found). A `0x42` the
+client answers, and a GL line that names panfrost instead of softpipe, is the
+next wall down; if the params stop at 10 or the `0x42` is refused, the wall is
+the buffer/VA path instead.
