@@ -3808,4 +3808,70 @@ the image).
 `8d9f701d77c27136baa1237a7f101c1f822918697bb554b31aaf15c4f60c1428`: CI kernel
 run `43619257199` (0165, `JTFB present` verified present in the artifact) + the
 full jt53 cmdline + `jtlogo=1`, and no `a5fb_nopresent` this time so the GUI can
-actually come up.  Not flashed yet: no fastboot device attached as of 18:24.
+actually come up.
+
+### jt55 on the phone: console alive, and it is the GL path that stops (2026-11-14)
+
+Flashed 18:24 (BOOT only, rc=0 both; log `/tmp/opencode/gpu/flash-jt55.log`).
+The owner's photo `~/Downloads/IMG_20261114_182722982.jpg` (18:27) is the
+evidence that the empty cmdline was the whole black-screen story:
+
+* `JT EXV: backboardd -> DYLD_AMFI_FAKE=0x2`, `[backboardd] jackpotlte-gl:`,
+  `[backboardd] EAGLContext is ours: 10 of 10 methods` — the injected GL library
+  is loaded and its ten `EAGLContext` methods are installed;
+* `JackpotlteMali: request 0x44` / `param 13 = 0x6046000`, `param 14/15 = 0x100`,
+  `param 39 = 0x100`, `param 40 = 0` — panfrost is asking the GPU about itself and
+  getting answers (`0154`/`0160`);
+* `request 0x42` twice → `buffer 1: 134217728 bytes at 0x118200000`,
+  `buffer 2: 4096 bytes at 0x190200000` — two BOs created (`0163`).  At 1x zoom
+  the two addresses look identical, which is not a bug: `jackpotlte_mali_address()`
+  hands out 64 KB-aligned addresses from a single counter, so they cannot repeat,
+  and both buffers were logged as created.  (The exact low digits are not
+  trustworthy at this text size; the fact that matters is that both create-BOs
+  succeeded.)
+* then `[backboardd] MESA: error: mmap(..., size=4096, prot=3, flags=0x11)
+  failed: Invalid argument` — **this string is ours**: it is the single
+  `mesa_loge` in `tools/mesa-jackpotlte/0001-darwin-drm-standin.patch`
+  (`src/panfrost/lib/kmod/pan_kmod.h`).  So panfrost reached the point of
+  mapping the 4 KiB BO it had just created and the mapping was refused with
+  `EINVAL`.
+
+No Apple logo in that photo: `fbcon_init()` clears the whole panel before the
+first `kprintf`, so the shim's logo (and its moved text) is gone by then — the
+reason for `0166` below.
+
+Where the `EINVAL` comes from, from the sources: `panfrost_bo_mmap()` calls
+`pan_kmod_bo_mmap()` with `MAP_SHARED`, and the Darwin branch of that calls
+`jackpotlte_drm_map(fd, bo->handle, bo->size)`; that returns `MAP_FAILED` only
+when `jt_bo_map()` fails, which returns `-EINVAL` either when `handle == 0` (a
+userspace refusal, never reaching the kernel) or when
+`JackpotlteMaliUserClient::clientMemoryForType(type)` does not find the buffer
+and answers `kIOReturnBadArgument` (`jt_errno()` maps that to `-EINVAL`).  Both
+are `EINVAL`, and the request log stops after 32 requests (`fRequests++ < 32`),
+so the photo cannot say which — hence `0167`.
+
+### 0166: the kernel console keeps out of the logo; 0167: say which buffer maps
+
+`0166-jackpotlte-fbcon-logo-hole.patch` (commit `e74e0e2`, CI `43621677594`
+green, verified in the artifact's `buildtree.tgz`): `A5_LOGO_X/Y/W/H`
+(445/776/190/241, the values in `shim/jackpotlte/logo.h`) in `A5XELTE.h`, and
+`fbcon_hole_*` + `fbcon_in_hole()` in `pexpert/arm/pe_serial.c`, so
+`fbcon_clear_row()` and `fbcon_transmit_data()` skip that rectangle.  The hole
+is only armed by `PE_parse_boot_argn("jtlogo", ...)` under `JACKPOTLTE`, which is
+the same token the shim needs to draw the logo at all; boot args are up
+(`PE_init_platform` at `osfmk/arm/arm_init.c:374`) long before
+`serial_init()` → `fbcon_probe()` (547/1022).  Without `jtlogo` the console is
+byte-for-byte unchanged.
+
+`0167-jackpotlte-mali-map-job-log.patch` (CI `43622937993`): `clientMemoryForType`
+logs `JackpotlteMali: map <handle>: ok|not found` for every mapping request —
+"not found" means the handle was stale, "ok" everywhere means the refusal is in
+`IOConnectMapMemory64` itself — and `kPanfrostSubmit` logs the first 8 job chains
+(`job N: chain ..., buffers ..., requirements ..., seq ...`).  No submit line at
+all would say the GL path never reaches the GPU; a submit line is the first
+"the GPU was asked to draw" this port has had.
+
+`jt57` (not flashed as of this writing) = CI `43622937993` (0166 + 0167) + the
+full jt53 cmdline + `jtlogo=1`; packer `/tmp/opencode/jt57-pack.sh` verifies both
+patches in the artifact's tree, the `0167` strings in the kernel, and the packed
+payload cmdline.
