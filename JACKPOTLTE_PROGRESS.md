@@ -4164,3 +4164,8 @@ sha256 `ea59c9b6f4ce97558b5e0b524e12d57b8b343aa4eb811e2a3813373509780641`;
 matches`.  Free space was the tight part: 13 GB before the remaster and 2.4 GB
 after, so seven old `/var/tmp/jt*` build trees were deleted to keep the host
 from filling up mid-write.
+
+Flashed 21:10-21:19 (`/tmp/opencode/gpu/flash-jt60.log`): USERDATA the 12.16 GB
+sparse, 47/47 chunks, `USERDATA rc=0`, 506 s; then BOOT (`OKAY`), reboot
+`rc=0`.  BOOT only carries the kernel (0168); the dylib came in with USERDATA,
+which is the half that had never been rewritten this way before.
