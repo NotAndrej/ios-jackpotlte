@@ -3510,3 +3510,27 @@ after the queries: Mesa's first BO is the 128 MiB tiler heap
 client answers, and a GL line that names panfrost instead of softpipe, is the
 next wall down; if the params stop at 10 or the `0x42` is refused, the wall is
 the buffer/VA path instead.
+
+**CI and image (2026-11-14 16:03).** Push run `43607040664` is green (the patch
+gate included, "all 161 project patches applied") and built
+`kernel.development.a5xelte`, 16,619,360 B, sha256
+`c0b93094c67e6bb62a0601d130adf61ba7521f198d867e6ac35cd757360bae40`
+(downloaded to `/tmp/opencode/jt53-art/`).  The mask is in the built kernel, not
+only in the patch: `llvm-objdump -d` puts `jackpotlte_mali_parameter` at
+`0xfffffff007481ca0` and its case 0 (`<L5>`, `0xfffffff007481d78`) loads the
+register's high half and masks it — `ldrh w8, [x8, #0xcc2]` then
+`and x8, x8, #0xfffffffffffff00f` — while case 1 (`<L1>`) still loads the low
+half (`ldrh w8, [x8, #0xcc0]`, 0x2).
+
+Packed as `/var/tmp/a8-xnu-jt53-prodid.img`, 17,553,424 B, sha256
+`313278ac90a65bd255df2c6accb4840927e6a2fd148a71fe742709712856fc04`, from
+`/home/not_andrej/Music/hd/boot_a530f_p.img` with `jt52`'s cmdline byte for byte
+(read back out of the packed image) and `jt52`'s header (kernel `0xcb50`,
+ramdisk `0xfd81a0`, second `0x10f00000`, DTB `0xd7800`, `SRPRG03A001KU`, page
+2048).  Exactly 181 bytes differ from `jt52` and all of them are in the payload,
+and the mask instruction's encoding (`08 dd 74 92`) is present in `jt53` and
+absent from `jt52`, so the image carries the new kernel.
+
+**Not yet flashed:** the phone is up in `jt52`, not in fastboot, so this is a
+packed image a flash away from being a boot stage.  BOOT only; nothing here
+touches `USERDATA`.
