@@ -3946,4 +3946,7 @@ budget on a run that cannot move the GL path.
 in the built `IOUserClient.cpp`, the hole absent from `pe_serial.c` and
 `A5XELTE.h`, the `JackpotlteMali: map %u` / `job %u: chain` and
 `jackpotlte-iokit: map type %u failed` strings in the kernel binary, and the
-payload cmdline.
+payload cmdline.  Flashed **BOOT only** 19:27, flash rc=0, reboot rc=0
+(`/tmp/opencode/gpu/flash-jt59.log`); no phone evidence yet.  The two lines to
+read: whether the 4 KiB `mmap(..., flags=0x1)` is no longer followed by
+`failed: Invalid argument`, and any new `jackpotlte-iokit: map type ...` line.
