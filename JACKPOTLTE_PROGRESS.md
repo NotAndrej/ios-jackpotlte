@@ -4231,3 +4231,8 @@ sha256 `7025a913ddeea058d2ea1bfe83e7d46362f5072a02c8e72d0e5a2b32fc06d353`,
 `verify-sparse.py` "every data byte matches".  The 3.2 GB of extracted cache
 files were deleted first (they come out of the image in three minutes and the
 remaster needs the room).
+
+Flashed 21:53-22:02 (`/tmp/opencode/gpu/flash-jt61.log`): USERDATA the 12.16 GB
+sparse (`7025a913...`), 47/47 chunks, `USERDATA rc=0`, 507 s, reboot `rc=0`.
+**BOOT was not written** - the kernel is jt60's, unchanged, so this iteration
+is a userspace-only change and the only destructive step was the iOS root.
