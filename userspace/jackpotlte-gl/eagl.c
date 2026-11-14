@@ -6,27 +6,38 @@
  * CoreAnimation's render server draws with Metal, or else with OpenGL ES, or
  * else with its own software rasteriser (CA::WindowServer::EAGLServer::renderer()).
  * With no Metal plug-in on this phone (docs/jackpotlte-mali.md section 6), it
- * reaches for OpenGL ES, and asks an EAGLContext for seven things.  All seven
- * are replaced here, so the context it gets is one of the library behind this
- * file (jackpotlte_gl_osmesa.c: Mesa's OSMesa with the phone's Mali) rather than
- * Apple's driver:
+ * reaches for OpenGL ES, and asks an EAGLContext for a handful of things.  All
+ * of them are replaced here, so the context it gets is one of the library
+ * behind this file (jackpotlte_gl_osmesa.c: Mesa's OSMesa with the phone's
+ * Mali) rather than Apple's driver:
  *
  *   -initWithAPI:properties:   makes a context of the OpenGL ES version asked for
+ *                              (and the -sharegroup and -sharedWithCompute:
+ *                              forms of the same initialiser)
  *   -API                       that version
  *   -sharegroup                nil: nothing here shares a context (CoreImage asks;
  *                              its own accessor reads ivars of an object this
  *                              shim never initialised, so it must be answered)
  *   -setParameter:to:          noted; the value is not read
+ *   -getParameter:to:          the same, in the other direction
  *   -getMacroContextPrivate    the table of functions the caller invokes as
  *                              entry(table[0], arguments...), at the offsets of
  *                              the build's own OpenGLES (eagl_slots.txt); entry
  *                              0 is this context, the rest are gl_slots.c's
  *   -texImageIOSurface:...     the texture bound to the target is to show what
- *                              the IOSurface holds
+ *                              the IOSurface holds (both forms the build has,
+ *                              with and without `invert`)
  *   -attachImage:toCoreSurface:invertedRender:
  *                              the texture bound to the target is to be the
  *                              surface's memory (CoreAnimation then draws into
  *                              it), or to show it once
+ *   -renderbufferStorage:fromDrawable:
+ *                              noted, YES: whether this build takes that path
+ *   -presentRenderbuffer:      (and its atTime: and afterMinimumDuration: forms)
+ *                              the frame the caller has drawn is handed to the
+ *                              GPU - see below
+ *   +setCurrentContext:        noted; every GL entry already carries its context
+ *   +currentContext            what they noted
  *   -dealloc                   the context goes
  *
  * Both surface methods go through the same path: the surface's ID is handed to
@@ -36,9 +47,17 @@
  * and refused rather than copied: a copy would be a different picture and a
  * different bug.
  *
+ * The present methods are what makes a drawn frame exist.  Apple's context
+ * presents by handing its renderbuffer to the window system; there is no
+ * renderbuffer here, and the surface CoreAnimation drew into is composited by
+ * the kernel's own display path (0046), so the part left to do is what Apple's
+ * driver does first: get the batch to the GPU.  Mesa submits on a flush, and a
+ * GL client that only draws submits nothing - which is what the jt60 log shows,
+ * ending at glDrawElements with no job behind it.
+ *
  * Nothing here is called by Apple's code paths that this shim does not replace:
  * the class's ivars are never filled in (there is no call to super's -init), so
- * every method CoreAnimation reaches must be one of the seven above.
+ * every method CoreAnimation reaches must be one of the ones above.
  */
 #include "jackpotlte_gl.h"
 
@@ -176,6 +195,24 @@ jackpotlte_gl_use(void *context)
       jackpotlte_gl_make_current(e->gl);
 }
 
+/*
+ * The dispatch table's drawing entries call this after the call is passed on.
+ * Apple's driver submits a draw to the GPU as it is made; the library behind
+ * this table keeps it in a batch until a flush, so a renderer that never
+ * flushes (the display server, jt60: a full first frame drawn, no job to the
+ * GPU) would leave its frame in the library's command stream forever.  One
+ * flush per draw is expensive and is exactly what a bring-up wants: a drawn
+ * frame becomes a real one, and the driver's own job log says so.
+ */
+void
+jackpotlte_gl_after_draw(void)
+{
+   void (*flush)(void) = (void (*)(void))jackpotlte_gl_proc("glFlush");
+
+   if (flush != NULL)
+      flush();
+}
+
 static struct jackpotlte_eagl *
 context_of(id object)
 {
@@ -271,6 +308,18 @@ my_initWithAPI_sharegroup(id self, SEL selector, unsigned long api, id sharegrou
    return make_context(self, api);
 }
 
+/* The third form: the same context, with a flag that asks for a sharegroup
+ * that is only a compute context's.  Nothing here shares, so the flag is
+ * noted by being ignored. */
+static id
+my_initWithAPI_sharedWithCompute(id self, SEL selector, unsigned long api,
+                                 BOOL compute)
+{
+   (void)selector;
+   (void)compute;
+   return make_context(self, api);
+}
+
 static unsigned long
 my_API(id self, SEL selector)
 {
@@ -322,6 +371,21 @@ my_getMacroContextPrivate(id self, SEL selector)
 
    (void)selector;
    return e != NULL ? e->table : NULL;
+}
+
+static unsigned long
+my_getParameter(id self, SEL selector, unsigned long parameter, void *value)
+{
+   static unsigned noted;
+
+   (void)self;
+   (void)selector;
+   (void)value;
+   if (noted < 16) {
+      say("-getParameter:%#lx to:%p: not answered", parameter, value);
+      noted++;
+   }
+   return 0;
 }
 
 /* The name of the texture bound to GL_TEXTURE_2D, or 0. */
@@ -410,6 +474,147 @@ my_attachImage(id self, SEL selector, unsigned long target, IOSurfaceRef surface
    return surface_is_texture(e, surface, target, "-attachImage:");
 }
 
+/* The same surface method without `invert`, which the build also has.  The
+ * caller means the same thing; the flag only says how the surface's rows are
+ * handed to the sampler, and Apple's own header spells both. */
+static BOOL
+my_texImageIOSurface_plane(id self, SEL selector, IOSurfaceRef surface,
+                           unsigned long target, unsigned long internal,
+                           int width, int height, unsigned long format,
+                           unsigned long type, unsigned int plane)
+{
+   struct jackpotlte_eagl *e = context_of(self);
+
+   (void)selector;
+   (void)internal;
+   (void)width;
+   (void)height;
+   (void)format;
+   (void)type;
+   (void)plane;
+   if (e == NULL || surface == NULL)
+      return NO;
+   return surface_is_texture(e, surface, target, "-texImageIOSurface:...plane:");
+}
+
+/*
+ * -presentRenderbuffer: and the two timed forms.  What a present has to do
+ * here is the flush: the library's driver submits a batch to the GPU on one,
+ * and CoreAnimation draws into an IOSurface that the kernel's display path
+ * composites by itself, so there is nothing to swap and nowhere to copy - the
+ * frame exists once the GPU has written it.  A draw with no flush after it
+ * leaves the batch in the library's command stream, which is what the jt60
+ * log ends in (glDrawElements, then nothing, and no JackpotlteMali job).
+ *
+ * The first few presents are logged with the GL error, if any; after that one
+ * in six hundred, which is enough to say a frame rate is going by.
+ */
+static BOOL
+present_target(id self, SEL selector, unsigned long target, const char *method)
+{
+   struct jackpotlte_eagl *e = context_of(self);
+   static unsigned presents;
+
+   (void)selector;
+   if (e == NULL) {
+      if (presents++ < 8)
+         say("%s: no context of ours", method);
+      return NO;
+   }
+   jackpotlte_gl_make_current(e->gl);
+   {
+      void (*flush)(void) = (void (*)(void))jackpotlte_gl_proc("glFlush");
+      unsigned (*get_error)(void) =
+          (unsigned (*)(void))jackpotlte_gl_proc("glGetError");
+
+      if (flush != NULL)
+         flush();
+      if (presents < 8) {
+         unsigned error = get_error != NULL ? get_error() : 0;
+
+         if (error != 0)
+            say("%s: target %#lx, flush left GL error %#x", method, target, error);
+         else
+            say("%s: target %#lx, flushed", method, target);
+      } else if (presents % 600 == 0) {
+         say("%s: %u presents", method, presents + 1);
+      }
+   }
+   presents++;
+   return YES;
+}
+
+static BOOL
+my_presentRenderbuffer(id self, SEL selector, unsigned long target)
+{
+   return present_target(self, selector, target, "-presentRenderbuffer:");
+}
+
+static BOOL
+my_presentRenderbuffer_atTime(id self, SEL selector, unsigned long target,
+                              double when)
+{
+   (void)when;
+   return present_target(self, selector, target, "-presentRenderbuffer:atTime:");
+}
+
+static BOOL
+my_presentRenderbuffer_afterMinimumDuration(id self, SEL selector,
+                                            unsigned long target,
+                                            double duration)
+{
+   (void)duration;
+   return present_target(self, selector, target,
+                         "-presentRenderbuffer:afterMinimumDuration:");
+}
+
+/*
+ * -renderbufferStorage:fromDrawable: is the path where CoreAnimation draws
+ * to the screen through the context instead of into a surface.  There is no
+ * renderbuffer of Apple's here and saying NO could stop a renderer that would
+ * otherwise draw, so this says YES and records the drawable: if the log shows
+ * it, the surface path was not the one taken and the pixels of this one have
+ * nowhere to go yet.
+ */
+static BOOL
+my_renderbufferStorage(id self, SEL selector, unsigned long target, id drawable)
+{
+   static unsigned noted;
+
+   (void)self;
+   (void)selector;
+   if (noted < 8) {
+      say("-renderbufferStorage:%#lx fromDrawable:%s", target,
+          drawable != nil ? class_getName(object_getClass(drawable)) : "nil");
+      noted++;
+   }
+   return YES;
+}
+
+/*
+ * +setCurrentContext: and +currentContext.  Apple's pair keeps the context in
+ * the thread's own storage; here every GL entry already carries the context it
+ * means as the table's first argument, so nothing reads this back - the two
+ * only have to be consistent with each other and stay out of Apple's engine.
+ */
+static _Thread_local id current_context;
+
+static void
+my_setCurrentContext(id self, SEL selector, id context)
+{
+   (void)self;
+   (void)selector;
+   current_context = context;
+}
+
+static id
+my_currentContext(id self, SEL selector)
+{
+   (void)self;
+   (void)selector;
+   return current_context;
+}
+
 /*
  * objc_msgSendSuper, read as what is wanted here.  <objc/message.h> declares it
  * as `void objc_msgSendSuper(void)` - Apple's form, which says the arguments
@@ -455,13 +660,21 @@ union method_prototype {
    IMP imp;
    id (*initialise)(id, SEL, unsigned long, id);          /* with properties or a sharegroup */
    id (*initialise_simple)(id, SEL, unsigned long);
+   id (*initialise_compute)(id, SEL, unsigned long, BOOL);
    unsigned long (*api)(id, SEL);
    id (*sharegroup)(id, SEL);
    unsigned long (*parameter)(id, SEL, unsigned long, void *);
    void *(*macro_context)(id, SEL);
    BOOL (*image)(id, SEL, IOSurfaceRef, unsigned long, unsigned long, int, int,
                  unsigned long, unsigned long, unsigned int, BOOL);
+   BOOL (*image_plane)(id, SEL, IOSurfaceRef, unsigned long, unsigned long, int,
+                       int, unsigned long, unsigned long, unsigned int);
    BOOL (*attach)(id, SEL, unsigned long, IOSurfaceRef, BOOL);
+   BOOL (*present)(id, SEL, unsigned long);
+   BOOL (*present_time)(id, SEL, unsigned long, double);
+   BOOL (*storage)(id, SEL, unsigned long, id);
+   void (*set_context)(id, SEL, id);
+   id (*get_context)(id, SEL);
    void (*dispose)(id, SEL);
 };
 
@@ -475,14 +688,33 @@ install(void)
       { "initWithAPI:properties:", { .initialise = my_initWithAPI_properties } },
       { "initWithAPI:", { .initialise_simple = my_initWithAPI } },
       { "initWithAPI:sharegroup:", { .initialise = my_initWithAPI_sharegroup } },
+      { "initWithAPI:sharedWithCompute:",
+        { .initialise_compute = my_initWithAPI_sharedWithCompute } },
       { "API", { .api = my_API } },
       { "sharegroup", { .sharegroup = my_sharegroup } },
       { "setParameter:to:", { .parameter = my_setParameter } },
+      { "getParameter:to:", { .parameter = my_getParameter } },
       { "getMacroContextPrivate", { .macro_context = my_getMacroContextPrivate } },
       { "texImageIOSurface:target:internalFormat:width:height:format:type:plane:invert:",
         { .image = my_texImageIOSurface } },
+      { "texImageIOSurface:target:internalFormat:width:height:format:type:plane:",
+        { .image_plane = my_texImageIOSurface_plane } },
       { "attachImage:toCoreSurface:invertedRender:", { .attach = my_attachImage } },
+      { "renderbufferStorage:fromDrawable:",
+        { .storage = my_renderbufferStorage } },
+      { "presentRenderbuffer:", { .present = my_presentRenderbuffer } },
+      { "presentRenderbuffer:atTime:",
+        { .present_time = my_presentRenderbuffer_atTime } },
+      { "presentRenderbuffer:afterMinimumDuration:",
+        { .present_time = my_presentRenderbuffer_afterMinimumDuration } },
       { "dealloc", { .dispose = my_dealloc } },
+   };
+   static const struct {
+      const char *name;
+      union method_prototype ours;
+   } class_methods[] = {
+      { "setCurrentContext:", { .set_context = my_setCurrentContext } },
+      { "currentContext", { .get_context = my_currentContext } },
    };
    Class eagl = (Class)objc_getClass("EAGLContext");
    unsigned i, installed = 0;
@@ -524,6 +756,18 @@ install(void)
          say("EAGLContext has no -%s", methods[i].name);
       }
    }
+   for (i = 0; i < sizeof(class_methods) / sizeof(class_methods[0]); i++) {
+      SEL selector = sel_registerName(class_methods[i].name);
+      Method method = class_getClassMethod(eagl, selector);
+
+      if (method != NULL) {
+         method_setImplementation(method, class_methods[i].ours.imp);
+         installed++;
+      } else {
+         say("EAGLContext has no +%s", class_methods[i].name);
+      }
+   }
    say("EAGLContext is ours: %u of %u methods", installed,
-       (unsigned)(sizeof(methods) / sizeof(methods[0])));
+       (unsigned)((sizeof(methods) + sizeof(class_methods)) /
+                  sizeof(methods[0])));
 }

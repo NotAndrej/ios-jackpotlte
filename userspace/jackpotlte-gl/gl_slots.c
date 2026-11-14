@@ -699,6 +699,8 @@ jgl_000b(void *context, GLbitfield mask)
    if (real == NULL)
       return;
    real(mask);
+   /* glClear draws: hand it to the GPU (see SUBMIT) */
+   jackpotlte_gl_after_draw();
 }
 
 typedef void (*jgl_t_000d)(GLfloat, GLfloat, GLfloat, GLfloat);
@@ -924,6 +926,8 @@ jgl_0042(void *context, GLenum mode, GLint first, GLsizei count)
    if (real == NULL)
       return;
    real(mode, first, count);
+   /* glDrawArrays draws: hand it to the GPU (see SUBMIT) */
+   jackpotlte_gl_after_draw();
 }
 
 typedef void (*jgl_t_0044)(GLenum, GLsizei, GLenum, const void *);
@@ -939,6 +943,8 @@ jgl_0044(void *context, GLenum mode, GLsizei count, GLenum type, const void *ind
    if (real == NULL)
       return;
    real(mode, count, type, indices);
+   /* glDrawElements draws: hand it to the GPU (see SUBMIT) */
+   jackpotlte_gl_after_draw();
 }
 
 typedef void (*jgl_t_0049)(GLenum);
@@ -2124,6 +2130,8 @@ jgl_0196(void *context, GLenum mode, GLuint start, GLuint end, GLsizei count, GL
    if (real == NULL)
       return;
    real(mode, start, end, count, type, indices);
+   /* glDrawRangeElements draws: hand it to the GPU (see SUBMIT) */
+   jackpotlte_gl_after_draw();
 }
 
 typedef void (*jgl_t_01b7)(GLenum, GLint, GLint, GLsizei, GLsizei, GLsizei, GLint, GLenum, GLenum, const void *);
@@ -4344,6 +4352,8 @@ jgl_02f4(void *context, GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1, GLin
    if (real == NULL)
       return;
    real(srcX0, srcY0, srcX1, srcY1, dstX0, dstY0, dstX1, dstY1, mask, filter);
+   /* glBlitFramebuffer draws: hand it to the GPU (see SUBMIT) */
+   jackpotlte_gl_after_draw();
 }
 
 typedef void (*jgl_t_02f5)(GLenum, GLsizei, GLenum, GLsizei, GLsizei);
@@ -4404,6 +4414,8 @@ jgl_02fb(void *context, GLenum mode, GLint first, GLsizei count, GLsizei instanc
    if (real == NULL)
       return;
    real(mode, first, count, instancecount);
+   /* glDrawArraysInstanced draws: hand it to the GPU (see SUBMIT) */
+   jackpotlte_gl_after_draw();
 }
 
 typedef void (*jgl_t_02fc)(GLenum, GLsizei, GLenum, const void *, GLsizei);
@@ -4419,6 +4431,8 @@ jgl_02fc(void *context, GLenum mode, GLsizei count, GLenum type, const void *ind
    if (real == NULL)
       return;
    real(mode, count, type, indices, instancecount);
+   /* glDrawElementsInstanced draws: hand it to the GPU (see SUBMIT) */
+   jackpotlte_gl_after_draw();
 }
 
 typedef void (*jgl_t_0301)(GLuint);
@@ -4509,6 +4523,8 @@ jgl_0307(void *context, GLenum buffer, GLint drawbuffer, const GLint *value)
    if (real == NULL)
       return;
    real(buffer, drawbuffer, value);
+   /* glClearBufferiv draws: hand it to the GPU (see SUBMIT) */
+   jackpotlte_gl_after_draw();
 }
 
 typedef void (*jgl_t_0308)(GLenum, GLint, const GLuint *);
@@ -4524,6 +4540,8 @@ jgl_0308(void *context, GLenum buffer, GLint drawbuffer, const GLuint *value)
    if (real == NULL)
       return;
    real(buffer, drawbuffer, value);
+   /* glClearBufferuiv draws: hand it to the GPU (see SUBMIT) */
+   jackpotlte_gl_after_draw();
 }
 
 typedef void (*jgl_t_0309)(GLenum, GLint, const GLfloat *);
@@ -4539,6 +4557,8 @@ jgl_0309(void *context, GLenum buffer, GLint drawbuffer, const GLfloat *value)
    if (real == NULL)
       return;
    real(buffer, drawbuffer, value);
+   /* glClearBufferfv draws: hand it to the GPU (see SUBMIT) */
+   jackpotlte_gl_after_draw();
 }
 
 typedef void (*jgl_t_030a)(GLenum, GLint, GLfloat, GLint);
@@ -4554,6 +4574,8 @@ jgl_030a(void *context, GLenum buffer, GLint drawbuffer, GLfloat depth, GLint st
    if (real == NULL)
       return;
    real(buffer, drawbuffer, depth, stencil);
+   /* glClearBufferfi draws: hand it to the GPU (see SUBMIT) */
+   jackpotlte_gl_after_draw();
 }
 
 typedef const GLubyte * (*jgl_t_030b)(GLenum, GLuint);

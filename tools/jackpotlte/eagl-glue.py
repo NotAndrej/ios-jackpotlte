@@ -84,6 +84,27 @@ EXTRA = {
          "glGetFramebufferParameteri"),
 }
 
+# The calls that put pixels into a framebuffer.  Apple's driver hands each one
+# to the GPU as it is made; the library behind this table keeps them in a batch
+# and submits that on a flush.  A renderer that draws but never flushes would
+# therefore have its frame drawn nowhere -- which is what jt60 showed
+# (backboardd drew a whole first frame and no job ever reached the driver) --
+# so these entries flush after the call.  It costs the batching and is a
+# bring-up aid: what it buys is that a drawn frame becomes a real one.
+SUBMIT = {
+    "glBlitFramebuffer",
+    "glClear",
+    "glClearBufferfi",
+    "glClearBufferfv",
+    "glClearBufferiv",
+    "glClearBufferuiv",
+    "glDrawArrays",
+    "glDrawArraysInstanced",
+    "glDrawElements",
+    "glDrawElementsInstanced",
+    "glDrawRangeElements",
+}
+
 
 def parse_registry(path):
     """name -> (return type, [(type, name)])."""
@@ -233,7 +254,7 @@ jgl_%04x(void *context%s%s)
       real = (jgl_t_%04x)jackpotlte_gl_proc(%s);%s
    if (real == NULL)
       %s
-   %sreal(%s);
+   %sreal(%s);%s
 }
 """ % (ret if ret else "void", index, arg_types(params),
        ret if ret else "void", index,
@@ -242,7 +263,9 @@ jgl_%04x(void *context%s%s)
        "" if call == name else "\n   /* %s is spelled %s here */" % (name, call),
        "return;" if not ret or ret == "void" else "return 0;",
        "" if not ret or ret == "void" else "return ",
-       args))
+       args,
+       "\n   /* %s draws: hand it to the GPU (see SUBMIT) */\n   "
+       "jackpotlte_gl_after_draw();" % name if call in SUBMIT else ""))
 
     f.write("\nvoid\njackpotlte_gl_fill_table(void *table[JACKPOTLTE_GL_SLOTS])\n{\n")
     for off in sorted(entries):

@@ -33,6 +33,15 @@ jackpotlte_gl_func jackpotlte_gl_proc(const char *name);
  */
 void jackpotlte_gl_use(void *context);
 
+/*
+ * Called by the dispatch table's drawing entries after the call is passed on
+ * (gl_slots.c, from the SUBMIT set in tools/jackpotlte/eagl-glue.py): the
+ * library keeps a draw in a batch until a flush, and Apple's driver does not,
+ * so without this a renderer that draws and never flushes draws nowhere.
+ * Bring-up aid; costs the batching.
+ */
+void jackpotlte_gl_after_draw(void);
+
 /* An OpenGL ES 2 or 3 context of the library, or NULL. */
 struct jackpotlte_gl *jackpotlte_gl_create(int version);
 
