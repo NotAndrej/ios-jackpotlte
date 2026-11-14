@@ -3629,3 +3629,18 @@ the expected console for the next image is `JackpotlteMali: buffer 1: 134217728
 bytes at 0x...` after the `0x42`, no panic, and then whatever Mesa does next;
 if the panic is still there, the chain names the flush and `0164` was not the
 whole story.
+
+**CI and image (`jt54`, 2026-11-14 17:15).** Push run `43613384741` is green
+(163 patches) and built `kernel.development.a5xelte`, 16,619,440 B (+80 over
+`jt53`, the three edits), sha256
+`611961c1ab123d28b7b46a5d5460df386dab19510d31638f21edfe40eb1af522`.  All three
+changes are in the binary, not only in the patches: the two new strings are
+present (`JT: illegal PA caller chain:`, `JackpotlteMali: buffer %u: %llu bytes
+at %#llx`), `_pmap_sync_page_attributes_phys` (`0xfffffff0073fd8a0`) now does
+`lsl x0, x10, x9` where it did `lsl w0, w0, w9`, and `0161`'s mask is still
+there (`and x8, x8, #0xfffffffffffff00f` at `0xfffffff007481d80`).  Packed as
+`/var/tmp/a8-xnu-jt54-wimgfix.img`, 17,553,424 B, sha256
+`c49b08f3055b09eec9f2e6c9b9d0f6e7fc7d16453dd67d96dac68939b6b9d63b`, from the
+same `boot_a530f_p.img` and `jt53`'s cmdline byte for byte; header matches
+`jt53` apart from the ramdisk size (`0xfd81f0` vs `0xfd81a0`).  Not flashed yet
+— the phone has to be put back in fastboot.
