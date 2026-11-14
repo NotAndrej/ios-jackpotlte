@@ -3415,12 +3415,16 @@ emmcwrite=1 ... jtexecinject=...,backboardd dyld_flags=2
 jtexecenv=DYLD_AMFI_FAKE=0x2`), same header as `jt51` (DTB `0xd7800`,
 `SRPRG03A001KU`, second addr `0x10f00000`).
 
-**Not flashed:** no phone is attached (neither `fastboot devices` nor
-`adb devices` lists one). Flash with `fastboot flash BOOT
-/var/tmp/a8-xnu-jt52-paramlog.img` once it is in fastboot. BOOT only: nothing
-here touches `USERDATA`, and the userspace-side fix (an instrumented drm face,
-or an `libOSMesa` built with `MESA_DEBUG`) still waits on the ~28 GiB the packed
+**Flashed (2026-11-14 14:09):** `fastboot flash BOOT
+/var/tmp/a8-xnu-jt52-paramlog.img` returned RC=0 (product `jackpotlte`, `BOOT`
+0x2000000 = 32 MiB, image 17,553,424 B, sha256 read back `5edfcd9a...fe8f1`),
+`fastboot reboot` OKAY, and the device left fastboot. BOOT only: nothing here
+touched `USERDATA`, and the userspace-side fix (an instrumented drm face, or a
+`libOSMesa` built with `MESA_DEBUG`) still waits on the ~28 GiB the packed
 `IOSRoot.img` needs.
+
+**No boot output yet:** no photo and no serial log, so this is a flash, not a
+boot stage. The `param` lines below are what the next one has to show.
 
 What the next photo has to show, in order: `param 0 = 0x6000` (the prod id,
 `0153`'s `jt_gpu_id >> 16`; anything else and `panfrost_get_model` bails on
