@@ -509,8 +509,63 @@ The steps (1 to 3 are done; step 4 is not):
    10 methods` — and, for a surface it refuses, that refusal's own line. A frame
    on the panel is the claim; the lines are only how it is reached.
 
-Both images are on the phone as of 2026-11-14; nothing has booted yet. The phone
-is the blocker, and a boot is not a frame.
+Both images are on the phone and have booted (`jt45` onwards); no frame has been
+drawn, and the shim was not even loaded until `0159` (below). A boot is not a
+frame.
+
+### Why the library never arrived: dyld reads `DYLD_*` only when AMFI says so
+
+`jt48`/`jt50` put the display server's stderr on the console, and that half
+works: the boot prints `|backboardd| objc[...]: Class ... is implemented in
+both ...` at about `t=124 s`. But there is no `jackpotlte-gl:` line, no `dyld:`
+complaint and no crash of `backboardd` anywhere in the recording (277 keyframes
+plus full-resolution windows around the exec), so the library was **not
+loaded** — the shim is not failing quietly, it is never entered.
+
+The gate is dyld's, not the kernel's. dyld4 walks the process environment with
+`ProcessConfig::PathOverrides::addEnvVar()` only inside
+`if ( security.allowEnvVarsPath )` (`dyld/DyldProcessConfig.cpp`, "process
+DYLD_* env variables if allowed"), and `allowEnvVarsPath` is one bit of the
+flag word that `amfi_check_dyld_policy_self()` (closed libamfi) returns. On this
+port no policy answers that call: `sweet_amfi.c` registers as
+`MPC_NAME " AMFI"` (`0106`) with a single `mpo_vnode_check_signature` hook
+(`0035`) and no `mpo_policy_syscall`, so libamfi's call cannot land, dyld gets
+flags 0, and the `DYLD_INSERT_LIBRARIES` the kernel sets is dropped before the
+loader looks at it. Library validation is not involved: `F_CHECK_LV` reaches
+`mac_file_check_library_validation()` (`bsd/kern/kern_descrip.c`), which
+`sweet_amfi.c` does not implement, so that hook returns 0.
+
+The escape hatch a development install has — and it needs no kext — is
+`DYLD_AMFI_FAKE`: `ProcessConfig::Security::getAMFI()` takes the whole flag word
+from that variable instead of from AMFI when the process runs on an internal
+install **and** dyld's comm page says test mode. Both are true on this image
+already, without a root change:
+
+- `internalInstall` is `_COMM_PAGE_DEV_FIRM & 1`, i.e.
+  `PE_i_can_has_debugger()` (`osfmk/arm/commpage/commpage.c:168-169`), which is
+  the `/chosen` property `debug-enabled` (`pexpert/arm/pe_init.c:453-470`); the
+  ADT this packer builds carries `debug-enabled=1` (inherited from
+  `tools/mkadt.py`);
+- test mode is comm-page bit 1 (`dyld/DyldDelegates.h:142-143`), set from
+  `dyld_flags=`. The kernel hands `dyld_flags=` to every exec as an apple
+  parameter when the tunable is non-zero (`bsd/kern/kern_exec.c`, `if (
+  dyld_flags )`), launchd (pid 1) copies it into the comm page
+  (`DyldProcessConfig.cpp:886-891`, `setupDyldCommPage()`), and later processes
+  read it from there (`DyldProcessConfig.cpp:477`).
+
+`0159-jackpotlte-exec-inject-env.patch` supplies the variable the same way the
+library is supplied: boot-arg `jtexecenv=NAME=VALUE[,NAME=VALUE...]` appends
+those strings to the environment of the programs `jtexecinject` matched and
+prints one `JT ENV:` line when it does. With
+`dyld_flags=2 jtexecenv=DYLD_AMFI_FAKE=0x2` on the cmdline, `backboardd`'s dyld
+gets `allowEnvVarsPath` and therefore reads the `DYLD_INSERT_LIBRARIES` the
+kernel already sets; every other process is unchanged, because
+`DYLD_AMFI_FAKE` is only read where it is present.
+
+The flag is `0x2` (path variables) and deliberately not `0x22`: with
+`ALLOW_FAILED_LIBRARY_INSERTION` (0x20) dyld stays silent when an inserted
+library cannot be loaded (`DyldRuntimeState.cpp`, `loadInsertedLibraries()`), and
+a loud reason is worth more than a quiet no.
 
 Licence: this is our own code (the chosen route). The reference's `eagl.c` is
 under the same README-only MIT statement as the rest of its Mali userland

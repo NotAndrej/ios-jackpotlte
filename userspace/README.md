@@ -132,6 +132,14 @@ library and `backboardd`, parsed with `TUNABLE_STR` and applied in
 shim's own log on the kernel console: the kernel prints one `JT INJECT:` line
 per exec, and the shim reads `kern.bootargs` and writes its `say()` lines to
 `/dev/console` as well as stderr. Both are off unless the switch is there.
+A third boot-arg, `jtexecenv=NAME=VALUE,...`
+(`0159-jackpotlte-exec-inject-env.patch`), puts extra variables into the
+environment of those same programs. It is what hands dyld
+`DYLD_AMFI_FAKE=0x2`: dyld4 only reads `DYLD_*` when AMFI says it may
+(`allowEnvVarsPath`), and no policy on this port answers that query, so the
+kernel-set variable is dropped without it. It needs `dyld_flags=2` on the
+cmdline as well; `docs/jackpotlte-mali.md` §9 lists both conditions. All three
+are off unless they are on the cmdline.
 Only putting the library into the root is a `userdata`
 change, and it needs the owner's word first. The reference also turns off
 `cs_require_lv()`, but that function has no caller in xnu-8796 (our built-in

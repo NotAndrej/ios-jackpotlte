@@ -3198,3 +3198,74 @@ reached becomes readable with a BOOT-only flash.
 
 **Not flashed:** the phone left USB (`lsusb` shows no `18d1:`/`04e8:`) before the
 BOOT write could be issued.
+
+### The shim is never loaded: dyld drops the variable (`0159`, 2026-11-14)
+
+Two boots after the `0048` fix settle what the tee was for. `jt48`
+(`328f3176...`, 17,537,040 B) and `jt50` (`7bb4157a...`, same kernel, cmdline =
+`jt47`'s minus `jtgllog=1`) both put the display server's stderr on the
+console: `|backboardd| objc[157]: Class ... is implemented in both ...` appears
+at about `t=124 s` of the 303 s recording
+(`VID_20261114_113147985.mp4`). So the tee fires, on that program, and the
+shim's own `say()` — which writes to stderr — would have been visible.
+
+It is not there. 277 keyframes plus 2 fps full-resolution windows around the
+exec (`t` 66-86 s) and around the tee proof (`t` 122-130 s) contain no
+`jackpotlte-gl:` line, no `EAGLContext is ours`, no `dyld:` complaint and no
+`CRSH backboardd`. The only `backboardd` lines are the objc duplicate-class
+warnings and the `0116` container trace. **The library is not loaded**; this is
+not the shim failing quietly inside the process.
+
+Why: dyld4 reads `DYLD_*` out of the environment only inside
+`if ( security.allowEnvVarsPath )` (`dyld/DyldProcessConfig.cpp`, "process
+DYLD_* env variables if allowed", `addEnvVar()` for `DYLD_INSERT_LIBRARIES`).
+That bit comes from `amfi_check_dyld_policy_self()` in the closed libamfi. This
+port's built-in AMFI registers as `MPC_NAME " AMFI"` (`0106`) with a single
+`mpo_vnode_check_signature` hook (`0035`) and no `mpo_policy_syscall`, so
+libamfi's call cannot land, dyld receives flags 0, and the kernel-set variable
+is dropped. Library validation is not the gate: `F_CHECK_LV` reaches
+`mac_file_check_library_validation()` (`bsd/kern/kern_descrip.c:4155-4185`),
+which `sweet_amfi.c` does not implement, so it returns 0.
+
+The way past it without a kext is `DYLD_AMFI_FAKE`, taken by
+`ProcessConfig::Security::getAMFI()` instead of AMFI when the process is on an
+internal install and dyld's comm page says test mode. Both already hold here:
+
+- `internalInstall` = `_COMM_PAGE_DEV_FIRM & 1` = `PE_i_can_has_debugger()`
+  (`osfmk/arm/commpage/commpage.c:168-169`), which is `/chosen`
+  `debug-enabled` (`pexpert/arm/pe_init.c:453-470`). The generated ADT has it
+  (`tools/mkadt_jackpotlte.py` builds on `mkadt.build()`, whose `/chosen` sets
+  `debug-enabled` = 1) -- read back out of `/tmp/opencode/jt.adt` for this
+  entry, so no boot-image change is needed for it;
+- test mode = comm-page bit 1 (`dyld/DyldDelegates.h:142-143`), set from
+  `dyld_flags=`: `bsd/kern/kern_exec.c` adds `dyld_flags=0x%llx` to every exec's
+  apple parameters when the tunable is non-zero, launchd (pid 1) copies it into
+  the comm page (`DyldProcessConfig.cpp:886-891`, `setupDyldCommPage()`), and
+  every later process reads it from there (`DyldProcessConfig.cpp:477`).
+
+So `0159-jackpotlte-exec-inject-env.patch` adds one boot-arg,
+`jtexecenv=NAME=VALUE[,NAME=VALUE...]`, applied in the same block of
+`exec_extract_strings()` as `jtexecinject` and only for the programs that
+matched it. It is a separate last-numbered patch so `0156`-`0158` do not move.
+It also prints one `JT ENV: <name> += <variable>` line when it adds something,
+which is the console evidence for the next boot; `jtgllog` stays off, so this is
+one or two lines, not one per exec.
+
+**Next image (not packed yet):** `jt50`'s cmdline with two arguments appended,
+
+```
+dyld_flags=2 jtexecenv=DYLD_AMFI_FAKE=0x2
+```
+
+`0x2` = `ALLOW_PATH_VARS` only. `0x22` would add
+`ALLOW_FAILED_LIBRARY_INSERTION`, and with that bit dyld does not print why an
+inserted library failed (`DyldRuntimeState.cpp`, `loadInsertedLibraries()`);
+a loud failure is more useful here than a quiet one.
+
+What to look for, in order: `JT ENV: backboardd += DYLD_AMFI_FAKE=0x2` (the
+kernel half), then `|backboardd| jackpotlte-gl: library loaded into the display
+server` and `EAGLContext is ours: N of 10 methods` (dyld loaded it), then the
+context/surface lines, then the wallpaper. Each is a separate claim and the
+first three are console text, not a frame. **No `USERDATA` write is involved:**
+the root already holds the shim and `libOSMesa.8.dylib` (hash-checked against
+`userspace/out/` on 2026-11-14), so this is BOOT only.
