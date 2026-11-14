@@ -19,6 +19,7 @@
 #include "../fdt.h"
 #if JT_HAVE_FB
 #include "../font.h"
+#include "logo.h"
 #endif
 
 #define PAGE_SIZE		4096UL
@@ -94,8 +95,13 @@ static volatile uint32_t *const fb = (volatile uint32_t *)JT_FB_BASE;
 #define CELL_W	(8 * SCALE)
 #define CELL_H	(16 * SCALE + 6)
 #define COLS	((JT_FB_WIDTH - 48) / CELL_W)
-#define ROWS	((JT_FB_HEIGHT - 160) / CELL_H)
+/* Rows start at scr_top. The default is the top of the screen; with the boot
+ * logo enabled scr_top moves below the logo so text never overwrites it. */
+#define SCR_TOP_DEFAULT	120
+#define SCR_ROWS(top)	((JT_FB_HEIGHT - (top)) / CELL_H)
 static unsigned int row, col;
+static unsigned int scr_top = SCR_TOP_DEFAULT;
+static unsigned int scr_rows = SCR_ROWS(SCR_TOP_DEFAULT);
 
 static void fill(int x0, int y0, int w, int h, uint32_t c)
 {
@@ -108,20 +114,39 @@ static void scr_ch(char c)
 {
 	if (c == '\n' || col >= COLS) {
 		col = 0;
-		row = (row + 1) % ROWS;
-		fill(0, 120 + row * CELL_H, JT_FB_WIDTH, CELL_H, 0xff000000U);
+		row = (row + 1) % scr_rows;
+		fill(0, (int)scr_top + (int)row * CELL_H, JT_FB_WIDTH, CELL_H,
+		     0xff000000U);
 		if (c == '\n')
 			return;
 	}
 	if (c < 0x20 || c > 0x7e)
 		c = '?';
 	const unsigned char *g = font8x16[c - 0x20];
-	int x0 = 24 + col * CELL_W, y0 = 120 + row * CELL_H;
+	int x0 = 24 + (int)col * CELL_W, y0 = (int)scr_top + (int)row * CELL_H;
 	for (int gy = 0; gy < 16; gy++)
 		for (int gx = 0; gx < 8; gx++)
 			fill(x0 + gx * SCALE, y0 + gy * SCALE, SCALE, SCALE,
 			     (g[gy] & (0x80 >> gx)) ? fg : 0xff000000U);
 	col++;
+}
+
+/* The iOS userspace boot logo, 1 bpp white on black, drawn 1:1 (the bitmap is
+ * already at panel size, so there is no scaling and no float anywhere). */
+static void blit_logo(int x0, int y0)
+{
+	for (unsigned int y = 0; y < LOGO_H; y++) {
+		int py = y0 + (int)y;
+		if (py < 0 || py >= (int)JT_FB_HEIGHT)
+			continue;
+		for (unsigned int x = 0; x < LOGO_W; x++) {
+			int px = x0 + (int)x;
+			if (px < 0 || px >= (int)JT_FB_WIDTH)
+				continue;
+			if (logo_bits[y * LOGO_STRIDE + (x >> 3)] & (0x80U >> (x & 7)))
+				fb[py * (JT_FB_STRIDE / 4) + px] = 0xffffffffU;
+		}
+	}
 }
 #endif
 
@@ -260,6 +285,41 @@ static int magic_ok(const volatile char *m)
 	return 1;
 }
 
+#if JT_HAVE_FB
+/* Does a space-separated cmdline token match exactly? Bounded by n (the
+ * payload cmdline has no guaranteed NUL); absent or malformed -> no. */
+static int cmdline_has(const volatile char *cl, uint64_t n, const char *tok)
+{
+	uint64_t tlen = 0;
+	while (tok[tlen])
+		tlen++;
+	for (uint64_t i = 0; i + tlen <= n; i++) {
+		if (i && cl[i - 1] != ' ')
+			continue;
+		uint64_t k = 0;
+		while (k < tlen && cl[i + k] == tok[k])
+			k++;
+		if (k != tlen)
+			continue;
+		if (i + tlen == n || cl[i + tlen] == ' ' || cl[i + tlen] == 0)
+			return 1;
+	}
+	return 0;
+}
+
+/* The payload's own cmdline -- the same bytes copied into boot_args -- asks
+ * for the panel logo. A missing/placeholder payload has no cmdline: off. */
+static int payload_logo(uintptr_t start, uintptr_t end)
+{
+	if (end - start < sizeof(struct payload))
+		return 0;
+	const volatile struct payload *p = (const volatile struct payload *)start;
+	if (!magic_ok(p->magic) || p->version != 1)
+		return 0;
+	return cmdline_has(p->cmdline, sizeof(p->cmdline), "jtlogo=1");
+}
+#endif
+
 static uint64_t fail(const char *why)
 {
 	fg = 0xffff4040U;
@@ -336,6 +396,12 @@ static void dt_probe(uintptr_t dtb)
 
 uint64_t jt_main(uintptr_t dtb, uint64_t el, uint64_t sctlr)
 {
+	/* Hoisted (not printed here): the logo decision needs the ramdisk bounds
+	 * before the banner draws anything, and the probe below reports them in
+	 * exactly the old order. */
+	uint64_t rd_start = 0, rd_end = 0;
+	int have_rd = fdt_chosen_u64(dtb, "linux,initrd-start", &rd_start) &&
+		      fdt_chosen_u64(dtb, "linux,initrd-end", &rd_end);
 #if JT_HAVE_FB
 	/* Re-arm the DECON HW trigger so the panel keeps scanning the handover
 	 * framebuffer, then clear it for the banner. This is a mode bit, not a
@@ -347,6 +413,19 @@ uint64_t jt_main(uintptr_t dtb, uint64_t el, uint64_t sctlr)
 		for (int x = 0; x < (int)JT_FB_WIDTH; x++)
 			((volatile uint32_t *)JT_FB_BASE)[y * (JT_FB_STRIDE / 4) + x] = 0xff000000U;
 	fg = 0xffffff00U;
+
+	/* Optional Apple logo at the iOS userspace boot position/size. Only the
+	 * payload cmdline can switch it on, so a probe-only image stays off. */
+	int logo = 0;
+	if (have_rd && rd_start >= LOW_RAM_BASE && rd_end <= LOW_RAM_END &&
+	    rd_end > rd_start)
+		logo = payload_logo((uintptr_t)rd_start, (uintptr_t)rd_end);
+	if (logo) {
+		blit_logo(LOGO_X, LOGO_Y);
+		/* Keep the console below the logo instead of over it. */
+		scr_top = (unsigned int)(LOGO_Y + (int)LOGO_H + 24);
+		scr_rows = SCR_ROWS(scr_top);
+	}
 #endif
 #if JT_HAVE_RAMOOPS
 	prz->sig = PRZ_SIG;
@@ -356,6 +435,21 @@ uint64_t jt_main(uintptr_t dtb, uint64_t el, uint64_t sctlr)
 #endif
 	out("JACKPOTLTE LOADER BEGIN  (ios-jackpotlte, Exynos 7885)\n");
 	fg = 0xffffffffU;
+#if JT_HAVE_FB
+	if (logo) {
+		out("logo: on ");
+		dec(LOGO_W);
+		out("x");
+		dec(LOGO_H);
+		out(" at ");
+		dec(LOGO_X);
+		out(",");
+		dec(LOGO_Y);
+		out("\n");
+	} else {
+		out("logo: off\n");
+	}
+#endif
 	kv("entry EL", el);
 	if (el == 2)
 		out("(EL2 handoff, dropped to EL1 in start.S)\n");
@@ -369,9 +463,7 @@ uint64_t jt_main(uintptr_t dtb, uint64_t el, uint64_t sctlr)
 	if (el != 1 && el != 2)
 		return fail("entered below EL1");
 
-	uint64_t rd_start, rd_end;
-	if (!fdt_chosen_u64(dtb, "linux,initrd-start", &rd_start) ||
-	    !fdt_chosen_u64(dtb, "linux,initrd-end", &rd_end))
+	if (!have_rd)
 		return fail("no initrd in /chosen");
 	kv("initrd", rd_start);
 	kv("end", rd_end);
