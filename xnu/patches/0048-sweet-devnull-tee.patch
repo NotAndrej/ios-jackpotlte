@@ -4,14 +4,20 @@
  	return 0;
  }
  
-+#if defined(ARM64_BOARD_CONFIG_SWEET)
++#if defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_A5XELTE)
 +/*
-+ * SWEET: daemons started by launchd write stdout/stderr to /dev/null, and
-+ * pointing a launchd job at /dev/console stops it from launching at all
++ * SWEET/A5XELTE: daemons started by launchd write stdout/stderr to /dev/null,
++ * and pointing a launchd job at /dev/console stops it from launching at all
 + * (backboardd, v8 image). Instead, what the processes named in boot-arg
 + * sweetnull (comma separated, default "backboardd,SpringBoard") write to
 + * /dev/null goes to the console (and so to the persistent log) as
 + * "|name| text". sweetnull=- turns it off.
++ *
++ * The A5XELTE arm is what makes the display server's stderr reachable on the
++ * A8: the GL shim (userspace/jackpotlte-gl) is loaded into backboardd and says
++ * what it does to stderr, which is otherwise /dev/null.  On A5XELTE the guard
++ * used to name SWEET alone, so the tee was compiled out and the shim was
++ * silent (kernel 2026-11-14: no "sweetnull" and no "|%s| " in the image).
 + */
 +static char sweet_null_names[128];
 +static int sweet_null_parsed;
@@ -49,7 +55,7 @@
  			if (rw == UIO_READ) {
  				return 0;
  			}
-+#if defined(ARM64_BOARD_CONFIG_SWEET)
++#if defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_A5XELTE)
 +			{
 +				char name[32];
 +				if (sweet_null_tee(name, sizeof(name))) {
