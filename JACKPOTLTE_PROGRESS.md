@@ -3642,5 +3642,12 @@ there (`and x8, x8, #0xfffffffffffff00f` at `0xfffffff007481d80`).  Packed as
 `/var/tmp/a8-xnu-jt54-wimgfix.img`, 17,553,424 B, sha256
 `c49b08f3055b09eec9f2e6c9b9d0f6e7fc7d16453dd67d96dac68939b6b9d63b`, from the
 same `boot_a530f_p.img` and `jt53`'s cmdline byte for byte; header matches
-`jt53` apart from the ramdisk size (`0xfd81f0` vs `0xfd81a0`).  Not flashed yet
-— the phone has to be put back in fastboot.
+`jt53` apart from the ramdisk size (`0xfd81f0` vs `0xfd81a0`).
+
+**Flashed to `BOOT` and rebooted (2026-11-14 17:37,
+`/tmp/opencode/gpu/flash-jt54.log`).**  `fastboot flash BOOT` wrote 17142 KB
+(RC=0) and `fastboot reboot` answered OKAY (RC=0).  BOOT only; nothing here
+touches `USERDATA`.  The next evidence is the phone's own console: the expected
+order is the `param` run with `param 0 = 0x6000`, then `request 0x42`, then
+`JackpotlteMali: buffer 1: 134217728 bytes at 0x...` and **no**
+`phystokv_range` panic.
