@@ -4005,3 +4005,78 @@ i.e. a missing object (context/screen/device), not a bad mapping.  The crash pc
 or our `libjackpotlte-gl.dylib`.  No `JackpotlteMali: job` line appears within
 reach of the crash, so the GPU has still never been handed a chain: the death is
 in Mesa's texture/first-draw path, before the first submit.
+
+### jt59, the scroll after the crash (19:43-19:44): same death, one step further in
+
+Three photos taken 40 s apart, each scrolled a little further:
+`~/Downloads/IMG_20261114_194404399.jpg` (19:44:04),
+`IMG_20261114_194403362.jpg` (19:44:03) and `IMG_20261114_194359818.jpg`
+(19:44:04-ish, the one with the crash on screen).  Between them they show the
+whole request sequence of a *fresh* backboardd instance, not just the tail:
+
+```
+JackpotlteMali: request 0x44, 16 bytes     param 0/1/2 = 0x6000, 0x2, 0x3
+                                           param 10 = 0x809   11 = 0x1   12 = 0x2830
+                                           param 13 = 0xa016000  14 = 0x100  15 = 0x100
+                                           param 18 = 0xffffffff 19 = 0x1ffff 20 = 0xfa3fffff
+                                           param 21 = 0  39 = 0x100  40 = 0
+JackpotlteMali: request 0x42, 24 bytes     buffer 1: 134217728 bytes, buffer 2..6: 4096 each
+                                           map 2..6: ok
+[backboardd] jackpotlte-gl: an OpenGL ES 3 context for CoreAnimation by
+             @loader_path/libOSMesa.8.dylib; OpenGL ES 3.1 Mesa 25.0.7;
+             Mali-G71 (Panfrost)
+[backboardd] -setParameter:0x260 to:0x16f807404
+SWEET FB: display on
+SWEET FB: backboardd sel 79 ln 2/0 out 0/40 -> 0x0
+SWEET FB: backboardd sel 84 ln 0/8 out 0/8 -> 0x0
+SWEET FB: backboardd sel 68 ln 1/8 out 0/8 -> 0x0
+JackpotlteMali: request 0x70, 48 bytes   (x4)
+JackpotlteMali: request 0x45, 16 bytes   (get_bo_offset)
+SWEET HID: SweetHIDTouch / SweetHIDButtons open -> 1
+SWEET FB: backboardd sel 79 ln 2/0 out 0/1580 -> 0x0
+SWEET FB: backboardd sel 74 ln 1/0 out 1/64 -> 0x0
+[backboardd] jackpotlte-gl: -attachImage:: texture 1 is surface 67, 1080 x 2220
+             (memory shared)
+JackpotlteMali: request 0x42, 24 bytes   buffer 8: 1048576 bytes  map 8: ok
+JackpotlteMali: request 0x42, 24 bytes   buffer 9: 65536 bytes    map 9: ok
+JackpotlteMali: request 0x42, 24 bytes   buffer 10: 65536 bytes
+CRASH backboardd[559] sig 11 code 0x100000001 sub 0x30 slide 0x1dc0000
+CRASH backboardd pc 0x1ef9e9e70 lr 0x1c186bffc sp 0x16f75bde0 fp 0x16f75b9e0 far 0x30
+CRASH backboardd bt 0x1a621f65e ... 0x1a61d7afc 0x1a61b0f70 0x1a61bd38a 0x1a61b4d94
+CRASH backboardd reason ns 2 code 0xb (none)
+Process[559] crashed: backboardd. Too many corpses being created.
+```
+
+Read as claims, not as one claim:
+
+- **Same fault as the instance before it.**  pc `0x1ef9e9e70`, `far 0x30`, same
+  bt family, a different surface id (67 instead of 7) and different buffer
+  addresses.  So the NULL+0x30 is deterministic, in the first frame's path,
+  not a one-off of the first context.
+- **The attach itself works.**  `-attachImage:` reports `memory shared` for the
+  1080x2220 BGRA surface, and the three buffers that follow (1 MiB and two
+  64 KiB) all create and map.  The death is after the texture is bound, not in
+  binding it.
+- **Still no chain to the GPU.**  No `JackpotlteMali: job` line anywhere near
+  the crash (0166 prints the first 8), so no `0x40` submit was ever reached:
+  the crash is in the first-draw setup, before panfrost hands the kernel a
+  job chain.  Whether the NULL is panfrost's or CoreAnimation's is *not* known
+  yet -- the bt frames are all `0x1a62xxxxx` while the pc is `0x1ef9e9e70`.
+- `param 18 = 0xffffffff` and `param 20 = 0xfa3fffff` are raw register reads
+  from unpowered domains; panfrost accepted them (it built the context), so
+  they are noted, not (yet) blamed.
+- `request 0x70, 48 bytes` is not one of the driver's selectors
+  (`0x09`, `0x40`-`0x48`, `0x7d`, `0x7e`), and the driver's "not known here"
+  line for it is not on the panel.  Either those lines scrolled past between
+  shots or the request is answered above the switch; to settle with the next
+  kernel log, not by guessing.
+
+**The blocker this exposes.**  Every remaining suspect is *our* userspace
+(`libjackpotlte-gl.dylib`'s EAGLContext methods/ivars, or the Mesa we build),
+and today there is no way to put a new userspace binary on the phone: the
+dylibs live inside the HFS+ root on USERDATA, writing to that image needs root
+(no password here) and a fresh `img2simg` needs ~12.15 GB with 12.4 GiB free.
+Until userspace can be replaced from the BOOT image alone, no fix that has been
+diagnosed can be tested.  Proposed (not implemented): have the kernel *embed*
+the built dylib and write it to `/usr/local/lib/` before `jtexecinject` adds it,
+so a GL/CA fix costs one `fastboot flash BOOT` and no USERDATA write.
