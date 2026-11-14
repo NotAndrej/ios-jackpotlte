@@ -3848,24 +3848,35 @@ userspace refusal, never reaching the kernel) or when
 `JackpotlteMaliUserClient::clientMemoryForType(type)` does not find the buffer
 and answers `kIOReturnBadArgument` (`jt_errno()` maps that to `-EINVAL`).  Both
 are `EINVAL`, and the request log stops after 32 requests (`fRequests++ < 32`),
-so the photo cannot say which — hence `0167`.
+so the photo cannot say which — hence `0166` (the Mali log patch).
 
-### 0166: the kernel console keeps out of the logo; 0167: say which buffer maps
+### The logo-hole patch is WITHDRAWN: the shim's logo must not outlive the shim
 
 `0166-jackpotlte-fbcon-logo-hole.patch` (commit `e74e0e2`, CI `43621677594`
-green, verified in the artifact's `buildtree.tgz`): `A5_LOGO_X/Y/W/H`
-(445/776/190/241, the values in `shim/jackpotlte/logo.h`) in `A5XELTE.h`, and
-`fbcon_hole_*` + `fbcon_in_hole()` in `pexpert/arm/pe_serial.c`, so
-`fbcon_clear_row()` and `fbcon_transmit_data()` skip that rectangle.  The hole
-is only armed by `PE_parse_boot_argn("jtlogo", ...)` under `JACKPOTLTE`, which is
-the same token the shim needs to draw the logo at all; boot args are up
-(`PE_init_platform` at `osfmk/arm/arm_init.c:374`) long before
-`serial_init()` → `fbcon_probe()` (547/1022).  Without `jtlogo` the console is
-byte-for-byte unchanged.
+green; flashed as part of `jt57`) reserved the logo rectangle in `fbcon`, so that
+`fbcon_clear_row()` and `fbcon_transmit_data()` skipped it and the shim's Apple
+logo survived the kernel's full-panel clear, with no `kprintf` text on it.  That
+was the fix for the owner's "make the text not print on the apple logo".
 
-`0167-jackpotlte-mali-map-job-log.patch` (CI `43622937993`): `clientMemoryForType`
-logs `JackpotlteMali: map <handle>: ok|not found` for every mapping request —
-"not found" means the handle was stale, "ok" everywhere means the refusal is in
+On the phone the owner rejected the result: **"Apple logo still drawing after
+shim handoff, it should not do that."**  The logo is a shim-side bring-up
+marker, and leaving it on the panel through the whole kernel boot makes it
+impossible to tell our bitmap from the real iOS boot logo.  Decision (owner,
+2026-11-14): the shim may draw it during its own phase, and `fbcon_init()`'s
+full clear must erase it at handoff — which is exactly what happens *without*
+the patch.  `A5_LOGO_*` existed only for that patch, so they went with it; the
+shim's own `logo.h` is the only place the geometry lives again, and
+`jtlogo=1` now only means "the shim draws the logo and says
+`logo: on 190x241 at 445,776`".
+
+With the hole gone, kernel text uses the whole panel again; text cannot land on
+the logo because the logo is gone.  The shim keeps its own text below the logo
+(`scr_top = LOGO_Y + LOGO_H + 24` = 1041) for the phase where both are on screen.
+
+`0166-jackpotlte-mali-map-job-log.patch` (renumbered from `0167` when the hole
+patch was removed; CI `43622937993`): `clientMemoryForType` logs
+`JackpotlteMali: map <handle>: ok|not found` for every mapping request — "not
+found" means the handle was stale, "ok" everywhere means the refusal is in
 `IOConnectMapMemory64` itself — and `kPanfrostSubmit` logs the first 8 job chains
 (`job N: chain ..., buffers ..., requirements ..., seq ...`).  No submit line at
 all would say the GL path never reaches the GPU; a submit line is the first
@@ -3873,11 +3884,7 @@ all would say the GL path never reaches the GPU; a submit line is the first
 
 `jt57` = `/var/tmp/a8-xnu-jt57-logohole-maplog.img`, 17 559 568 B, sha256
 `d7da2a99ac904fededc9a44db56abb0b467788008839f889f293caa9b9226c93` — CI
-`43622937993` (0166 + 0167) + the full jt53 cmdline + `jtlogo=1`.  Packer
-`/tmp/opencode/jt57-pack.sh` asserted both patches in the artifact's tree
-(`fbcon_in_hole` in `pe_serial.c`, `A5_LOGO_Y` in `A5XELTE.h`, the 0167
-`map`/`job` strings present in the kernel binary itself) and the packed payload
-cmdline.  Flashed **BOOT only** 18:57, flash rc=0, reboot rc=0
-(`/tmp/opencode/gpu/flash-jt57.log`).  No phone evidence yet — the two things to
-read off the photo are `logo: on 190x241 at 445,776` with no kernel text on the
-logo, and the first `JackpotlteMali: map <n>: ...` / `job ...` lines.
+`43622937993` (the hole patch + the Mali log) + the full jt53 cmdline +
+`jtlogo=1`; flashed **BOOT only** 18:57, rc=0 both (`/tmp/opencode/gpu/flash-jt57.log`).
+It is the image that showed the owner the persisting logo; the next image drops
+the hole patch and keeps the Mali log.
