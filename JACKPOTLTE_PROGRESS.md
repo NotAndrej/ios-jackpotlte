@@ -3742,8 +3742,7 @@ reads them.  Fixed in `8014ff4` by declaring `sweet_fb_presents_logged` /
 `43619257199`; the `loader` workflow (which builds the shim) passed on the logo
 commit.
 
-**Apple logo in the shim (done, 2026-11-14, commit `85930cf`).**  The shim can
-now draw the iOS boot logo behind a cmdline token `jtlogo=1` in the *payload*
+**Apple logo in the shim (done, 2026-11-14, commit `85930cf`).**  The shim cannow draw the iOS boot logo behind a cmdline token `jtlogo=1` in the *payload*
 cmdline.  Geometry comes from `IMG_20261108_170011203.jpg`: the body outline is
 ~1820 px wide for 70.6 mm → the 62.2 mm active area is ~1603 photo px ↔ 1080
 panel px (1 panel px = 1.484 photo px); the logo ink box is 279x335 photo px →
@@ -3760,3 +3759,53 @@ relocations, image 58 528 B.  Not yet on hardware: the photo evidence line is
 `logo: on 190x241 at 445,776`, and proving it needs a flash with a real payload
 whose cmdline carries the token (a `--probe` image has no payload, so it always
 prints `logo: off`).
+
+### ROOT CAUSE of the black screen: jt54 shipped with an EMPTY cmdline (2026-11-14)
+
+The owner's report — "shim shows, the second it hands off it's black, like no
+console nothing" — was **not a kernel regression and not the panel**.  The
+flashed `jt54` image was packed with a payload whose **cmdline field is all
+zeros**.  Byte-for-byte, at payload offset 0x48 (`tools/mkpayload.py` layout:
+`0x000 magic[8] = "SWEETXNU"`, `0x048 char cmdline[608]`), payload base
+0xd800 = image offset 55296:
+
+* `jt53`: `... 54 58 4e 55 01 00 00 00 ... ` then at 55368
+  `debug=0xc serial=3 cpus=8 keepsyms=1 rd=emmcroot0 ...` — the full cmdline;
+* `jt54`: the same header (`SWEETXNU`, version 1, nsegs 0xa, sizes, entry) but
+  from 55368 to the segment table **every byte is 0x00**.
+
+Why that means a black screen, from the built tree:
+
+1. `osfmk/arm/arm_init.c:556-593` parses `serial=3` into `serialmode`
+   (`SERIALMODE_OUTPUT 0x01 | SERIALMODE_INPUT 0x02`, `osfmk/console/serial_protos.h`).
+   Only when `(serialmode & SERIALMODE_OUTPUT) && serial_exists` does it set
+   `serial_console_enabled = true` and **`disableConsoleOutput = FALSE`**.
+2. With an empty cmdline `serialmode = 0`, so `disableConsoleOutput` keeps its
+   boot default (TRUE) and `serial_console.c` drops every character.  The kernel
+   therefore prints *nothing at all* — not the `kprintf` console, not the fbcon
+   text, not a panic — and the last thing on the panel is the shim's banner.
+   That is exactly the reported symptom.
+3. The same empty cmdline also lost `rd=emmcroot0 emmcroot=USERDATA emmcwrite=1`
+   (no root device), `jtmalimetal=1` and
+   `jtexecinject=/usr/local/lib/jackpotlte-gl.dylib,backboardd` (no GPU
+   injection) — so jt54 was a crippled boot, not a heartbeat of the port.
+
+Evidence it is the pack and not the kernel: `jt53` (full cmdline, 0161 only) was
+flashed 18:11 and the owner reports it "works, nothing special" — the console
+shows, as its 16:21 photo did.  Same shim, same panel, same kernel tree except
+0162/0163/0164 (+80 B), which touch neither `serial` nor the console.  The two
+images differ in the shim region by 434 bytes and across the whole image by
+4 953 883 (the kernel), but the decisive one is the cmdline field.
+
+Guard added so it cannot recur: `tools/mkpayload.py` now **refuses an empty
+cmdline** (`raise SystemExit`, message points at `serial=3`);
+`tools/jackpotlte/make-boot.sh` already defaulted to a non-empty one.  The next
+image, `jt55`, is packed from the **jt53** cmdline and verified after packing
+(payload cmdline echoed, `serial=3`/`jtlogo=1` asserted, `debug=0xc` found in
+the image).
+
+`jt55` = `/var/tmp/a8-xnu-jt55-cmdlinefix-logo.img`, 17 559 568 B, sha256
+`8d9f701d77c27136baa1237a7f101c1f822918697bb554b31aaf15c4f60c1428`: CI kernel
+run `43619257199` (0165, `JTFB present` verified present in the artifact) + the
+full jt53 cmdline + `jtlogo=1`, and no `a5fb_nopresent` this time so the GUI can
+actually come up.  Not flashed yet: no fastboot device attached as of 18:24.

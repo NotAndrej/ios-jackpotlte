@@ -184,6 +184,14 @@ def build(kernel_path, adt_path, cmdline, ramdisk_path=None):
     struct.pack_into('<8sII', out, 0, b'SWEETXNU', 1, len(pieces))
     struct.pack_into('<7Q', out, 0x10, virt_base, m['entry'], adt_off, len(adt_blob), kernel_end,
                      PHYS_BASE, MEM_SIZE)
+    # An empty cmdline is never intended: the kernel parses serial=3 out of it
+    # and only then clears disableConsoleOutput (osfmk/arm/arm_init.c:589), so
+    # an empty one silently boots with no console at all -- the shim banner is
+    # the last thing the panel shows.  Refuse it instead of shipping it.
+    if not cmdline.strip():
+        raise SystemExit('mkpayload: refusing an empty cmdline (the kernel '
+                         'would boot with every console output disabled; pass '
+                         'at least serial=3)')
     cl = cmdline.encode()[:BOOT_LINE_LENGTH - 1]
     out[CMDLINE:CMDLINE + len(cl)] = cl
     for i, t in enumerate(seg_table):
