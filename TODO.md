@@ -167,17 +167,32 @@ deleted on 2026-11-10); build results and the image details live in
       variable are real, not just the strings in the binary. Both images are on
       the phone (master root as a **sparse** `USERDATA`, `img2simg` +
       `verify-sparse.py`, 47/47 chunks, `USERDATA rc=0`; kernel as `BOOT`). What
-      is left is the shim half: the dylib in the root predates the console sink,
-      so its own lines need the `USERDATA` sparse reflash, and no frame has been
-      drawn.
+      is left is the shim half. The dylib in the root predates the console sink,
+      so its 0158 `/dev/console` lines are not there — but its `say()` goes to
+      stderr, and `|backboardd| jackpotlte-gl: ...` on the console is exactly
+      what `0048`'s `/dev/null` tee is for. `0048` was **dead on this board**
+      (SWEET-only guard; see the log-switch item), so the fix is one kernel
+      line, not a userdata write: widen the guard, then a BOOT-only flash
+      (`jt48`) surfaces the shim's own lines. No frame has been drawn yet.
 - [ ] M4 GL-path log switch (2026-11-14): `jtgllog=1`
       (`0158-jackpotlte-gl-path-log.patch` + the shim). The kernel's injector
       prints one `JT INJECT: <name> -> <env>` line per exec (on the phone and
       printing, `jt47`), and the shim reads `kern.bootargs` and puts its `say()`
       lines on `/dev/console` (the kernel console) as well as stderr, so a
       program that never got the library can be told from one that did. Off by
-      default; nothing is opened or printed without the switch. The kernel half
-      is on the phone; the shim half waits on the reflash.
+      default; nothing is opened or printed without the switch.
+      **On A5XELTE the shim's own lines never appeared, and the cause was
+      `0048`, not the shim:** `0048-sweet-devnull-tee.patch` (the `/dev/null`
+      tee, `|name| text`, default `backboardd,SpringBoard`) guarded its whole
+      body with `#if defined(ARM64_BOARD_CONFIG_SWEET)` alone, and this board
+      defines only `ARM64_BOARD_CONFIG_A5XELTE` (`makedefs/MakeInc.def`) — so it
+      was compiled out. The `jt47` image has no `sweetnull` and no `|%s| `
+      string at all. Widened to the `SWEET || A5XELTE` form `0041`/`0086`/
+      `0098`/`0109` use; with that kernel (`jt48`, BOOT-only) `backboardd`'s
+      stderr — where the shim's `EAGLContext is ours: N of 10 methods` and the
+      context/surface lines go — reaches the console and the ring. This is the
+      cheap way to see the GL path; the `USERDATA` sparse reflash (the 0158 sink)
+      is the other.
 - [x] M4 GLES, first piece: the OpenGL ES dispatch table of this phone's build
       (2026-11-13). `-[EAGLContext getMacroContextPrivate]` hands out a table
       of function pointers and iOS calls `entry(table[0], args...)`; the offsets
