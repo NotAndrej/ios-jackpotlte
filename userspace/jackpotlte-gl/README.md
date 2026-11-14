@@ -3,9 +3,12 @@
 The OpenGL ES side of M4 (the GLES route, `docs/jackpotlte-mali.md` §6 and §9):
 an `EAGLContext` whose GL calls go to Mesa's OSMesa with the phone's Mali behind
 it, so that CoreAnimation's window-server renderer draws with OpenGL ES when it
-has no Metal. Nothing here has been loaded into the display server or run on
-the phone yet; what is written is the library (`userspace/build.sh` builds it as
-`out/libjackpotlte-gl.dylib`).
+has no Metal. As of 2026-11-14 (`jt51`) the library does load into the display
+server on the phone: `backboardd` receives it through the kernel's
+`jtexecinject`/`jtexecenv` (`0159`) and CoreAnimation's renderer makes one of
+these contexts. It is **not** yet shown to draw a frame -- no surface has been
+attached (`JACKPOTLTE_PROGRESS.md`, the `jt51` section). `userspace/build.sh`
+builds it as `out/libjackpotlte-gl.dylib`.
 
 | File | What it is |
 |---|---|

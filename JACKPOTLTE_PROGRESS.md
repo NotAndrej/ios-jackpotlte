@@ -3283,3 +3283,50 @@ context/surface lines, then the wallpaper. Each is a separate claim and the
 first three are console text, not a frame. **No `USERDATA` write is involved:**
 the root already holds the shim and `libOSMesa.8.dylib` (hash-checked against
 `userspace/out/` on 2026-11-14), so this is BOOT only.
+
+### The shim loads into the display server (`jt51`, 2026-11-14)
+
+**`jt51` is flashed, and the boot after it shows the shim in the display
+server.** `fastboot flash BOOT /var/tmp/a8-xnu-jt51-dyldfake.img` returned RC=0
+(`getvar product` = `jackpotlte`; `BOOT` is 0x2000000 = 32 MiB and the image is
+17,553,424 B, sha256 read back `76e8feca...c969c`), the phone rebooted into it,
+and the owner's photo of that boot (`IMG_20261114_131036274.jpg`, 13:10 CET) is
+the first screen output with the injected library running. The lines on it, with
+their source:
+
+- `|backboardd| jackpotlte-gl: ... the library is
+  @loader_path/libOSMesa.8.dylib` -- `0048`'s tee prefix, then
+  `jackpotlte_gl_osmesa.c:133`.
+- `|backboardd| jackpotlte-gl: ... an OpenGL ES 3 context for CoreAnimation by
+  @loader_path/libOSMesa.8.dylib: OpenGL ES 3.1 Mesa 25.0.7; softpipe` --
+  `eagl.c:234`.
+- `|backboardd| jackpotlte-gl: ... -setParameter:0x268 to:0x16ef1f404` --
+  `eagl.c:311`.
+- `JackpotlteMali: a client opened the GPU`, and many `JackpotlteMali: request
+  0x44, 16 bytes` -- the kernel: `0154`'s `IOLog` at line 214, and `0x44` =
+  `kPanfrostGetParam` at line 75.
+
+The prefix is `0048`'s `|%s| `; at this size its `|` glyphs read as `[`/`I`
+(OCR gives `Ibackboarda}`), so these are `backboardd`'s stderr and the
+`jackpotlte-gl:` text is the shim's own `say()`. Only `backboardd` has them,
+which matches `jtexecinject=...,backboardd`. The frame carries no version
+banner, so the tie to `jt51` is the timing (minutes after the flash) together
+with its being the boot in which the injection worked -- `jt48`'s recording had
+shown no such line.
+
+**What is proven, and what is not.** *Loaded*: yes. This is the section above
+working: `0159`'s `DYLD_AMFI_FAKE=0x2` made dyld keep
+`DYLD_INSERT_LIBRARIES`, and CoreAnimation's renderer was then given an
+`EAGLContext` that is the shim's. *Drew a frame*: no. The console line that
+would say a texture is the display's memory (`eagl.c:369`, `... is surface N,
+W x H, memory shared`) is absent, and so is the kernel's `request 0x7e`
+(`kJackpotlteSurface`, `0154` line 79), which only the surface path emits; the
+photo's screen is the console alone (every colour in it is neutral grey).
+`GL_RENDERER` also reads `softpipe` -- Mesa's software rasteriser answered, not
+Mali. So the next evidence to seek, in a recording rather than a single frame,
+is `... memory shared` and `request 0x7e` after the context is made; if they
+never come, the question is why the renderer makes a context and then attaches
+no surface (`-setParameter:` was called, but its value is not read,
+`eagl.c:19`).
+
+BOOT only; no `USERDATA` write was involved.
