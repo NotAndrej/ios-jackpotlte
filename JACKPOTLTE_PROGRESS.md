@@ -3020,3 +3020,11 @@ had left in `USERDATA`. What is left is the boot and a photo. The phone answers
 whether dyld honours the injected variable for `backboardd`, and only a frame on
 the panel is a draw claim. `docs/jackpotlte-mali.md` §9 has this with the
 citations.
+
+`fastboot reboot` was sent at 2026-11-14 06:46 UTC, so the flashed image has been
+booted; the phone left fastboot and does not enumerate on USB (as expected -- no
+gadget yet), so there is no observation to report. The screen needs a photo, and
+the 4 MiB persistent console ring at the end of `userdata` holds the kernel's log
+for later (`tools/sweet-log-pull.sh` reads it from a temporarily booted recovery;
+`/home/not_andrej/recovery-public-v1.img` is on the host). Reaching fastboot
+again takes the button combo.
