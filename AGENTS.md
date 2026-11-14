@@ -11,6 +11,13 @@
 
 - Keep private VM addresses, passwords, device dumps and downloaded Apple binaries out of git.
 - Preserve recovery p11, EFS p3 and the existing Linux BOOT checkpoint. Current XNU trials may write only the explicitly authorized BOOT p10; the donor's Xiaomi `fastboot` and USERDATA instructions are not A5XELTE instructions.
+- **NEVER flash `USERDATA` raw. It must be an Android sparse image, every time.**
+  The iOS root is a 16 GiB raw `IOSRoot.img`; writing that raw to the phone OOMs
+  the host (and the flash dies). Always: `img2simg RAW SPARSE`, verify with
+  `tools/jackpotlte/verify-sparse.py RAW SPARSE`, then `fastboot flash USERDATA
+  SPARSE`. `img2simg` needs the raw master *and* the ~12 GB sparse copy on disk
+  at once (~28 GiB free), so check `df` before starting. This is a step that has
+  been forgotten more than once — do not skip it, and do not "just try raw".
 - Keep build success, recovered kernel markers, physical screen reports and iOS runtime behavior as separate claims. `NOTES.md` below is SWEET donor history; do not edit it to imply Samsung behavior.
 
 ## Original SWEET contributor instructions (donor reference)
