@@ -3330,3 +3330,53 @@ no surface (`-setParameter:` was called, but its value is not read,
 `eagl.c:19`).
 
 BOOT only; no `USERDATA` write was involved.
+
+### The surface hand-off fails: the GL screen is softpipe (2026-11-14)
+
+Four photos of one boot (`IMG_20261114_132037538.jpg` and three beside it,
+13:20-13:21) show a crash loop, and each round localises the wall:
+
+```
+|backboardd| jackpotlte-gl: ... an OpenGL ES 3 context for CoreAnimation by
+            @loader_path/libOSMesa.8.dylib: OpenGL ES 3.1 Mesa 25.0.7; softpipe
+|backboardd| jackpotlte-gl: ... -setParameter:0x260 to:0x16f63b404
+SWEET SURF: backboardd create ld 60 1080x2220 fmt 0x42475241 bpe 4 bpr 4320 planes 0 size 9662464 keys 11 -> 0x0
+|backboardd| jackpotlte-gl: ... surface 60 is not a texture here (GL error 0x501)
+CRSH backboardd[503] sig 11 code 0x100000001 sub 0x30 ... pc 0x1d2d75e70 ... far 0x30
+Process[503] crashed: backboardd. Too many corpses being created.
+```
+
+then `exec backboardd`, `JT ENV: backboardd += DYLD_AMFI_FAKE=0x2`, and the next
+round (`surface 61`/`[567]`, `surface 67`/`[599]`).
+
+- `JT ENV:` is `0159`'s kernel print: the variable reaches `backboardd` every
+  round, including after a crash.
+- The surface is the right shape -- 1080x2220, `0x42475241` = 'BGRA', `bpe 4`,
+  one plane -- which is exactly what `osmesa_surface_resource` requires
+  (`0003-osmesa-panfrost-screen.patch:136`).
+- `0x501` is `GL_INVALID_VALUE`, raised in
+  `jackpotlte_gl_osmesa.c:253` after `glEGLImageTargetTexture2DOES` went
+  through. `0003` only makes a surface a texture when `gpu_fd >= 0` (patch
+  line 134), so a softpipe screen cannot do it and returns NULL.
+- The renderer is `softpipe`, so `osmesa_create_gpu_screen()` returned NULL.
+  That happens if `OSMESA_SOFTWARE` is set (nothing sets it), if
+  `drmOpenWithType("panfrost")` fails (it does not: "JackpotlteMali: a client
+  opened the GPU" appears in lockstep with the shim's `the library is ...`,
+  every round), or if `panfrost_drm_screen_create()` fails.
+- The crash follows the refused attach: `far 0x30` is a NULL+0x30 dereference
+  and the pc is Apple code, so it is CoreAnimation dying after being handed no
+  texture, not the shim. It repeats until "Too many corpses".
+
+So the path is correct up to one thing: panfrost's screen. That failure is
+silent here -- `debug_printf`, which carries "Unsupported model"
+(`pan_screen.c:905`), is compiled out unless `MESA_DEBUG` is a *build* define
+(`src/util/u_debug.h:133`), and the tiler-heap and sample-position failures in
+`pan_device.c` do not log at all. The kmod paths that do log use `mesa_loge`,
+and nothing was printed.
+
+The next boot has to say which it is: log the values the user client answers
+for `DRM_PANFROST_PARAM_*` in `0154`'s get_param. The prod id must be `0x6000`
+with variant 0 for `panfrost_get_model` to find G71
+(`src/panfrost/lib/pan_props.c:61`; the panfrost kmod never sets `gpu_variant`,
+so `memset` leaves it 0, `panfrost_kmod.c:182`), and a create-BO (`0x42`) has to
+follow the queries at all.
