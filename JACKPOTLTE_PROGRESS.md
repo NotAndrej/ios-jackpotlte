@@ -4933,3 +4933,63 @@ Commit `3af7aac` on branch `jackpotlte-display` (files: `car-mode.py` new,
 was written (the write is authored in the script; the script writes), and no
 `fastboot`/`adb`/`img2simg` was run. `python3 tools/validate-repo.py` passes
 (168 patches, 39 Python tools, 28 shell scripts).
+
+### Handoff: the lock-screen fix is built and staged; only the flash is left
+
+**The missing clock and camera button, root-caused.** jt64's 12:05 console photo
+(`~/Downloads/IMG_20261115_120537625.jpg`), read directly, has the kernel's own
+line for the clock's ramp straight above the shim's refusal:
+
+    SWEET SURF: backboardd create id 6 256x1 fmt 0x0 bpe 2 bpr 672 planes 0 size 4096 -> 0x0
+    [backboardd] jackpotlte-gl: -texImageIOSurface:: surface 6 is '..', 0 planes, 2 bytes a pixel: not a texture here
+    [backboardd] jackpotlte-gl: -texImageIOSurface:: surface 5 is 'L008', 0 planes, 2 bytes a pixel: not a texture here
+
+Surface 6 is the clock gradient ramp, surface 5 the camera button's `L008`
+luminance mask. The shim accepted only `'BGRA'`, so both were refused, and a
+refused texture is not drawn. That is the whole of "status bar and pill only".
+
+**The fix is userspace only** - `userspace/jackpotlte-gl/eagl.c`,
+`-texImageIOSurface:` - and lives on branch `jackpotlte-gl-surface-copy`
+(commits through `8bd44f4`, pushed; CI `43711731841` green; host test
+`userspace/jackpotlte-gl/test_surface_copy.c` under ASan/UBSan covers the exact
+surface-6 numbers, a padded stride, `invert`, a short allocation and the
+refusal). It copies a non-`BGRA` surface with the format/type CoreAnimation
+asked for, honours `invert`, and derives pixels as stride -> the surface's own
+`bytesPerElement` -> the allocation, never reading past the allocation;
+`-attachImage:` still refuses non-`BGRA` because that surface is drawn *into*.
+This is **not merged to `main`**: "built" and "drew a frame" stay separate
+claims, and only the phone can close the second one.
+
+**Delivery is prepared and stops before the flash.** The fixed shim
+(`userspace/out/libjackpotlte-gl.dylib`, 214,568 B, sha256 `bb42dd3a...`) was
+installed into `/var/tmp/IOSRoot.img` by `tools/jackpotlte/install-userspace.sh`
+(read back `ok libjackpotlte-gl.dylib bb42dd3a...`, fsck "no new problem",
+image sha256 `5cbfe6ea...` -> `41268db4...`), then `img2simg` produced
+`/var/tmp/IOSRoot.sparse.img` (12,158,019,288 B, sha256 `2383e4f6...`) which
+`tools/jackpotlte/verify-sparse.py` reports as **every data byte matches**.
+`/var/tmp/jt66/a8-xnu-jt66-boot.img` (sha256 `bb4f4a16...`) is the 0174
+touch-power kernel with `a8touchverbose=1`, so touch power and the GL fix land
+in one boot.
+
+**Nothing has been flashed**, and nothing can be until the phone is in
+fastboot: as of this entry `fastboot devices` is empty and `lsusb` shows no
+`18d1:`/`04e8:` device. When it is there:
+
+    fastboot flash USERDATA /var/tmp/IOSRoot.sparse.img   # carries the fixed shim
+    fastboot flash BOOT     /var/tmp/jt66/a8-xnu-jt66-boot.img
+
+USERDATA first. The new shim prints the geometry for every copy and refusal
+(`row <used> of <reported> bytes, <n> B a pixel, <n> planes, <n> allocated,
+format <f> type <t>`), so the next console photo alone says whether surfaces 5
+and 6 became textures ("copied into the texture") and the clock and camera
+button drew.
+
+**Tooling gap closed on `main`** (`1aaaec8`): `install-userspace.sh` now refuses
+an image that is already attached to a loop device, with the unmount-then-detach
+order in the message. An image already attached is reused by `mount(8)`, and a
+read-only attachment makes the second mount read-only, so the install died with
+`cannot remove ...: Read-only file system` after writing nothing - twice, on a
+read-only inspection mount of the same image. The check resolves the loop
+device's backing file, since `/proc/mounts` names a loop mount's source as
+`/dev/loopN` and never the image.
+
