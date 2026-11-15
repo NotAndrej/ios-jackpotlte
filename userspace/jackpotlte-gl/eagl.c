@@ -84,8 +84,13 @@ uint32_t IOSurfaceGetID(IOSurfaceRef surface);
 uint32_t IOSurfaceGetPixelFormat(IOSurfaceRef surface);
 size_t IOSurfaceGetPlaneCount(IOSurfaceRef surface);
 size_t IOSurfaceGetBytesPerElement(IOSurfaceRef surface);
+size_t IOSurfaceGetBytesPerRow(IOSurfaceRef surface);
+size_t IOSurfaceGetAllocSize(IOSurfaceRef surface);
 size_t IOSurfaceGetWidth(IOSurfaceRef surface);
 size_t IOSurfaceGetHeight(IOSurfaceRef surface);
+void *IOSurfaceGetBaseAddress(IOSurfaceRef surface);
+int IOSurfaceLock(IOSurfaceRef surface, uint32_t options, uint32_t *seed);
+int IOSurfaceUnlock(IOSurfaceRef surface, uint32_t options, uint32_t *seed);
 
 /* The GL names this file itself uses. */
 #define GL_TEXTURE_2D             0x0de1
@@ -93,6 +98,30 @@ size_t IOSurfaceGetHeight(IOSurfaceRef surface);
 #define GL_VENDOR                 0x1f00
 #define GL_RENDERER               0x1f01
 #define GL_VERSION                0x1f02
+
+/* glTexImage2D's formats CoreAnimation hands -texImageIOSurface: (the surface's
+ * own pixel format is not part of that call: these are). */
+#define GL_ALPHA                  0x1906
+#define GL_RGB                    0x1907
+#define GL_RGBA                   0x1908
+#define GL_BGRA                   0x80e1
+#define GL_LUMINANCE              0x1909
+#define GL_LUMINANCE_ALPHA        0x190a
+#define GL_UNSIGNED_BYTE          0x1401
+#define GL_UNSIGNED_SHORT_5_6_5   0x8363
+#define GL_UNSIGNED_SHORT_4_4_4_4 0x8033
+#define GL_UNSIGNED_SHORT_5_5_5_1 0x8034
+#define GL_FLOAT                  0x1406
+#define GL_HALF_FLOAT             0x140b
+#define GL_RGBA8                  0x8058
+#define GL_RGBA16F                0x881a
+#define GL_RGBA32F                0x8814
+#define GL_TEXTURE_MIN_FILTER     0x2801
+#define GL_TEXTURE_MAG_FILTER     0x2800
+#define GL_LINEAR                 0x2601
+
+/* kIOSurfaceLockReadOnly. */
+#define SURFACE_LOCK_READ_ONLY    0x1
 
 /* As many contexts as the display server has been seen to make: the renderer's
  * own and CoreImage's.  A table this small keeps the lookup in context_of() a
@@ -401,6 +430,279 @@ bound_texture(struct jackpotlte_eagl *e)
 }
 
 /*
+ * True when the surface's own memory can be the texture, with no copy: one
+ * plane of 32-bit BGRA pixels.  That is the format the kernel's GPU driver can
+ * map (0154's 0x7e) and the one CoreAnimation composites its own draws into, so
+ * both -attachImage: and -texImageIOSurface: take the zero-copy path for it.
+ */
+static int
+surface_shareable(IOSurfaceRef surface)
+{
+   return IOSurfaceGetPixelFormat(surface) == 'BGRA' &&
+          IOSurfaceGetPlaneCount(surface) == 0 &&
+          IOSurfaceGetBytesPerElement(surface) == 4;
+}
+
+/*
+ * How many bytes one pixel of (format, type) is, for the formats CoreAnimation
+ * passes -texImageIOSurface:.  0: not one of them.
+ */
+static size_t
+bytes_a_pixel(unsigned long format, unsigned long type)
+{
+   if (type == GL_UNSIGNED_BYTE) {
+      switch (format) {
+      case GL_RGBA:
+      case GL_BGRA:
+         return 4;
+      case GL_RGB:
+         return 3;
+      case GL_LUMINANCE_ALPHA:
+         return 2;
+      case GL_ALPHA:
+      case GL_LUMINANCE:
+         return 1;
+      default:
+         return 0;
+      }
+   }
+   if (type == GL_FLOAT) {
+      switch (format) {
+      case GL_RGBA:
+         return 16;
+      case GL_LUMINANCE_ALPHA:
+         return 8;
+      case GL_ALPHA:
+      case GL_LUMINANCE:
+         return 4;
+      default:
+         return 0;
+      }
+   }
+   if (type == GL_HALF_FLOAT) {
+      switch (format) {
+      case GL_RGBA:
+         return 8;
+      case GL_LUMINANCE_ALPHA:
+         return 4;
+      case GL_ALPHA:
+      case GL_LUMINANCE:
+         return 2;
+      default:
+         return 0;
+      }
+   }
+   if (type == GL_UNSIGNED_SHORT_5_6_5 || type == GL_UNSIGNED_SHORT_4_4_4_4 ||
+       type == GL_UNSIGNED_SHORT_5_5_5_1) {
+      return 2;
+   }
+   return 0;
+}
+
+/*
+ * A surface that cannot be a texture in place, made into one by copying it with
+ * the format the caller asks for.  jt64's 12:05 log is why this exists:
+ *
+ *   -texImageIOSurface:: surface 6 is '..', 0 planes, 2 bytes a pixel: not a
+ *       texture here
+ *   -texImageIOSurface:: surface 5 is 'L008..', 0 planes, 2 bytes a pixel: not
+ *       a texture here
+ *
+ * Those are not BGRA and so were refused, and a refused texture is not drawn:
+ * the lock screen's clock (a 256x1 float gradient ramp) and its camera button
+ * (an 8-bit luminance mask) came out as nothing and as a white square, while
+ * the plain-BGRA status bar and home indicator drew.  A copy is the wrong thing
+ * for a surface the caller draws *into* (-attachImage: keeps refusing), but for
+ * one it only samples, the pixels are all that is wanted.
+ */
+static BOOL
+surface_copy_texture(struct jackpotlte_eagl *e, IOSurfaceRef surface,
+                     int width, int height, unsigned long internal,
+                     unsigned long format, unsigned long type, BOOL invert,
+                     const char *method)
+{
+   static void (*tex_image)(unsigned, int, int, int, int, int, unsigned,
+                            unsigned, const void *);
+   static void (*tex_parameter)(unsigned, unsigned, int);
+   static unsigned (*get_error)(void);
+   static unsigned char *packed;
+   static size_t capacity;
+   static uint32_t logged;
+   size_t bpr;
+   size_t bpp;
+   size_t row;
+   size_t total;
+   const unsigned char *base;
+   const unsigned char *source;
+   unsigned error;
+   uint32_t seed = 0;
+   uint32_t pixels = IOSurfaceGetPixelFormat(surface);
+   int locked;
+
+   if (!resolve_helpers() || !jackpotlte_gl_make_current(e->gl))
+      return NO;
+   if (tex_image == NULL) {
+      tex_image = (void (*)(unsigned, int, int, int, int, int, unsigned,
+                            unsigned, const void *))
+         jackpotlte_gl_proc("glTexImage2D");
+      tex_parameter = (void (*)(unsigned, unsigned, int))
+         jackpotlte_gl_proc("glTexParameteri");
+      get_error = (unsigned (*)(void))jackpotlte_gl_proc("glGetError");
+      if (tex_image == NULL || get_error == NULL) {
+         say("%s: the library has no glTexImage2D: surface %u is not a texture",
+             method, (unsigned)IOSurfaceGetID(surface));
+         return NO;
+      }
+   }
+   if (width <= 0) {
+      width = (int)IOSurfaceGetWidth(surface);
+   }
+   if (height <= 0) {
+      height = (int)IOSurfaceGetHeight(surface);
+   }
+   bpr = IOSurfaceGetBytesPerRow(surface);
+   bpp = bytes_a_pixel(format, type);
+   if (bpp == 0) {
+      /* Nothing usable was asked for: the surface's own geometry is then the
+       * only thing to go on, and a whole number of bytes a pixel is a guess
+       * that at least keeps the rows lined up. */
+      if (width > 0 && bpr % (size_t)width == 0) {
+         bpp = bpr / (size_t)width;
+      }
+      if (bpp == 0 && width > 0 && height > 0) {
+         size_t whole = IOSurfaceGetAllocSize(surface);
+
+         if (whole != 0 && whole % ((size_t)width * (size_t)height) == 0) {
+            bpp = whole / ((size_t)width * (size_t)height);
+         }
+      }
+      if (bpp == 0) {
+         say("%s: surface %u is '%.4s' and asks for format %#lx type %#lx, "
+             "which is no texture this knows", method,
+             (unsigned)IOSurfaceGetID(surface),
+             (const char *)&(uint32_t){ __builtin_bswap32(pixels) },
+             format, type);
+         return NO;
+      }
+   }
+   /* The caller did not say what the pixels are, or said something the surface
+    * cannot be: a whole number of bytes a pixel is then the decision. */
+   if (format == 0 || type == 0) {
+      switch (bpp) {
+      case 16:
+         format = GL_RGBA;
+         type = GL_FLOAT;
+         break;
+      case 8:
+         format = GL_RGBA;
+         type = GL_HALF_FLOAT;
+         break;
+      case 4:
+         format = GL_RGBA;
+         type = GL_UNSIGNED_BYTE;
+         break;
+      case 2:
+         format = GL_LUMINANCE_ALPHA;
+         type = GL_UNSIGNED_BYTE;
+         break;
+      default:
+         format = GL_ALPHA;
+         type = GL_UNSIGNED_BYTE;
+         break;
+      }
+   }
+   row = (size_t)width * bpp;
+   if (bpr < row && width > 0 && bpr % (size_t)width == 0) {
+      /* The caller's idea of a pixel is wider than a row of the surface can
+       * hold: believe the surface. */
+      bpp = bpr / (size_t)width;
+      row = (size_t)width * bpp;
+      if (bpp == 1) {
+         format = GL_ALPHA;
+         type = GL_UNSIGNED_BYTE;
+      }
+   }
+   if (internal == 0) {
+      /* GL_RGBA8 for a byte BGRA surface, else the format itself. */
+      internal = (format == GL_BGRA) ? GL_RGBA8 : format;
+      if (bpp == 16) {
+         internal = GL_RGBA32F;
+      } else if (bpp == 8 && format == GL_RGBA) {
+         internal = GL_RGBA16F;
+      }
+   }
+   total = row * (size_t)height;
+
+   locked = IOSurfaceLock(surface, SURFACE_LOCK_READ_ONLY, &seed) == 0;
+   base = (const unsigned char *)IOSurfaceGetBaseAddress(surface);
+   if (base == NULL || total == 0) {
+      if (locked) {
+         IOSurfaceUnlock(surface, SURFACE_LOCK_READ_ONLY, &seed);
+      }
+      say("%s: surface %u has no memory to copy", method,
+          (unsigned)IOSurfaceGetID(surface));
+      return NO;
+   }
+   if (bpr == 0) {
+      bpr = row;
+   }
+   /* Always pack: the surface's rows and the texture's rows are not guaranteed
+    * to be the same width, and a copy that reads past a row is a fault, while
+    * one that copies less than a row is only a wrong picture. */
+   if (total > capacity) {
+      unsigned char *bigger = realloc(packed, total);
+
+      if (bigger == NULL) {
+         if (locked) {
+            IOSurfaceUnlock(surface, SURFACE_LOCK_READ_ONLY, &seed);
+         }
+         say("%s: no room to pack surface %u (%zu bytes)", method,
+             (unsigned)IOSurfaceGetID(surface), total);
+         return NO;
+      }
+      packed = bigger;
+      capacity = total;
+   }
+   for (int y = 0; y < height; y++) {
+      size_t n = bpr < row ? bpr : row;
+      unsigned char *out = packed + (size_t)y * row;
+      const unsigned char *in = base + (size_t)(invert ? height - 1 - y : y) * bpr;
+
+      memset(out, 0, row);
+      memcpy(out, in, n);
+   }
+   source = packed;
+
+   while (get_error() != 0) {
+   }
+   tex_image(GL_TEXTURE_2D, 0, (int)internal, width, height, 0, (unsigned)format,
+             (unsigned)type, source);
+   error = get_error();
+   if (locked) {
+      IOSurfaceUnlock(surface, SURFACE_LOCK_READ_ONLY, &seed);
+   }
+   if (error != 0) {
+      say("%s: surface %u (%dx%d, %zu B a pixel, '%.4s') copy left GL error %#x",
+          method, (unsigned)IOSurfaceGetID(surface), width, height, bpp,
+          (const char *)&(uint32_t){ __builtin_bswap32(pixels) }, error);
+      return NO;
+   }
+   /* Complete the texture: without a mipmap level, the default minification
+    * filter samples nothing, whatever was uploaded. */
+   if (tex_parameter != NULL) {
+      tex_parameter(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+      tex_parameter(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+   }
+   if (logged++ < 16) {
+      say("%s: surface %u is '%.4s' %dx%d, format %#lx type %#lx: copied into "
+          "the texture", method, (unsigned)IOSurfaceGetID(surface),
+          (const char *)&(uint32_t){ __builtin_bswap32(pixels) }, width, height,
+          format, type);
+   }
+   return YES;
+}
+
+/*
  * The texture bound to the target is to be the surface's memory.  Returns NO
  * when the surface is not one this can be done for, and says why.
  */
@@ -420,8 +722,7 @@ surface_is_texture(struct jackpotlte_eagl *e, IOSurfaceRef surface,
       say("%s: no texture is bound", method);
       return NO;
    }
-   if (pixels != 'BGRA' || IOSurfaceGetPlaneCount(surface) != 0 ||
-       IOSurfaceGetBytesPerElement(surface) != 4) {
+   if (!surface_shareable(surface)) {
       say("%s: surface %u is '%.4s', %zu planes, %zu bytes a pixel: not a "
           "texture here", method, (unsigned)IOSurfaceGetID(surface),
           (const char *)&(uint32_t){ __builtin_bswap32(pixels) },
@@ -438,8 +739,10 @@ surface_is_texture(struct jackpotlte_eagl *e, IOSurfaceRef surface,
    return YES;
 }
 
-/* (the last three arguments arrive on the stack: their sizes and order are the
- * method's own) */
+/*
+ * A surface handed to a *sampling* call: in place when it can be (one plane of
+ * BGRA), and as a copy in the format the caller asked for when it cannot.
+ */
 static BOOL
 my_texImageIOSurface(id self, SEL selector, IOSurfaceRef surface,
                      unsigned long target, unsigned long internal, int width,
@@ -449,16 +752,22 @@ my_texImageIOSurface(id self, SEL selector, IOSurfaceRef surface,
    struct jackpotlte_eagl *e = context_of(self);
 
    (void)selector;
-   (void)internal;
-   (void)format;
-   (void)type;
    (void)plane;
    (void)invert;
-   (void)width;
-   (void)height;
    if (e == NULL || surface == NULL)
       return NO;
-   return surface_is_texture(e, surface, target, "-texImageIOSurface:");
+   if (target != GL_TEXTURE_2D) {
+      say("-texImageIOSurface: target %#lx is not GL_TEXTURE_2D", target);
+      return NO;
+   }
+   if (bound_texture(e) == 0) {
+      say("-texImageIOSurface: no texture is bound");
+      return NO;
+   }
+   if (surface_shareable(surface))
+      return surface_is_texture(e, surface, target, "-texImageIOSurface:");
+   return surface_copy_texture(e, surface, width, height, internal, format, type,
+                               invert, "-texImageIOSurface:");
 }
 
 static BOOL
@@ -486,15 +795,23 @@ my_texImageIOSurface_plane(id self, SEL selector, IOSurfaceRef surface,
    struct jackpotlte_eagl *e = context_of(self);
 
    (void)selector;
-   (void)internal;
-   (void)width;
-   (void)height;
-   (void)format;
-   (void)type;
    (void)plane;
    if (e == NULL || surface == NULL)
       return NO;
-   return surface_is_texture(e, surface, target, "-texImageIOSurface:...plane:");
+   if (target != GL_TEXTURE_2D) {
+      say("-texImageIOSurface:...plane: target %#lx is not GL_TEXTURE_2D",
+          target);
+      return NO;
+   }
+   if (bound_texture(e) == 0) {
+      say("-texImageIOSurface:...plane: no texture is bound");
+      return NO;
+   }
+   if (surface_shareable(surface))
+      return surface_is_texture(e, surface, target,
+                                "-texImageIOSurface:...plane:");
+   return surface_copy_texture(e, surface, width, height, internal, format, type,
+                               NO, "-texImageIOSurface:...plane:");
 }
 
 /*

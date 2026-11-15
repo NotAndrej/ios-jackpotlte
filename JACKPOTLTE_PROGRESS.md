@@ -4933,3 +4933,60 @@ Commit `3af7aac` on branch `jackpotlte-display` (files: `car-mode.py` new,
 was written (the write is authored in the script; the script writes), and no
 `fastboot`/`adb`/`img2simg` was run. `python3 tools/validate-repo.py` passes
 (168 patches, 39 Python tools, 28 shell scripts).
+
+### jt64's 12:05 log names the missing UI: two surfaces refused as textures (2026-11-15)
+
+`~/Downloads/IMG_20261115_120537625.jpg` (12:05, the same jt64 boot as the
+12:07 lock-screen photo) is a scroll of console text, and two lines in it are
+the whole answer to "only the status bar and the pill draw":
+
+    [backboardd] jackpotlte-gl: -texImageIOSurface:: surface 6 is '..', 0 planes,
+        2 bytes a pixel: not a texture here
+    [backboardd] jackpotlte-gl: -texImageIOSurface:: surface 5 is 'L008..', 0
+        planes, 2 bytes a pixel: not a texture here
+
+`SWEET SURF: backboardd create id 6 256x1 fmt 0x0 bpe 2 bpr 672 planes 0
+size 4096` is the surface those two lines are about: **256x1, `4096` bytes** =
+16 bytes a pixel = a **256-entry RGBA float gradient ramp**. Surface 5 is
+`'L008'`, an **8-bit luminance mask**. `surface_is_texture()` in
+`userspace/jackpotlte-gl/eagl.c` accepted only `'BGRA'`, 0 planes and 4 bytes a
+pixel, because that is what the kernel's GPU driver can map with no copy; both
+were refused.
+
+A refused texture is not drawn, and the two elements that need those two
+surfaces are exactly the two that are missing from the 12:07 photo:
+
+* the **camera button** is in the photo as a **solid white square** of about the
+  size of its glyph - a textured quad sampling the GL default (white) because
+  the `'L008'` mask never became a texture; on the Nov 9 CPU rendition
+  (`IMG_20261109_072022724.jpg`) it is the dark circle with a white camera in it;
+* the **clock and date** (a gradient ramp) are not there at all.
+
+The status bar's orange strip and `rdar:45025538`, the white `home indicator`
+pill, and the `exec fairplayd.H2` console line are the rest of that frame; the
+strip and the pill are plain `'BGRA'`/solid, which is why they drew. The GPU is
+producing the frame (jt64's `0173` made the four-level walk work and `SWEET FB:
+swap 9 ... 1080x2220 fmt 0x42475241 bpr 4320` is in the same log), so this is a
+shim decision and not a rendering failure.
+
+**Fix (userspace, no kernel patch, no `0175`).** `-texImageIOSurface:` now takes
+the copy path when the surface cannot be a texture in place: it copies the
+pixels with **the format and type the caller asked for** (`GL_ALPHA`/
+`GL_UNSIGNED_BYTE` for the `'L008'` mask, `GL_RGBA`/`GL_FLOAT` into
+`GL_RGBA32F` for the ramp), honouring `invert`, and falls back to the surface's
+own geometry when the caller says nothing. `-attachImage:toCoreSurface:` still
+refuses anything but `'BGRA'`: that surface is one the caller *draws into*, and
+a copy of it would be a different picture, not the same memory.
+
+The decision is a host test, `userspace/jackpotlte-gl/test_surface_copy.c`
+(built and run by `userspace/build.sh` as `out/test_surface_copy`, and by the
+`userspace` workflow): a fake IOSurface and a fake `glTexImage2D` check the
+`'L008'` mask, the 256x1 ramp, a padded stride, `invert`, and that a surface
+with no derivable pixel size is refused rather than guessed.
+
+**Delivery is the root, not `BOOT`.** `libjackpotlte-gl.dylib` lives in
+`/usr/local/lib` on USERDATA, so this needs the `userspace` CI artifact
+installed into the root image (`tools/jackpotlte/apply-root-tweaks.sh`) and the
+sparse rebuilt - a destructive USERDATA flash that needs the owner's go-ahead,
+and ~12.2 GB of free disk, which means deleting `/var/tmp/IOSRoot.sparse.img`
+first.

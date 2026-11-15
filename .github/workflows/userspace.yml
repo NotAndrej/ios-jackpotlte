@@ -43,6 +43,9 @@ jobs:
       - name: The request layer asks the kernel for the right things
         run: userspace/out/test_gpu_host
 
+      - name: The surface-copy path decides the way jt64's log said
+        run: userspace/out/test_surface_copy
+
       - name: The phone's copies are arm64
         run: |
           file userspace/out/maliprobe

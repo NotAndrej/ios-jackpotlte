@@ -97,6 +97,15 @@ if printf '%s\n' "$gl_undefined" | grep -E ' _gl[A-Z]'; then
 	exit 1
 fi
 
+echo "--- host copy of the surface-copy test ---"
+# Which IOSurfaces -texImageIOSurface: turns into textures, and in what format,
+# is a decision made in eagl.c and is what the lock screen's clock and camera
+# button failed on (jt64: surface 6 is '..', a 256x1 float ramp, and surface 5
+# is 'L008', a luminance mask; both were refused, and a refused texture is not
+# drawn).  The fake IOSurface and fake GL are in the test itself, so this is a
+# host build.
+clang "${common[@]}" -o "$out/test_surface_copy" "$gl/test_surface_copy.c"
+
 echo "--- arm64 iOS libjackpotlte.a ---"
 obj=$out/.obj
 rm -rf "$obj"
@@ -121,5 +130,6 @@ lipo -info "$out/libjackpotlte.a"
 echo
 echo "built:"
 ls -l "$out/maliprobe" "$out/maliprobe.host" "$out/test_gpu_host" \
-	"$out/libjackpotlte.a" "$out/libjackpotlte-gl.dylib" \
+	"$out/test_surface_copy" "$out/libjackpotlte.a" \
+	"$out/libjackpotlte-gl.dylib" \
 	"$out/jackpotlte_gpu.h" "$out/jackpotlte_drm.h"
