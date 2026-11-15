@@ -166,7 +166,41 @@ main(void)
       check("  whole ramp", upload.w == 256 && upload.h == 1);
    }
 
-   /* 3. A padded row: 3x2, 4 bytes a pixel, 20-byte stride. */
+   /* 3. The jt64 log's surface 6 (JACKPOTLTE_PROGRESS.md, "jt64's 12:05 log"):
+    *    256x1, pixelFormat 0, bytesPerElement 2, bytesPerRow 672, 4096
+    *    allocated.  672 is not 256 of anything and 4096 is the page rounding, so
+    *    the surface's own bytes a pixel is what is left. */
+   memset(&upload, 0, sizeof(upload));
+   memset(captured, 0, sizeof(captured));
+   {
+      struct __IOSurface *s = surface_new(6, 0, 256, 1, 672, 2, 4096);
+
+      check("jt64's surface 6 becomes a texture",
+            surface_copy_texture(&eagl, s, 0, 0, 0, 0, 0, NO, "-t") == YES);
+      check("  two bytes a pixel, as the surface says",
+            upload.format == GL_LUMINANCE_ALPHA &&
+            upload.type == GL_UNSIGNED_BYTE);
+      check("  one 512-byte row of the 672-byte surface row",
+            captured[0] == s->bytes[0] && captured[511] == s->bytes[511]);
+      check("  and nothing from past it", captured[512] == 0);
+   }
+
+   /* 4. A short allocation: bytesPerRow times the height is more than the
+    *    surface says it allocated, and nothing may be read past it. */
+   memset(&upload, 0, sizeof(upload));
+   memset(captured, 0, sizeof(captured));
+   {
+      struct __IOSurface *s = surface_new(10, 0x42475241u /* 'BGRA' */, 128, 4,
+                                          512, 4, 1024);
+
+      check("a short allocation is copied short, never read past",
+            surface_copy_texture(&eagl, s, 0, 0, GL_RGBA8, GL_BGRA,
+                                 GL_UNSIGNED_BYTE, NO, "-t") == YES);
+      check("  the two rows it holds are there",
+            captured[0] == s->bytes[0] && captured[1023] == s->bytes[1023]);
+   }
+
+   /* 5. A padded row: 3x2, 4 bytes a pixel, 20-byte stride. */
    memset(&upload, 0, sizeof(upload));
    memset(captured, 0, sizeof(captured));
    {
@@ -182,7 +216,7 @@ main(void)
             captured[12] == s->bytes[20] && captured[23] == s->bytes[31]);
    }
 
-   /* 4. invert: the surface's last row is the texture's first. */
+   /* 6. invert: the surface's last row is the texture's first. */
    memset(&upload, 0, sizeof(upload));
    memset(captured, 0, sizeof(captured));
    {
@@ -195,7 +229,7 @@ main(void)
             captured[0] == s->bytes[8] && captured[3] == s->bytes[11]);
    }
 
-   /* 5. Nothing usable at all: refused, not guessed. */
+   /* 7. Nothing usable at all: refused, not guessed. */
    memset(&upload, 0, sizeof(upload));
    {
       struct __IOSurface *s = surface_new(8, 0x76303234u, 7, 3, 9, 0, 27);

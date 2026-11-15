@@ -532,6 +532,7 @@ surface_copy_texture(struct jackpotlte_eagl *e, IOSurfaceRef surface,
    size_t bpp;
    size_t row;
    size_t total;
+   size_t alloc;
    const unsigned char *base;
    const unsigned char *source;
    unsigned error;
@@ -563,25 +564,34 @@ surface_copy_texture(struct jackpotlte_eagl *e, IOSurfaceRef surface,
    bpr = IOSurfaceGetBytesPerRow(surface);
    bpp = bytes_a_pixel(format, type);
    if (bpp == 0) {
-      /* Nothing usable was asked for: the surface's own geometry is then the
-       * only thing to go on, and a whole number of bytes a pixel is a guess
-       * that at least keeps the rows lined up. */
+      /* Nothing usable was asked for, so the surface has to say.  In order of
+       * how much each answer means: its stride (a row is a whole number of
+       * pixels, or it is not this surface's stride at all), then its own bytes
+       * a pixel, then the allocation.  jt64's surface 6 - 256x1, bytesPerElement
+       * 2, bytesPerRow 672, 4096 allocated, pixelFormat 0 - is the case that
+       * needs the second one: 672 is not 256 of anything, and the allocation's
+       * 16 bytes a pixel is the page rounding, not the ramp. */
+      size_t whole = IOSurfaceGetAllocSize(surface);
+      size_t bpe = IOSurfaceGetBytesPerElement(surface);
+
       if (width > 0 && bpr % (size_t)width == 0) {
          bpp = bpr / (size_t)width;
       }
-      if (bpp == 0 && width > 0 && height > 0) {
-         size_t whole = IOSurfaceGetAllocSize(surface);
-
-         if (whole != 0 && whole % ((size_t)width * (size_t)height) == 0) {
-            bpp = whole / ((size_t)width * (size_t)height);
-         }
+      if (bpp == 0 && bpe > 0 && bpe <= 16) {
+         bpp = bpe;
+      }
+      if (bpp == 0 && width > 0 && height > 0 && whole != 0 &&
+          whole % ((size_t)width * (size_t)height) == 0) {
+         bpp = whole / ((size_t)width * (size_t)height);
       }
       if (bpp == 0) {
-         say("%s: surface %u is '%.4s' and asks for format %#lx type %#lx, "
-             "which is no texture this knows", method,
+         say("%s: surface %u is '%.4s' %dx%d, row %zu, %zu B a pixel, %zu "
+             "planes, %zu allocated, and asks for format %#lx type %#lx, which "
+             "is no texture this knows", method,
              (unsigned)IOSurfaceGetID(surface),
-             (const char *)&(uint32_t){ __builtin_bswap32(pixels) },
-             format, type);
+             (const char *)&(uint32_t){ __builtin_bswap32(pixels) }, width,
+             height, bpr, bpe, IOSurfaceGetPlaneCount(surface), whole, format,
+             type);
          return NO;
       }
    }
@@ -663,13 +673,24 @@ surface_copy_texture(struct jackpotlte_eagl *e, IOSurfaceRef surface,
       packed = bigger;
       capacity = total;
    }
+   /* Nothing is read past the surface's allocation.  bytesPerRow times the
+    * height need not fit in it - jt64's surface 6 is 256x1 with bytesPerRow 672
+    * and a 4096-byte allocation, which is more than 672 - so the last row of a
+    * short allocation is copied short rather than read past. */
+   alloc = IOSurfaceGetAllocSize(surface);
    for (int y = 0; y < height; y++) {
       size_t n = bpr < row ? bpr : row;
+      size_t off = (size_t)(invert ? height - 1 - y : y) * bpr;
       unsigned char *out = packed + (size_t)y * row;
-      const unsigned char *in = base + (size_t)(invert ? height - 1 - y : y) * bpr;
 
       memset(out, 0, row);
-      memcpy(out, in, n);
+      if (alloc != 0 && off >= alloc) {
+         continue;
+      }
+      if (alloc != 0 && n > alloc - off) {
+         n = alloc - off;
+      }
+      memcpy(out, base + off, n);
    }
    source = packed;
 
@@ -682,8 +703,9 @@ surface_copy_texture(struct jackpotlte_eagl *e, IOSurfaceRef surface,
       IOSurfaceUnlock(surface, SURFACE_LOCK_READ_ONLY, &seed);
    }
    if (error != 0) {
-      say("%s: surface %u (%dx%d, %zu B a pixel, '%.4s') copy left GL error %#x",
-          method, (unsigned)IOSurfaceGetID(surface), width, height, bpp,
+      say("%s: surface %u (%dx%d, row %zu, %zu B a pixel, '%.4s') copy left GL "
+          "error %#x", method, (unsigned)IOSurfaceGetID(surface), width, height,
+          bpr, bpp,
           (const char *)&(uint32_t){ __builtin_bswap32(pixels) }, error);
       return NO;
    }
@@ -694,9 +716,12 @@ surface_copy_texture(struct jackpotlte_eagl *e, IOSurfaceRef surface,
       tex_parameter(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
    }
    if (logged++ < 16) {
-      say("%s: surface %u is '%.4s' %dx%d, format %#lx type %#lx: copied into "
-          "the texture", method, (unsigned)IOSurfaceGetID(surface),
+      say("%s: surface %u is '%.4s' %dx%d, row %zu of %zu bytes, %zu B a pixel, "
+          "%zu planes, %zu allocated, format %#lx type %#lx: copied into the "
+          "texture", method, (unsigned)IOSurfaceGetID(surface),
           (const char *)&(uint32_t){ __builtin_bswap32(pixels) }, width, height,
+          bpr, IOSurfaceGetBytesPerRow(surface), bpp,
+          IOSurfaceGetPlaneCount(surface), IOSurfaceGetAllocSize(surface),
           format, type);
    }
    return YES;

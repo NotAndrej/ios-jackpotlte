@@ -4981,8 +4981,29 @@ a copy of it would be a different picture, not the same memory.
 The decision is a host test, `userspace/jackpotlte-gl/test_surface_copy.c`
 (built and run by `userspace/build.sh` as `out/test_surface_copy`, and by the
 `userspace` workflow): a fake IOSurface and a fake `glTexImage2D` check the
-`'L008'` mask, the 256x1 ramp, a padded stride, `invert`, and that a surface
-with no derivable pixel size is refused rather than guessed.
+`'L008'` mask, the 256x1 ramp, a padded stride, `invert`, a short allocation,
+and that a surface with no derivable pixel size is refused rather than guessed.
+
+**What the surface's numbers actually are.** Read off the 12:05 photo again,
+character by character, the kernel's own line for surface 6 is
+
+    SWEET SURF: backboardd create id 6 256x1 fmt 0x0 bpe 2 bpr 672 planes 0 size 4096 -> 0x0
+
+That is not a 16-byte pixel: `IOSurfaceBytesPerRow` is 672, which is neither
+1024 (`4*256`) nor 4096 (`16*256`), and 672 is not 64-aligned, so it came
+straight from the creation dictionary and is the surface's real stride rather
+than one of the kernel's defaults. `size 4096` is the page rounding of a 672-byte
+row, and it is what makes `alloc / (width*height)` answer 16, which is why the
+copy path must not prefer it: with no `format`/`type` from the caller it takes
+the stride first, then the surface's own `bytesPerElement` (2 here), and only
+then the allocation. The copy also never reads past the allocation, so a surface
+whose `bytesPerRow * height` is shorter than its own row count copies short
+instead of faulting.
+
+Every copy and every refusal now prints the geometry -
+`row <used> of <reported> bytes, <n> B a pixel, <n> planes, <n> allocated,
+format <f> type <t>` - so the next boot settles which of these the clock and the
+camera button actually used, with no second guess.
 
 **Delivery is the root, not `BOOT`.** `libjackpotlte-gl.dylib` lives in
 `/usr/local/lib` on USERDATA, so this needs the `userspace` CI artifact
