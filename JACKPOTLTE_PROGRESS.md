@@ -4537,6 +4537,47 @@ handle; the next kernel change should print or correct the leaf PTE's
 `AP`/`SH`/`AF`/attr bits for the chain page and the AS0 `TRANSCFG`/`MEMATTR`
 against the panfrost values (`/tmp/opencode/mali-ref/`), then be flashed once.
 
+#### The three-minute video of the same boot: a swap does reach the framebuffer
+
+`~/Downloads/VID_20261115_095048707.mp4` (185 s, 1920x1080, 09:50, sampled as
+37 frames plus the last one; `ffmpeg` + `tesseract` to *find* lines, crops to
+read them). It is the same `jt62` kernel as the three photos, recorded for
+long enough to see past them, and it answers two of the open questions.
+
+- **No `CRASH backboardd`, no `far 0x30`, anywhere in three minutes.** So the
+  `0170` fix holds under sustained surface traffic, not just past one point.
+  (The only crash is unrelated: `CRASH driverkitd[60] sig 9 code 0x0 sub 0x0 …
+  reason ns 1 code 0x7: (none)` then `exec ReportCrash`; DriverKit is not used
+  on this platform and the daemon is respawned. Nothing touches backboardd.)
+- **The swap path runs**: `SWEET FB: swap 4 layer 0 surface 1 1080x2220
+  fmt 0x42475241 bpr 4320 a 0,0 1080x2220 b 0,0 1080x2220`, twice in the last
+  ten seconds. The three photos happened to miss it. Layer 0, surface 1 — the
+  surface the GL lines named (`texture 1 is surface 2 … texture 3 is surface
+  1`) — full-screen. The panel still shows the kernel console over it for the
+  whole recording, so a swap is delivered and nothing iOS draws ends up
+  visible: consistent with the GPU producing no finished job.
+- **The address-space field is now read cleanly: `cfg 0x420003c6`.** That is
+  `6 | (15 << 6) | (2 << 24) | (1 << 30)`, so `INA_BITS(15)`, i.e. the MMU's
+  reported input-address size is **40 bits** — the `0x420083c6` in the jt62
+  photo had a spurious bit 15. With 40 bits and four levels, level 0 is one
+  bit wide and levels 1-3 are nine bits each, which is what `0173` builds and
+  why only index 0 of the top level is ever used.
+- **Both faults of a pair share one page entry**: `page 0x88a7b1743 mapped`
+  for both `0xa530380` and `0xa5308c0`, `0x98dd5743` for both `0x9a90380` and
+  `0x9a908c0`. The chains live in one 4 KB page, so the driver's `mapped`
+  answer and the GPU's fault are about the *same* page — again a walk
+  disagreement, not a buffer that never entered the address space.
+- **The charger never leaves the fallback.** Every sample is
+  `SWEET BATTERY: static fallback, 100% external=1 charging=0`, with
+  `JACKPOTLTE PMIC: I2C busy before message` recurring throughout. So
+  `a8battery=1` produced no reading at all: the reader collides with the touch
+  path's polled transfer on the same controller, exactly as `0169` flagged.
+  The charger lane needs its own serialisation before it can show state.
+- Sandbox noise, for the record: `A5XELTE Sandbox: logd privilege 1002
+  denied`, `A5XELTE Sandbox: rapportd privilege 12000 denied`, and
+  `A5XELTE container: com.apple.backboardd XML entitlements=00
+  system-container=1` before `exec backboardd`.
+
 #### What the fault really was: a translation fault, and a table one level short
 
 Two upstream files settle the reading, both for Mali Bifrost via the mainline
