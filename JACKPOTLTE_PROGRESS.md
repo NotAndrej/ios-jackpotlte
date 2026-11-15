@@ -4236,3 +4236,88 @@ Flashed 21:53-22:02 (`/tmp/opencode/gpu/flash-jt61.log`): USERDATA the 12.16 GB
 sparse (`7025a913...`), 47/47 chunks, `USERDATA rc=0`, 507 s, reboot `rc=0`.
 **BOOT was not written** - the kernel is jt60's, unchanged, so this iteration
 is a userspace-only change and the only destructive step was the iOS root.
+
+### The `rdar:45025538` strip is UIKit's status-bar fallback, not a build marker (2026-11-15)
+
+Read off the phone's own software: the iOS 16.7.16 root's split dyld shared
+cache (`System/Library/Caches/com.apple.dyld/`, read in place with the reader
+behind `tools/jackpotlte/cache-symbol.py`; UIKitCore's base in that cache is
+`0x188d83000`, and the offsets below are from *that* image base).
+
+| what it is | where it is |
+| --- | --- |
+| the strip's text, UTF-16, in UIKitCore's localisable string table | `UIKitCore+0x123325a` = `rdar:45025538`, in the same table as the status-bar strings `5G`, `5G-e` |
+| the log line it prints when it happens | `UIKitCore+0x11d3626`: `No status bar visual provider for screen %@ (width: %.2f, scale: %.2f, idiom: %ld, cornerRadius: %.2f). Please see rdar://45025538.` |
+| the debug override key next to it | `UIKitCore+0x11d35c4`: `UIStatusBarVisualProviderClassName`, beside `WARNING: Using overridden status bar visual provider class: %@` |
+| the fallback itself | `_UIStatusBarVisualProvider_Fallback` and `_UIStatusBarFallbackItem` are classes in the same image |
+
+So the strip is **not** an Apple-internal build marker, and it is not a radar
+lookup at runtime: it is UIKit's `_UIStatusBar` falling back when no status-bar
+visual provider matches the screen, drawing a compiled-in localisable string.
+Nothing enables it — no `AppleInternal` marker, no root plist, no boot-arg, no
+kernel or bootloader flag: the string and the fallback classes are in this
+*release* cache and appear whenever the screen geometry is not recognised.
+Searching the whole 3.2 GB cache for the ASCII bytes `45025538` finds exactly one
+hit (the log string above); the strip's own string is UTF-16, so an ASCII search
+misses it, and no other file in the root image contains the number at all.
+
+The one root-side lever in the binary is that override key (UIKit checks it
+before it gives up). It is a debug affordance: it only changes how the status
+bar is drawn, the screen is still not a known mode, which preferences domain it
+reads is not established here, and it cannot be tested without a boot. Recorded,
+not wired.
+
+### The mode table is real iPhones only, and neither 2220 nor 2400 is in it
+
+What UIKit can pick from is named after the native pixel widths of real notched
+iPhones, all present in this build: `_UIStatusBarVisualProvider_Split828`,
+`_Split1080`, `_Split1080_Wide`, `_Split1125`, `_Split1170`, `_Split1170_Wide`,
+`_Split1242`, `_Split1284`, `_Split1284_Wide` (plus `_Split`, `_FixedSplit`,
+`_CustomSplit`, `_LegacyPhone`, `_Pad*`, `_CarPlay*`).
+
+The pairing of native pixels with point sizes is on the device too.
+`System/Library/PrivateFrameworks/UIKitCore.framework/BoundingPathData.bundle/Assets.car`
+names a bitmap per combination: `1125x2436-375x812-3.00x`,
+`1080x2340-375x812-3.00x` and `-320x693-3.00x` (Display Zoom), `828x1792`,
+`1170x2532`, `1179x2556`, `1242x2688`, `1284x2778`, `1290x2796`, and the iPads.
+**There is no 1080x2220 and no 1080x2400**, and UIKitCore's `__TEXT` holds no
+`2220.0` or `2400.0` double at all (it does hold 828, 1080, 1125, 1170, 1242,
+1284, 2340, 2436, 2532, 2778).
+
+That answers the panel question: **1080 px wide is supported** (`_Split1080`) —
+it is the *height* that has no provider — and 2220 vs 2400 changes nothing,
+because neither is a mode. That is also why the donor S8 carried the same strip
+at 1080x2400 until it presented 1125x2436 (`NOTES.md:34`). Adding 1080x2220 "as
+a known iPhone mode" would mean inventing a mode no iPhone has; the panel's own
+geometry is not what iOS is looking for, so it is a red herring for the strip.
+
+The point size follows the canvas, not a device table: with the canvas at
+1125x2436 and `display-scale 3` the phone itself logged `375x812@3x`, i.e.
+`points = canvas / display-scale`, and today's 1080x2220 canvas is 360x740 —
+the screen in the `rdar` screenshot. `tools/jackpotlte/display-mode.py` (new)
+does that arithmetic from the tree's own `FB_W/FB_H` and `display-scale`, and
+`--root <mounted root>` re-reads the mode list out of the phone's `Assets.car`:
+
+    panel 1080x2220, canvas 1080x2220, display-scale 3 -> 360x740 points
+    VERDICT 1080x2220 is NOT an iPhone mode. Width 1080 is supported (native
+    height 2340), so it is the height that misses.
+      1080x2340 @3  375x812  width exact, 120 rows squeezed (5.1% of source)
+      1125x2436 @3  375x812  45 columns cropped, 216 rows squeezed (8.9%)
+
+### Correction: the bounding-path asset the squeezed mode died on is in the root
+
+`jt46` died in SpringBoard on `BoundingPathBitmap-1125x2436-375x812-3.00x` from
+the asset manager, and the entry that removed `0156` concluded the asset was
+"missing (or unreadable) for this root". It is not missing: the
+`BoundingPathData.bundle/Assets.car` above, inside `/var/tmp/IOSRoot.img`,
+declares that exact name (with `-A` and `.data` renditions). So the presented
+mode did reach SpringBoard and the lookup failed for a reason that is still
+unknown — a userspace/asset question, not a display-mode one. Re-adding the
+squeeze on the theory that the asset is absent would be repeating a known
+crash for a reason the tree can now rule out.
+
+None of this was tried on the phone (no fastboot, no flash, no write to the root
+image): it is cache and root inspection plus arithmetic. What only a boot can
+answer: whether presenting a real mode removes the strip on *this* panel
+(donor-proven at `NOTES.md:34`, A8-unconfirmed), whether 1080x2340 is enough at
+360x780 points, and whether the bounding-path read succeeds once a mode is back.
