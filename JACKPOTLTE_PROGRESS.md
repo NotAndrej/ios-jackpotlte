@@ -4236,3 +4236,70 @@ Flashed 21:53-22:02 (`/tmp/opencode/gpu/flash-jt61.log`): USERDATA the 12.16 GB
 sparse (`7025a913...`), 47/47 chunks, `USERDATA rc=0`, 507 s, reboot `rc=0`.
 **BOOT was not written** - the kernel is jt60's, unchanged, so this iteration
 is a userspace-only change and the only destructive step was the iOS root.
+
+### jt61 on the panel: the draw is submitted now, and the job faults
+
+Four photos of the panel (`~/Downloads/IMG_20261114_221145757/221157078/`
+`221159599/221247803.jpg`, 22:11:45-22:12:47, read with tight grayscale crops).
+This is the first iteration whose userspace change is visible in the *kernel's*
+accounting of the GPU, and the first whose crash names both its `pc` and the
+function it was called from.
+
+**What the panel says, in order.**
+
+- `JackpotlteMali: param 13/14/15/19/20/21/39/40 = ...`, then a run of
+  `JackpotlteMali: request 0x44, 16 bytes` and `request 0x42, 24 bytes` - the
+  surface client's own traffic, at the widened (`0168`) cap, ending in
+  `JackpotlteMali: buffer 1: 134217728 bytes at 0x1000000` (128 MiB mapped) and
+  `Failed to open swap file 2`.
+- GL entry order for the display server's renderer, first call each:
+  `glEGLImageTargetTexture2DOES`, `glGetError`, `request 0x7e, 40 bytes` x4,
+  `request 0x45, 16 bytes`, `jackpotlte-gl: -attachImage:: texture 1 is surface
+  2. 1080 x 2220, memory shared`, `glGenFramebuffers`, `glBindFramebuffer`,
+  `glFramebufferTexture2D`, `glDisable`, `glClearColor`, `glActiveTexture`,
+  `glPixelStorei`, `glViewport`, `glCreateShader`.
+- `jackpotlte-gl: Library loaded into the display server`, `Image 0x10025c000
+  libjackpotlte-gl.dylib`, `EAGLContext is ours: 19 of 19 methods`.
+- **The crash, twice, with the same signature as jt60**: `far 0x30`,
+  `pc 0x224741e70 = libsystem_platform.dylib + 0xe70 (base 0x224741000)`,
+  `lr 0x1f65c3ffc = IOSurface + 0x4ffc (base 0x1f65bf000)`,
+  `sp 0x16fd030e0 fp 0x16fd030e0`; 24 frames, every one of them QuartzCore
+  (`+0xb365c +0xd138c +0x1848cc +0x182070 +0x3440 +0x6bafc +0x54bf0 +0x5193c
+  +0x64344 +0x54c48 ...` with `+0x5dd3c +0x4c51c +0x6df74`, and repeating
+  `+0x5193c/+0x64344/+0x54c48` triplets - CA's recursive render walk), then
+  CoreFoundation `+0x74de4 +0x8ffa0`; `CRASH backboardd[117] sig 11 code
+  0x100000001 sub 0x30 slide 0x52c4...`.  The same backtrace is in the other
+  photo with `lr 0x1f65c3ffc` (base `0x1f65bf000`), so this is one signature,
+  not two.
+- **The GPU jobs, and how they end**:
+  `JACKPOTLTE MALI: a job on slot 1 did not finish: interrupts=0 status=0x8
+  mmu=0x1 fault=0x7e1002c2` and then, for the next one, slot 0 with
+  `fault=0x7e0002c2`, between `exec car kitd` and `exec FindMyDevice`; then
+  `JackpotlteMali: a client goes after 2 job chains, 0 of them unfinished`
+  (the dying instance's own accounting: two chains were handed to the engine
+  and none of them was left outstanding).
+- `exec xpcproxy`, `exec SpringBoard`, `JT ENV: backboardd <==
+  DYLD_AMFI_FAKE=0x2`, `exec backboardd`, `exec xpcproxy`, `exec FairPlayd.H2`,
+  and one ObjC duplicate-class warning (`_BKRuleResolutionTranscript` in
+  BackBoardHIDEventFoundation and `/usr/libexec/backboardd`) - so the respawn
+  loop keeps running; backboardd is being restarted, not the whole system.
+
+**What this settles.** The per-draw flush did what it was added for: the GPU is
+handed work now. Two job chains were submitted by one backboardd instance and
+neither was left unfinished, and the driver's own completion wait says why none
+of them produced a frame - every job timed out (`interrupts=0`) with the MMU
+reporting a fault (`mmu=0x1`, AS0 fault status `0x7e1002c2` / `0x7e0002c2`) and
+the job slot left in `status=0x8`. So "the draw never reached the GPU" (jt60) is
+answered: it reaches it, and the GPU faults on it. No `JackpotlteMali: job ...`
+line (the per-job detail from `0166`) is on any of the four photos, so what the
+job's chain contained still has to come from the kernel log, not these shots.
+No `SWEET FB: swap` line, and no wallpaper.
+
+**What is still the same.** The crash that kills backboardd is unchanged from
+jt60 (`far 0x30`, `lr` in `_IOSurfaceClientGetBulkAttachments + 0x44`), and
+jt61 names the other half of it: `pc` is `libsystem_platform + 0xe70`, i.e. the
+platform memmove/memset Apple's IOSurface client code calls at `+0x44` into
+`_IOSurfaceClientGetBulkAttachments`, with a source (or destination) pointer of
+`NULL + 0x30`. Both halves are Apple's code; what is ours is the kernel's
+answer to the bulk-attachment query that left it a NULL to read. That, and the
+GPU fault, are the two things to fix next.
