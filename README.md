@@ -94,7 +94,7 @@ pristine `xnu-8796.141.3` tree in CI. Those are host results, not boot claims.
 | Storage | eMMC `dwmmc0@13500000` maps and the GPT reads (`0127`) |
 | Root filesystem | The HFS+ iOS root mounts from `USERDATA` (`rd=emmcroot0 emmcroot=USERDATA`) |
 | Userland | `/sbin/launchd` executes (`unentitled_ios_sim_launch=1`) and starts SpringBoard (`launchd_unsecure_cache=1`); the panel shows the iOS Apple logo + progress bar, then the lock screen (owner-observed, 2026-11-09) |
-| Ported drivers | Probes for dwc3 USB (`0128`), the PMIC fuel gauge + charger (`0129`), sec_ts touch (`0130`/`0131`, which also brings up its rail and delivers HID events), the gpa1 buttons (`0132`) and the DSIM panel (`0133`, log-only by default) |
+| Ported drivers | Probes for dwc3 USB (`0128`), the PMIC fuel gauge + charger (`0129`), sec_ts touch (`0130`/`0131`, which also brings up its rail and delivers HID events), the gpa1 buttons (`0132`) and the DSIM panel (`0133`, log-only by default); `0169` turns the same s2mu004 reads into the battery/charging state iOS's `IOPMPowerSource` publishes (opt-in `a8battery=1`, not yet run on the phone) |
 | RAM | Physmap at `0x880000000`, 512 MiB window (`DRAM_SIZE 0x20000000`) |
 | Timer | 26 MHz arch timer, non-secure physical timer PPI 14 (INTID 30) |
 

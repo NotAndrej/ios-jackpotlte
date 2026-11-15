@@ -4388,3 +4388,62 @@ image): it is cache and root inspection plus arithmetic. What only a boot can
 answer: whether presenting a real mode removes the strip on *this* panel
 (donor-proven at `NOTES.md:34`, A8-unconfirmed), whether 1080x2340 is enough at
 360x780 points, and whether the bounding-path read succeeds once a mode is back.
+
+## `0169`: real charger/battery state for `IOPMPowerSource` (2026-11-14, not on the phone)
+
+The A8 has had an `IOPMPowerSource` since `0124`: that patch enables the
+`SweetBattery` personality for `A5XELTE` too (`KernelConfigTables.cpp`) and adds
+an A5XELTE branch to `SweetBattery::poll()` that calls `dreamlte_battery_read()`
+every 30 s. On `JACKPOTLTE` that name was a stub returning `-1`, so the only
+thing the phone ever published was the built-in `100 % / AC / not charging`
+fallback (the `SWEET BATTERY: static fallback` line). There is **one** power
+source, not two; `0169` fixes its data source instead of adding another.
+
+Data path: `SweetBattery` workloop timer (30 s) -> `dreamlte_battery_read()`
+(`bsd/dev/a5xelte_touch.c`, now a forwarder under `JACKPOTLTE`) ->
+`jackpotlte_battery_read()` (`bsd/dev/jackpotlte_pmic.c`) -> the polled
+S3C2440 transfer `0129` already had, on `i2c@13830000` (fuel gauge, 7-bit
+`0x3B`) and `i2c@13840000` (charger/MUIC, 7-bit `0x3D`). `0129`'s helpers are
+reused, not copied; both callers (the boot probe and the timer) now run every
+transfer under one `lck_mtx`.
+
+Decode, from Samsung's own driver rather than a guessed enumeration:
+
+| Register | Meaning | Source |
+| --- | --- | --- |
+| `CHG_STATUS0 0x0a` `CHGIN_STATUS[7:5]` | `0` no input; `3`/`5` input + charging; `2` VBUS OVP | `s2mu004_charger.c:721-757`, `:1416-1425`; `s2mu004-muic-afc.c:1305` |
+| `CHG_STATUS1 0x0b` `SELF_DISCHG` bit 7, `TOP_OFF` bit 1, `DONE` bit 0 | not charging / taper / done | `s2mu004_charger.h:91-113` |
+| `CHG_STATUS1[6:3]` `CHG_FAULT` | watchdog stop 3/4, TSD 5, TFB 6 -> not charging | `s2mu004_charger.h:94-103` |
+| `CHG_CTRL11 0x1b[3:0]` | top-off current `reg*25+100` mA, used for the full/charging tie-break | `s2mu004_charger.c:586-600` |
+| `CHG_STATUS3 0x0d` | `DET_BAT` bit 0 only; `BAT_STATUS[2:1]` is logged raw (the vendor never interprets it for this part) | `s2mu004_charger.h:129-134` |
+| `RVBAT 0x04` | `le16 * 1000 >> 13` mV | `s2mu004_fuelgauge.c:1219-1223` |
+| `RCUR_CC 0x06` | two's complement, `*1000>>12` mA, bit 15 = charging | `s2mu004_fuelgauge.c:1084-1095` |
+| `RSOC 0x08` | two's complement, 0.01 % units | `s2mu004_fuelgauge.c:914-926` |
+
+`ExternalConnected` = `CHGIN_STATUS != 0`, `IsCharging`/`FullyCharged` per the
+table, `Voltage`/`Amperage`/`CurrentCapacity` from the fuel gauge,
+`ExternalChargeCapable` = external, and `TimeRemaining` stays `-1`,
+`AtWarnLevel`/`AtCriticalLevel` stay false: the SOC is the gauge's raw RSOC
+without Samsung's DT table and `diff_soc` calibration, and a low-battery warning
+or shutdown must not be driven by an uncalibrated estimate.
+
+**Boot arg: `a8battery=1` (default off).** Without it the reader returns `-1`,
+`SweetBattery` publishes the same fallback as before, and the only new console
+line is `JACKPOTLTE BATTERY: off ...`. With it, expect
+`JACKPOTLTE BATTERY: chgin=... st0=... st1=... st3=... en_chg=... topoff=...
+vbat=...mV rsoc=...% cur=...mA ext=... chg=... full=... fault=...` on the
+first good sample and on every change (`SWEET BATTERY: fuel gauge ...` also
+appears once, from `SweetBattery` itself, when it leaves fallback mode).
+
+A NACK/timeout logs `JACKPOTLTE BATTERY: read failed, keeping the last sample`
+once and keeps publishing the last good sample; before the first success it
+stays on the fallback. Registers are only read; a wrong decode shows the wrong
+state, it cannot crash the bus path (each polled byte is bounded by the same
+`delay(1)` loop `0129` uses).
+
+**Not done here:** this is a kernel patch, so seeing it needs a CI build with
+`EXTRA_MACHINE_FLAGS=-DJACKPOTLTE=1` and a `BOOT` flash; no build was run and
+nothing was flashed or observed on the phone for `0169`. The bus pads are still
+assumed to be left muxed by S-Boot as `0129` documented (the I2C4 touch pads
+were not, so this assumption is the first thing to check if
+`JACKPOTLTE BATTERY: read failed` appears with `a8battery=1`).
