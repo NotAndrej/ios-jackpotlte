@@ -4520,15 +4520,14 @@ is the `jt64` target: a wrong permission/geometry bit in the leaf PTE or the
 AS0 setup, not a missing mapping. (`0171` was written for exactly this
 question; it is what turned "fault" into "fault on a mapped page".)
 
-**The charger reader reached the bus and collided, exactly as `0169`
-predicted.** The only new PMIC line is `JACKPOTLTE PMIC: I2C busy before
-message`: with `a8battery=1` the 30 s `SweetBattery` sample lands on the same
-polled S3C2440 controller the touch path drives, and `0129`'s busy check
-refuses rather than racing. Not fatal (the reader keeps the last sample and,
-before one, the static fallback), but it means the charger state may never be
-sampled while touch is active. Fixing it is a separate lane: give the battery
-transfer the same serialisation the touch path has, or move it to the
-interrupt-driven transfer.
+**The charger reader reached the bus and got a latched BUSY.** The only new
+PMIC line is `JACKPOTLTE PMIC: I2C busy before message`, so no charger or
+gauge register was ever read. This was first written up as a collision with
+the touch path; that is **wrong** and is corrected in the `0174` section at the
+end of this file — the charger is on `i2c_1` `0x13840000`, touch on `i2c_4`
+`0x13870000`, and the flag that stayed set is a START latch that nothing in
+this kernel ever cleared. Not fatal (the reader keeps the last sample and,
+before one, the static fallback), but the charger state was never sampled.
 
 **What only a boot can confirm / what is still open.** No `SWEET FB: swap`
 line and no wallpaper on any shot: the GPU still produces no frame, and that
@@ -4933,3 +4932,75 @@ Commit `3af7aac` on branch `jackpotlte-display` (files: `car-mode.py` new,
 was written (the write is authored in the script; the script writes), and no
 `fastboot`/`adb`/`img2simg` was run. `python3 tools/validate-repo.py` passes
 (168 patches, 39 Python tools, 28 shell scripts).
+
+## `0174`: the charger bus is not contended, it is latched (2026-11-15, not on the phone)
+
+`jt62`'s only PMIC line was `JACKPOTLTE PMIC: I2C busy before message`, so no
+charger or gauge register was ever read. The first write-up called that a
+collision with the touch path; the board DTS says otherwise.
+
+| Bus | Address | Device on the jackpotlte board |
+| --- | --- | --- |
+| `i2c_0` | `0x13830000` | `s2mu004-fuelgauge@3B` (`battery_data_jackpotlte_common.dtsi:45-50`) |
+| `i2c_1` | `0x13840000` | `s2mu004@3D`, the MUIC/charger (`exynos7885-jackpotlte_common.dtsi:1100-1110`) |
+| `i2c_2` | `0x13850000` | `sec-nfc@27` (same file:2113-2122) |
+| `i2c_4` | `0x13870000` | `sec_ts@0x48`, the real touchscreen (same file:621-650) |
+
+The SoC file labels `i2c_1` "I2C_TSP" (`exynos7885.dtsi:1020-1032`), which is
+where the collision theory came from, but the board puts the MUIC there and the
+touchscreen on `i2c_4`. The A5 touch driver maps `0x13850000`/`0x13870000`, and
+nothing else under `xnu/patches/` maps `0x13830000` or `0x13840000`, so there is
+no second client to race with.
+
+`IICSTAT[5]` is the controller's own START/STOP latch: set by the write that
+issues a START, cleared by hardware when the STOP completes
+(`i2c-s3c2410.c:77`, `:439-470`). `0129`'s pre-message loop only *read* it and
+returned on timeout without writing anything, so a START latched by S-Boot (or
+by an earlier failed transfer) outlived the boot and no later sample could
+clear it. The vendor driver has two things for that state which this file
+lacked: a 400 x 1 ms "cannot get bus" budget (`s3c24xx_i2c_set_master`,
+`i2c-s3c2410.c:789-807`) and, when that fails, a full controller re-init
+(`s3c24xx_i2c_init`, `:1196-1230`).
+
+The old wait was also much shorter than it read: `delay()` takes microseconds
+(`osfmk/kern/clock.c`, `delay_for_interval(usec, NSEC_PER_USEC)`), so
+`5000 x delay(1)` is 5 ms, not 5 s.
+
+`0174` touches `bsd/dev/jackpotlte_pmic.c` only:
+
+- `jp_wait_free()`: three polls before the first delay, then exponential
+  backoff to 1 ms inside the vendor's 400 ms budget — the shape of
+  `s3c24xx_i2c_wait_idle` (`:810-856`) with the budget of `set_master`.
+- On a stuck BUSY: print the controller state **once per bus**
+  (`stat= con= lc=`; a block that reads all ones is a clock/pad problem, not a
+  busy bus), then `jp_reset_bus()` — a master-Tx write with the START/STOP bit
+  clear to force a STOP (the write `s3c24xx_i2c_message_start` makes before
+  every address), then `IICCON=0, IICSTAT=0`, then divider and filter back —
+  and retry the message once.
+- A bus that still will not clear, or whose STOP after a *failed* message never
+  completes, is marked dead **per bus** and not retried for the rest of the
+  boot: one wedged controller must not cost 400 ms per register every 30 s, and
+  must not stop the other bus from being read.
+- `jp_stop()` now reports whether the STOP took effect, and the `0xe3`/`7`
+  divider and line control are `JT_IICCON_INIT`/`JT_IICLC_INIT`.
+
+Nothing here writes a charger or gauge register; the only writes are the
+controller's own IIC registers. `jp_sample_read`'s decode, the
+one-line-per-episode `JACKPOTLTE BATTERY: read failed`, and the static fallback
+are unchanged.
+
+Not on the phone. The file compiles locally with the CI flags against the run
+`43696186295` build tree: `tools/xnu-cc.py <log> /var/tmp/opencode-keep/bt3
+bsd/dev/jackpotlte_pmic.c --per-file` reports `0 of 1 files failed`, for both
+the unpatched and the patched file.
+
+What only a boot can say:
+1. Whether the dump appears at all, and its `stat=` value — `0xffffffff` would
+   mean the block or its clock is unreachable, not that the bus is busy.
+2. Whether the reset clears it (the sample path then runs) or the bus is marked
+   dead — the latter means something holds the bus in a way a register write
+   cannot fix, and the next step is the pad-GPIO recovery the vendor implements
+   only for its `hsi2c` nodes (`recover_i2c_gpio`, `i2c-s3c2410.c:185-260`,
+   which needs `gpio_sda`/`gpio_scl` that `i2c_1` does not declare).
+3. Whether `SWEET BATTERY` finally leaves the static fallback, and with which
+   `chgin`/`chg`/`full` when a charger is plugged in.
