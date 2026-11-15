@@ -41,7 +41,7 @@ diff --git a/bsd/dev/jackpotlte_mali.c b/bsd/dev/jackpotlte_mali.c
  /* Take one page out of the tables (redwood_mali.c:672-696's loop). */
  static void
  jt_unmap_page(uint64_t gpu)
-@@ -761,6 +787,26 @@
+@@ -761,6 +787,34 @@
  		    slot, raw, jt_rd(jt_gpu, js + JT_MALI_JS_STATUS),
  		    jt_rd(jt_gpu, JT_MALI_MMU_INT_RAWSTAT),
  		    jt_rd(jt_gpu, JT_MALI_AS0 + JT_MALI_AS_FAULTSTATUS));
@@ -54,14 +54,22 @@ diff --git a/bsd/dev/jackpotlte_mali.c b/bsd/dev/jackpotlte_mali.c
 +			uint64_t bad = ((uint64_t)jt_rd(jt_gpu, JT_MALI_AS0 +
 +			    JT_MALI_AS_FAULTADDR_HI) << 32) |
 +			    jt_rd(jt_gpu, JT_MALI_AS0 + JT_MALI_AS_FAULTADDR_LO);
++			/* AS_FAULTSTATUS: bits 0-2 say what went wrong, bits
++			 * 9:8 the access (0 atomic, 1 read, 2 write, 3
++			 * execute), bits 23:16 the unit that faulted. */
++			static const char *const acc[] = {
++				"atomic", "read", "write", "execute"
++			};
 +
-+			printf("JACKPOTLTE MALI: fault %#llx (%s%s%s, %s), "
-+			    "chain %#llx %s\n",
++			printf("JACKPOTLTE MALI: fault %#llx (%s%s%s%s, %s), "
++			    "source %u, chain %#llx %s\n",
 +			    (unsigned long long)bad,
 +			    (fs & 1u) ? "translation " : "",
 +			    (fs & 2u) ? "permission " : "",
 +			    (fs & 4u) ? "transtab-bus " : "",
-+			    (fs & 8u) ? "write" : "read",
++			    (fs & 8u) ? "access-flag " : "",
++			    acc[(fs >> 8) & 3u],
++			    (fs >> 16) & 0xffu,
 +			    (unsigned long long)chain,
 +			    jt_pt_lookup(chain) ? "mapped" : "NOT MAPPED");
 +		}
