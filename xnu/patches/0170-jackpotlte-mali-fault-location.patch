@@ -41,7 +41,7 @@ diff --git a/bsd/dev/jackpotlte_mali.c b/bsd/dev/jackpotlte_mali.c
  /* Take one page out of the tables (redwood_mali.c:672-696's loop). */
  static void
  jt_unmap_page(uint64_t gpu)
-@@ -761,6 +787,46 @@
+@@ -761,6 +787,53 @@
  		    slot, raw, jt_rd(jt_gpu, js + JT_MALI_JS_STATUS),
  		    jt_rd(jt_gpu, JT_MALI_MMU_INT_RAWSTAT),
  		    jt_rd(jt_gpu, JT_MALI_AS0 + JT_MALI_AS_FAULTSTATUS));
@@ -54,6 +54,7 @@ diff --git a/bsd/dev/jackpotlte_mali.c b/bsd/dev/jackpotlte_mali.c
 +			uint64_t bad = ((uint64_t)jt_rd(jt_gpu, JT_MALI_AS0 +
 +			    JT_MALI_AS_FAULTADDR_HI) << 32) |
 +			    jt_rd(jt_gpu, JT_MALI_AS0 + JT_MALI_AS_FAULTADDR_LO);
++			uint64_t page = jt_pt_lookup(bad & ~(uint64_t)(PAGE_SIZE - 1));
 +			/* AS_FAULTSTATUS: bits 0-3 say what went wrong, bits
 +			 * 9:8 the access (0 atomic, 1 read, 2 write, 3
 +			 * execute), bits 23:16 the unit that faulted. */
@@ -61,8 +62,14 @@ diff --git a/bsd/dev/jackpotlte_mali.c b/bsd/dev/jackpotlte_mali.c
 +				"atomic", "read", "write", "execute"
 +			};
 +
++			/* The faulting page against the same tables jt_map_page
++			 * fills.  An address the walk could not find means our
++			 * mapping does not cover what the job touched; an entry
++			 * that is there says the tables disagree with what the
++			 * GPU read (geometry or permission bits), which is a
++			 * different bug in a different place. */
 +			printf("JACKPOTLTE MALI: fault %#llx (%s%s%s%s, %s), "
-+			    "source %u, chain %#llx %s\n",
++			    "source %u, page %#llx %s, chain %#llx %s\n",
 +			    (unsigned long long)bad,
 +			    (fs & 1u) ? "translation " : "",
 +			    (fs & 2u) ? "permission " : "",
@@ -70,6 +77,7 @@ diff --git a/bsd/dev/jackpotlte_mali.c b/bsd/dev/jackpotlte_mali.c
 +			    (fs & 8u) ? "access-flag " : "",
 +			    acc[(fs >> 8) & 3u],
 +			    (fs >> 16) & 0xffu,
++			    (unsigned long long)page, page ? "mapped" : "NOT MAPPED",
 +			    (unsigned long long)chain,
 +			    jt_pt_lookup(chain) ? "mapped" : "NOT MAPPED");
 +			/* What address space 0 is set up as *now*: a
@@ -77,13 +85,12 @@ diff --git a/bsd/dev/jackpotlte_mali.c b/bsd/dev/jackpotlte_mali.c
 +			 * means the table the job walked is not the one
 +			 * jt_map_page filled. */
 +			printf("JACKPOTLTE MALI: as0 transtab %#llx cfg %#x "
-+			    "status %#x page %#llx\n",
++			    "status %#x\n",
 +			    (unsigned long long)(((uint64_t)jt_rd(jt_gpu,
 +			    JT_MALI_AS0 + JT_MALI_AS_TRANSTAB_HI) << 32) |
 +			    jt_rd(jt_gpu, JT_MALI_AS0 + JT_MALI_AS_TRANSTAB_LO)),
 +			    jt_rd(jt_gpu, JT_MALI_AS0 + JT_MALI_AS_TRANSCFG_LO),
-+			    jt_rd(jt_gpu, JT_MALI_AS0 + JT_MALI_AS_STATUS),
-+			    (unsigned long long)jt_pt_lookup(chain));
++			    jt_rd(jt_gpu, JT_MALI_AS0 + JT_MALI_AS_STATUS));
 +		}
  		jt_wr(jt_gpu, JT_MALI_GPU_INT_CLEAR, 0xffffffffu);
  		jt_wr(jt_gpu, JT_MALI_GPU_CMD, 1u);
