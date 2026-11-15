@@ -45,6 +45,30 @@ for name in "${files[@]}"; do
 	[ -f "$out/$name" ] || { echo "error: no $out/$name" >&2; exit 1; }
 done
 
+# An image that is already attached to a loop device is reused by mount(8), and
+# if that attachment is read-only the new mount is read-only too, so the install
+# dies deep inside `install` with "cannot remove ...: Read-only file system"
+# after nothing at all has been written.  Say so here instead.  The comparison
+# is against the loop device's backing file, not the mount entry: /proc/mounts
+# and /proc/self/mountinfo name a loop mount's source as /dev/loopN, never the
+# image.  -O BACK-FILE prints the name as it was attached, so the argument is
+# resolved first.
+image=$(readlink -f "$image")
+for l in $(losetup -l -n -O NAME,BACK-FILE | awk -v img="$image" '$2 == img { print $1 }'); do
+	where=$(findmnt -n -o TARGET --source "$l" 2>/dev/null | tr '\n' ' ')
+	cat >&2 <<EOF
+error: $image is already attached to $l${where:+ (mounted at $where)}.
+
+       A second mount of it would come up read-only and the install would fail
+       after changing nothing.  Clear it, unmounting before detaching - losetup
+       -d on a mounted autoclear device only marks it:
+
+         umount ${where:-<mountpoint>}
+         losetup -d $l
+EOF
+	exit 1
+done
+
 # The problem lines of a read-only check, without the two lines every run
 # prints and without the "(1, 0)" counters, which are not a problem.
 problems() {
