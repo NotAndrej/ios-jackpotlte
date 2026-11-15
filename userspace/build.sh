@@ -104,7 +104,9 @@ echo "--- host copy of the surface-copy test ---"
 # is 'L008', a luminance mask; both were refused, and a refused texture is not
 # drawn).  The fake IOSurface and fake GL are in the test itself, so this is a
 # host build.
-clang "${common[@]}" -o "$out/test_surface_copy" "$gl/test_surface_copy.c"
+# -lobjc: eagl.c installs its methods with the ObjC runtime, and the host
+# link does not bring it in on its own.
+clang "${common[@]}" -o "$out/test_surface_copy" "$gl/test_surface_copy.c" -lobjc
 
 echo "--- arm64 iOS libjackpotlte.a ---"
 obj=$out/.obj
