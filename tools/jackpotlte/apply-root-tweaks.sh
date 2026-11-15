@@ -33,6 +33,20 @@
 #   launchd.plist              _PanicOnCrash -> _PanicOnCrasX, CommCenter jobs off
 #   mediaserverd               VirtualAudio HAL plug-in disabled,
 #                              StartRecorderServer=false
+#   mobilegestalt              .../containers/Shared/SystemGroup/
+#                              systemgroup.com.apple.mobilegestaltcache/
+#                              Library/Caches/com.apple.MobileGestalt.plist
+#                              with CacheExtra: productType=iPhone10,3,
+#                              hwModelStr=D22AP, productName and
+#                              marketingNameString=iPhone X, and
+#                              artworkTraits={ArtworkDeviceSubType:2556} --
+#                              the last one is SpringBoard's Dynamic Island
+#                              gate on 16.7.16 (Jindo flag + subtype 2556/2796).
+#                              CacheVersion/CacheUUID are set too, because
+#                              MobileGestaltMigrator rebuilds (and would drop
+#                              CacheExtra) on any cache that fails
+#                              __MGCacheValid.  Read back and refused if the
+#                              write did not take.
 #   (then, by this script, after the Python step)
 #   /Applications              the 32 bundles from
 #                              /private/var/staged_system_apps moved in
@@ -47,6 +61,23 @@
 #                              kernel's exec-time injection into backboardd
 #                              (0156; docs/jackpotlte-mali.md sec. 9).  Same
 #                              CI-origin note as the probe.
+#
+# Identity has a kernel half this script cannot write.  sysctl hw.machine /
+# hw.model come from the device tree (IODTPlatformExpert::getMachineName /
+# getModelName), and until xnu/patches/0169 the A5XELTE config took the macOS
+# kludge branch in bsd/kern/kern_mib.c that hardcodes hw.machine to "iPad8,6"
+# -- the one place this tree calls itself an iPad, and what uname().machine
+# returns, because libsystem_c's _uname reads CTL_HW/HW_MACHINE into
+# utsname.machine.  0169 makes A5XELTE take the device-tree branch
+# (hw.machine = root model = iPhone10,3, hw.model = compatible[0] = D22AP),
+# and tools/mkadt_jackpotlte.py now puts D22AP first in root compatible for
+# the same reason.  The mobilegestalt step below is the userspace half: it is
+# enough on its own for every MobileGestalt consumer (SpringBoard, UIKit,
+# Settings/General, AuthKit), so an image whose kernel predates 0169 still
+# reports iPhone X to those.  Note that UIUserInterfaceIdiom follows this
+# identity, so the red "no status bar visual provider" strip (rdar://45025538)
+# can move once the device stops describing itself as an iPad; that is
+# expected, and the display lane owns what the status bar does with it.
 #
 # Why the app move: SpringBoard showed only ~7 icons because iOS 16 ships the
 # 32 user apps (Maps, Music, Weather, Clock, Calculator, Files, Books, Notes,

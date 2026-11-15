@@ -4236,3 +4236,211 @@ Flashed 21:53-22:02 (`/tmp/opencode/gpu/flash-jt61.log`): USERDATA the 12.16 GB
 sparse (`7025a913...`), 47/47 chunks, `USERDATA rc=0`, 507 s, reboot `rc=0`.
 **BOOT was not written** - the kernel is jt60's, unchanged, so this iteration
 is a userspace-only change and the only destructive step was the iOS root.
+
+### iPhone X everywhere, and Dynamic Island on 16.7.16 (2026-11-15)
+
+The phone's About screen showed a blank **Model Name**, and the status bar
+still carried the red `rdar:45025538` strip from
+`/System/Library/PrivateFrameworks/UIKitCore` ("No status bar visual provider
+for screen %@ (width: %.2f, scale: %.2f, idiom: %ld, cornerRadius: %.2f)").
+The device also described itself as an iPad in one place and an iPhone in
+another. This iteration makes the identity **D22AP / iPhone10,3 / iPhone X**
+everywhere it is decided, and turns SpringBoard's Dynamic Island on. Nothing
+here has been booted yet: everything below is either read off the phone's own
+root and its own dyld shared cache, or a build-time write verified by reading
+it back from the mounted volume.
+
+#### Where the identity actually comes from (measured)
+
+Read from the signed kernel source in `/var/tmp/opencode-keep/bt3/xnu` and from
+the root image's own caches; the addresses are VAs in
+`dyld_shared_cache_arm64.09` (arm64e-free classic cache, image base
+`0x19c555000` for libMobileGestalt).
+
+* **Device tree → sysctl.** `IODTPlatformExpert::getModelName` returns the
+  *first* root `compatible` string (leading `AAPL,` stripped) and
+  `getMachineName` returns root `model`; on arm64 `getTargetName` is
+  `getModelName` and `getProductName` is `getMachineName`. So
+  `hw.target = compatible[0]`, `hw.product = model`.
+* **The kludge branch.** `bsd/kern/kern_mib.c` has, under
+  `#if XNU_TARGET_OS_OSX && defined(__arm64__) && !defined(ARM64_BOARD_CONFIG_SWEET)`,
+  the macOS-config compatibility cases: for `PLATFORM_IOS` processes
+  `HW_MACHINE` is the hardcoded `"iPad8,6"` and `HW_MODEL` is
+  `PEGetProductName` (= root `model`). The `#else` branch (the one the SWEET
+  port already selected) returns `HW_MACHINE = PEGetMachineName` and
+  `HW_MODEL = PEGetModelName`. `jackpotlte` builds with
+  `ARM64_BOARD_CONFIG_A5XELTE` (`makedefs/MakeInc.def`), which the guard did
+  **not** exclude — so the kludge was live here.
+* **`uname()` is the iPad.** `libsystem_c.dylib:_uname` @ `0x18dc606d0` issues
+  `sysctl({CTL_HW, HW_MACHINE})` into `utsname.machine` (offset `0x400`), so on
+  this tree `uname().machine` was literally `"iPad8,6"`. That is the *only*
+  literal iPad identity anywhere in the tree, and it was a one-line
+  consequence of the guard.
+* **Userspace does not read the sysctl directly.** Neither UIKitCore
+  (`0x188d83000`) nor SpringBoard (`0x1c57ca000`) references `hw.machine` at
+  all; both ask MobileGestalt, which itself reads the IORegistry device-tree
+  properties (`IOPlatformSerialNumber`, `serial-number`, `model-number`,
+  `product-name`, `region-info` are embedded in `__DATA_CONST`). AuthKit
+  embeds the productName question for the Apple Account sheet.
+  `com.apple.MobileGestalt` answers measured from the `__copy_*` getters and
+  the question table (767 keys, `0x19c5b0500`):
+
+  | MG getter | question | was | now |
+  | --- | --- | --- | --- |
+  | productType | `h9jDsbgj7xIVeIQ8S3/X3Q` | `iPhone10,3` (`hw.product`, already right) | `iPhone10,3` |
+  | hwModelStr | `/YYygAofPDbhrwToVsXdeA` | `samsung,jackpotlte` (`hw.target`) | `D22AP` |
+  | productName | `ivIu8YTDnBSrYv/SN4G8Ag` | `iPhone10,3` | `iPhone X` |
+  | marketingNameString | `Z/dqyWS6OZTRy10UcmUAhw` | blank (no `/product` node) | `iPhone X` |
+  | artworkTraits | `oPeik/9e8lQWMszEjbPzng` | iPhone X subtype | subtype 2556 |
+
+  (The old `hwModelStr` value `samsung,jackpotlte` is `compatible[0]`, i.e.
+  `hw.target`, as `NOTES.md` 32 already recorded; `productType` was already
+  `iPhone10,3` because it comes from `hw.product` = root `model`.)
+* **Cosmetic, already correct:** `SystemVersion.plist` says
+  `ProductName = iPhone OS`; the root's own device-type database
+  (`/System/Library/CoreServices/MobileCoreTypes.bundle/Info.plist`,
+  `UTExportedTypeDeclarations` 610/611, and the same entries in
+  `CoreTypes.bundle/Contents/Library/MobileDevices.bundle`) already maps
+  `D22AP`/`iPhone10,3` to `com.apple.iphone-x-1` / `-2`, "iPhone X (Model
+  A1865, A1901, A1902, A1903)". Nothing there needed changing.
+* **Decides iPhone-vs-iPad:** the kernel identity above (`hw.target`,
+  `hw.product`) and hence MG's productType/hwModelStr; plus `uname().machine`
+  for the few things that use it. **Cosmetic:** SystemVersion.plist, the
+  CoreTypes device database, Settings localisation.
+
+#### Kernel half — `xnu/patches/0169-jackpotlte-mib-device-identity.patch`
+
+Widens 0059's guard to also exclude `ARM64_BOARD_CONFIG_A5XELTE`, so the
+jackpotlte build takes the device-tree branch: `hw.machine = iPhone10,3`,
+`hw.model = D22AP` (`hw.target` stays `compatible[0]`, `hw.product` stays
+`model`). Verified with `git apply --check` on top of the post-0059 file, and
+the series is contiguous (`tools/validate-repo.py`: 169 patches, 0001-0169).
+0059 is kept as-is — the merger renumbers, and it still documents the SWEET
+half.
+
+`tools/mkadt_jackpotlte.py` now puts `D22AP` **first** in root `compatible`
+(`D22AP, samsung,jackpotlte, samsung,exynos7885, AppleARM, samsung,a5xelte`),
+matching the donor (`tools/mkadt.py`). The Samsung entries stay because
+`IODTPlatformExpert` matches against *every* entry; only the order changed
+(`compatible[0]` is what `hw.target` reports). Built and printed back with the
+ADT builder: `compatible = ['D22AP', 'samsung,jackpotlte', ...]`,
+`model = iPhone10,3`.
+
+#### Userspace half — the `mobilegestalt` step in `tools/sweet-root-tweaks.py`
+
+`tools/jackpotlte/apply-root-tweaks.sh` calls that script, so a plain root
+rebuild gets the step. It writes
+`/private/var/containers/Shared/SystemGroup/systemgroup.com.apple.mobilegestaltcache/Library/Caches/com.apple.MobileGestalt.plist`
+with the `CacheExtra` overrides in the table above (set-style: same keys, same
+values, a second run prints `already set` and rewrites nothing), then reads
+the plist back from the mounted volume and `sys.exit`s if any override,
+`CacheVersion` or `CacheUUID` did not take. Both were exercised on a scratch
+root: first run writes, second run is a no-op, a deliberately lying write is
+refused with the mismatching key named.
+
+Why those extra keys are written at all (measured from
+`libMobileGestalt.dylib`):
+
+* The cache is read from a **fixed** path (constant C string at
+  `0x19c5bbead`). Only the *write* path consults
+  `container_system_group_path_for_identifier` (its sole call site,
+  `0x19c58e6fc`), so a plain file at the fixed path is what readers load. The
+  legacy `/var/mobile/Library/Caches/com.apple.MobileGestalt.plist` (VA
+  `0x19c5bbcfa`) is deleted by `__MGCacheValid` and is not a substitute.
+* `__MGCacheValid` (`0x19c558b00`) validates the cache against the OS build and
+  a build UUID — its own log strings are `"can't validate cache version since
+  _kCFSystemVersionBuildVersionKey is missing"`, `"cache %@ doesn't match OS
+  %@"`, `"can't validate cache since uuid is missing"`, `"cache UUID %@
+  doesn't match build UUID %@"`. So `CacheVersion` = `20H392` and `CacheUUID`
+  = `42F6FA57-C5A1-4134-9BF4-AB00F962EAE8` (the constant `__MGWriteCache` @
+  `0x19c58e28c` itself writes). This matters because
+  `/System/Library/DataClassMigrators/MobileGestaltMigrator.migrator` calls
+  `__MGCacheValid` at boot and rebuilds the cache when it is false ("Migrator
+  rebuilt MGCache in %lf seconds. Success %d"), which would discard
+  `CacheExtra`.
+* `CacheExtra` is validated per key against the 767-entry question table
+  (`"cache extra has invalid question %@"`); the loader then logs `"Cache
+  loaded with %zu pre-cached in CacheData and %ld items in CacheExtra."` An
+  empty `CacheData` only means "nothing pre-cached" — each answer is computed
+  live and then overridden. The file is written `mobile:mobile 0644` inside a
+  `mobile`-owned `Library/Caches`, because `MobileGestaltHelper`
+  (`/System/Library/LaunchDaemons/com.apple.mobilegestalt.xpc.plist`,
+  `UserName = mobile`) is the process that rewrites it.
+
+#### Dynamic Island — what actually enables it here (measured)
+
+* The feature flag is **already on**: `Jindo` is `FeatureComplete` in
+  `/System/Library/FeatureFlags/Domain/SpringBoard.plist` (and `JindoSim`
+  too), so `SBSEnableJindo` = `os_feature_enabled_impl("SpringBoard",
+  "Jindo")` already returns true on this root.
+* The gate is the artwork subtype. `_SBUIIsSystemApertureEnabled`
+  (SpringBoardUIServices, `0x1a345a39c`) → `SBFEffectiveArtworkSubtype`
+  (SpringBoardFoundation, `0x18e6093fc`) / `_SBSIsSystemApertureAvailable`
+  (`0x191555160`) read `MGCopyAnswer("oPeik/9e8lQWMszEjbPzng")` and accept
+  `CFDictionaryGetValue(dict, "ArtworkDeviceSubType")` ∈ {2556, 2796}.
+* **`YlEtTtHlNesRBMal1CqRaA` (DeviceSupportsDynamicIsland, iOS 17.4+) is
+  referenced nowhere in this cache.** Tools that set it for newer iOS can do
+  nothing on 16.7.16; the only override that matters is the artwork subtype.
+  2556 is the smaller of the two accepted values, so it is the least
+  disruptive claim for a 360x740 pt panel.
+* The panel can host it: 1080x2220 at scale 3 is 360x740 pt and the island's
+  centred presence is ~126 pt wide. How it is laid out at that size is the
+  display lane's (1080x2220) question and is not touched here.
+
+#### Measured vs assumed
+
+Measured (read from this tree's own binaries/plists/kernel source):
+
+* the whole kernel-side chain, the guard, `uname()`'s use of `HW_MACHINE`;
+* the MG cache path, question keys, `CacheExtra`/`CacheVersion`/`CacheUUID`
+  schema and validation strings, the fixed read path, the migrator's rebuild;
+* `Jindo` = `FeatureComplete`, the subtype gate {2556, 2796}, and that the
+  17.4 question is unread here;
+* the root build's own compatible order and `model` before and after.
+
+Assumed (not evidenced by a boot):
+
+* that MobileGestalt **applies** a `CacheExtra` entry over the computed answer
+  for these questions. The loader accepts the key and logs the item count, but
+  the precedence is only observable at runtime.
+* that `CacheVersion = 20H392` (string) and that UUID constant are exactly
+  what `__MGCacheValid` wants. The log strings name
+  `_kCFSystemVersionBuildVersionKey` and a "build UUID"; a mismatch only
+  costs a rebuild, not a hang.
+* that overriding the whole `artworkTraits` dict with a single key is enough
+  for consumers other than the gate. The gate reads only
+  `ArtworkDeviceSubType`; the answer block also sets
+  `ArtworkDeviceProductDescription`, `ArtworkDeviceIdiom`,
+  `ArtworkDeviceScaleFactor`, `ArtworkDisplayGamut`,
+  `ArtworkDynamicDisplayMode`, `DevicePerformanceMemoryClass` and
+  `CompatibleDeviceFallback` (strings at `0x19c5b85d2`-`0x19c5b867e`), so a
+  sparse dict makes those lookups return nil. The values for those keys were
+  not sourced, so they were left out rather than invented.
+* that `marketingNameString` = `iPhone X` is the exact string Apple ships
+  (it is the marketing name the root's own CoreTypes database records for
+  D22AP/iPhone10,3).
+
+#### What only a boot can confirm, and what is still missing
+
+* Whether SpringBoard shows the island at all, and whether the layout at
+  360x740 is usable (display lane).
+* Whether the MG overrides survive: check `MGCopyAnswer` / the About screen,
+  and whether `MobileGestaltMigrator` logged a rebuild. **Recovery if they do
+  not survive:** boot once, then re-run the same script — MG will have written
+  its own cache with a certainly-valid `CacheVersion`/`CacheUUID`, and the step
+  merges `CacheExtra` into it instead of creating one.
+* Whether the red `rdar://45025538` strip moves. It is UIKit failing to pick a
+  *status bar visual provider for the current screen/idiom*; the identity
+  feeds `UIUserInterfaceIdiom`, so a correct iPhone identity may change or
+  clear it. That interaction belongs to the display lane.
+* Still unsourced, so deliberately not written: **Model Number**
+  (`D0cJ8r7U5zve6uA6QbOiLA`) and **Serial Number**
+  (`VasUgeSzVyHdB27g2XpN0g`). Both would come from the `/product` ADT node
+  (`product-description`, `model-number`, `serial-number`, `region-info`),
+  which needs Apple's `research/ipsw-x/d22ap.adt` — not in the tree and not
+  to be guessed. The blank Model Name field is addressed by
+  `marketingNameString`; the blank Model Number field is not.
+
+Files: `xnu/patches/0169-jackpotlte-mib-device-identity.patch` (new),
+`tools/mkadt_jackpotlte.py`, `tools/sweet-root-tweaks.py`,
+`tools/jackpotlte/apply-root-tweaks.sh` (header + step wiring).

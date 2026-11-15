@@ -96,13 +96,21 @@ def build():
     # matches against *every* entry of this list, so it must contain a name
     # the kernel accepts -- otherwise no IOPlatformExpert matches, the
     # IOPanicPlatform fallback runs and the boot dies at
-    # "Unable to find driver for this platform". Keep jackpotlte first for
-    # identification and append the kernel-matchable name.
+    # "Unable to find driver for this platform". The samsung entries stay for
+    # that matching (every entry is tried).
     #
     # This append was previously an uncommitted local edit: the jt10/jt13
     # images carried it, jt14 did not, and jt14 panicked at IOPlatformExpert.
     # Commit it so it cannot be lost again.
-    set_prop(root, 'compatible', mkadt.cstr('samsung,jackpotlte') +
+    #
+    # D22AP goes *first* (patch 0169): IODTPlatformExpert::getModelName
+    # returns compatible[0], and on arm64 getTargetName == getModelName, so
+    # compatible[0] is what sysctl hw.target and MobileGestalt HWModelStr read
+    # (NOTES.md 32). The donor ADT has the same order (tools/mkadt.py). With
+    # jackpotlte first, HWModelStr read "samsung,jackpotlte"; the Samsung name
+    # only has to be somewhere in the list for the platform to bind.
+    set_prop(root, 'compatible', mkadt.cstr('D22AP') +
+             mkadt.cstr('samsung,jackpotlte') +
              mkadt.cstr('samsung,exynos7885') + mkadt.cstr('AppleARM') +
              mkadt.cstr('samsung,a5xelte'))
     chosen = child(root, 'chosen')
