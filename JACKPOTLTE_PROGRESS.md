@@ -4537,6 +4537,57 @@ handle; the next kernel change should print or correct the leaf PTE's
 `AP`/`SH`/`AF`/attr bits for the chain page and the AS0 `TRANSCFG`/`MEMATTR`
 against the panfrost values (`/tmp/opencode/mali-ref/`), then be flashed once.
 
+#### What the fault really was: a translation fault, and a table one level short
+
+Two upstream files settle the reading, both for Mali Bifrost via the mainline
+panfrost driver (`/tmp/opencode/mali-ref/panfrost_device.h`,
+`.../panfrost_regs.h`, `.../io-pgtable-arm.c`, `.../panfrost_mmu.c`).
+
+**The driver's decode of `AS_FAULTSTATUS` was wrong in two ways.** The low
+byte is **one exception code**, not a flag per bit: `enum
+drm_panfrost_exception_type` gives `0xc0`-`0xc4` = translation fault, level
+0-4, `0xc8`-`0xcb` = permission fault, level 0-3, `0xd0`-`0xd3` = the walk's
+own bus error, `0xd8`-`0xdb` = access flag, `0xe0`-`0xe7` = address size,
+`0xe8`-`0xef` = memory attribute. And bits 9:8 are the access type with
+`AS_FAULTSTATUS_ACCESS_TYPE_*` = 0 atomic, **1 execute, 2 read, 3 write** —
+the driver's table had `1 read, 2 write, 3 execute`. So
+
+    0x7c1002c2  ->  exception 0xc2 = TRANSLATION_FAULT_2,
+                    access 2 = READ, source 0x7c10
+
+i.e. **the GPU read `0x9a90380`, walked, and found no entry** — it is not a
+permission fault, and it is not a write. `0x7c0002c2` on slot 0 is the same
+code. That the driver's own three-level `jt_pt_lookup` finds an entry at that
+address only says the two walks disagree.
+
+**They disagree in their geometry.** `jt_as0_update` programs
+`JT_MALI_AS_TRANSCFG_AARCH64_4K` (`AS_TRANSCFG_ADRMODE_AARCH64_4K`, 6), and
+`mmu_cfg_init_aarch64_4k` pairs that with a **four-level** walk: level 0 is
+the table `TRANSTAB` names, indexed by the top address bits, level 3 holds the
+4 KB page. `jt_map_page` built **three** levels (bits 34:30, 29:21, 20:12),
+which is the reference driver's shape and covers the 35 bits
+`JT_GPU_ADDRESS_END` allows — but one level below where the GPU starts. The
+level the GPU found empty is one our walk never looks at. panfrost makes the
+same point from the other side: for the Mali format it forces
+`data->start_level = 0` and a full `1 << pgd_bits` page, "Mali seems to need a
+full 4-level table regardless of IAS".
+
+Checked and **not** the bug: `TRANSTAB`'s low bits carry no address-mode field
+in the AARCH64_4K convention (panfrost sets `arm_lpae_s1_cfg.ttbr =
+virt_to_phys(pgd)` there, and puts the mode in `TRANSCFG`) — the reference's
+`ADRMODE_TABLE|READ_INNER` (`0x7`) belongs to the other convention, where
+`TRANSCFG` is `ADRMODE_LEGACY`; and `MEMATTR 0x8888888888888888` is
+`ARM_MALI_LPAE_MEMATTR_IMP_DEF` (`0x88`) in every byte, the "Mali has no
+notion of non-cacheable" value, so the leaf PTEs' attribute index cannot miss.
+`TRANSCFG`'s address-bits field (`INA_BITS(55 - ias)`) and the leaf's
+`AF`/`SH_INNER`/`AP_RW`/page bits match panfrost's normal read/write leaf.
+
+The fix is `0173`: add the level-0 table (`TRANSTAB` now names it), index nine
+bits at each level, give `jt_pt_lookup`/`jt_unmap_page` the same walk, and
+print the fault the vendor's way. It is a build-and-flash change; nothing here
+says the job runs once the walk completes, only that the gap is real and
+located.
+
 ### iPhone X everywhere, and Dynamic Island on 16.7.16 (2026-11-15)
 
 The phone's About screen showed a blank **Model Name**, and the status bar
