@@ -4447,3 +4447,92 @@ nothing was flashed or observed on the phone for `0169`. The bus pads are still
 assumed to be left muxed by S-Boot as `0129` documented (the I2C4 touch pads
 were not, so this assumption is the first thing to check if
 `JACKPOTLTE BATTERY: read failed` appears with `a8battery=1`).
+
+(Answered by `jt62` below: built by CI run `43693762825`, flashed, and the
+only new PMIC line is the `I2C busy` collision this section predicted as the
+first thing to look for.)
+
+---
+
+### jt62 on the panel: the `far 0x30` crash is gone, every surface selector is named, and the Mali fault is a mapped page (2026-11-15)
+
+Three photos of the panel (`~/Downloads/IMG_20261115_093521513.jpg`,
+`093530412.jpg`, `093534360.jpg`, 09:35, read with tight grayscale crops).
+`jt62` is CI run `43693762825` built from `main` at `7c16bfe` (patches `0169`
+charger, `0170` surface struct clients, `0171` Mali fault detail), packed as
+`/var/tmp/jt62/a8-xnu-jt62-boot.img` (17 559 568 B, sha256 `4c71f93e…`) and
+flashed `BOOT`-only at 08:32:39 UTC (`OKAY` 0.184 s); the root stayed `jt61`'s.
+
+**The crash jt60/jt61 died on did not happen.** There is no `CRASH backboardd…`
+line anywhere on the three shots, and the boot runs past the old death point:
+`SWEET FB: display on`, `exec xpcproxy`, `exec fairplayd.H2`, more GL entry
+lines. `0170`'s refusal to hand a zeroed `0xa68` structure to a selector that
+builds an `IOSurfaceClient` out of it is what removed the `far 0x30` fault in
+`IOSurface + 0x4ffc`. This is the first `BOOT` iteration since `jt60` whose
+backboardd instance survived the surface traffic.
+
+**Every surface selector has a shape now** (the `SWEET SURF REQ`/`SHAPE`
+lines `0170` added, read off the panel):
+
+| sel | shape seen | what it is |
+| --- | --- | --- |
+| `0` | `create id 2 1080x2220 fmt 0x42475241 bpe 4 bpr 4352 planes 0 size 9662464 keys 11 -> 0x0` | create, `kIOReturnSuccess` |
+| `34` | `arg0 0x1787 id 5895 scalarin 1 struct 0/2664` | `lookupFromPort`, the real client-producing lookup; succeeds |
+| `9` | `struct 56/4`, `64/4`, `48/4`, `40/4`; id `(from struct)` = 1 or 2 | succeeds: a 4-byte out with the id |
+| `27` | `struct 136/0` | succeeds |
+| `5` | `scalarin 2`, `arg0 0x2`, id 2 | succeeds |
+| `13` | `0/24` | limits |
+| `6` | `arg0 0 id 133562368 (from struct) scalarin 0 struct 32/2664` | **the ex-culprit** |
+
+`sel 6` — the one that used to be handed zeros — now prints
+`SWEET SURF: sel 6 wants a 2664-byte structure; id 133562368 is no surface`
+and returns `kIOReturnUnsupported`. The id it read out of the structure
+(`0x07F60000`) is not a live surface id, so the fallback refuses cleanly and
+nothing dereferences a zero. `12`/`3`/`50`/`55`/`64`/`68`/`79` are the
+framebuffer client's selectors on the same family, not surface ones.
+
+**GL goes one step further than jt61.** `jackpotlte-gl: -attachImage:: texture
+1 is surface 2 … texture 3 is surface 1`, `1080 x 2220, memory shared`; the
+context line names the stack: `an OpenGL ES 3 context for CoreAnimation by
+@loader_path/libOSMesa.8.dylib: OpenGL ES 3.1 Mesa 25.0.7; Mali-G71
+(Panfrost)`. Three driver buffers map: `JackpotlteMali: buffer 17: 204800
+bytes at 0xa490000 / map 17: ok`, then `18` at `0xa4d0000` and `19` at
+`0xa510000`.
+
+**The Mali jobs still fault, and `0171` finally answers where.** For the
+submissions on these shots:
+
+    JACKPOTLTE MALI: fault 0x9a90380 (permission , write), source 16,
+        page 0x89f4b4743 mapped, chain 0x9a90380 mapped
+    JACKPOTLTE MALI: as0 transtab 0x883d16080 cfg 0x420083c6 status 0
+    JACKPOTLTE MALI: fault 0x9a908c0 (permission , write), source 0,
+        page 0x89f4b7473 mapped, chain 0x9a908c0 mapped
+
+and later `fault 0x9a90340` / `0x9a905c0`. The fault status is `0x7c1002c2`
+(slot 1) / `0x7c0002c2` (slot 0) with `interrupts=0 status=0x8 mmu=0x1`. So
+the faulting address's **own entry is present** in the very tables
+`jt_map_page` fills (`page … mapped`) — which rules out "our driver never
+mapped the buffer". The GPU faults *on the chain page itself*, and that page
+is remapped to a fresh physical page per submission (`0x89f4b4743` for one
+job, `0x89f4b7473` for the next). The walk therefore reaches a table with a
+valid entry, sees a permission fault on write, and the job never runs. That
+is the `jt64` target: a wrong permission/geometry bit in the leaf PTE or the
+AS0 setup, not a missing mapping. (`0171` was written for exactly this
+question; it is what turned "fault" into "fault on a mapped page".)
+
+**The charger reader reached the bus and collided, exactly as `0169`
+predicted.** The only new PMIC line is `JACKPOTLTE PMIC: I2C busy before
+message`: with `a8battery=1` the 30 s `SweetBattery` sample lands on the same
+polled S3C2440 controller the touch path drives, and `0129`'s busy check
+refuses rather than racing. Not fatal (the reader keeps the last sample and,
+before one, the static fallback), but it means the charger state may never be
+sampled while touch is active. Fixing it is a separate lane: give the battery
+transfer the same serialisation the touch path has, or move it to the
+interrupt-driven transfer.
+
+**What only a boot can confirm / what is still open.** No `SWEET FB: swap`
+line and no wallpaper on any shot: the GPU still produces no frame, and that
+is the single blocker. The chain-permission fault above is the concrete
+handle; the next kernel change should print or correct the leaf PTE's
+`AP`/`SH`/`AF`/attr bits for the chain page and the AS0 `TRANSCFG`/`MEMATTR`
+against the panfrost values (`/tmp/opencode/mali-ref/`), then be flashed once.
