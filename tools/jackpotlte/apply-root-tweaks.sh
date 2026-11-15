@@ -47,6 +47,11 @@
 #                              CacheExtra) on any cache that fails
 #                              __MGCacheValid.  Read back and refused if the
 #                              write did not take.
+#   (via tools/jackpotlte/car-mode.py)
+#   BoundingPathData Assets.car  the missing 1080x2220 (360x740 at 3x)
+#                              bounding-path rendition UIKitCore builds the
+#                              name for and loads by hand (the A8 canvas is
+#                              not one of Apple's shipped modes)
 #   (then, by this script, after the Python step)
 #   /Applications              the 32 bundles from
 #                              /private/var/staged_system_apps moved in
@@ -168,6 +173,27 @@ fi
 rm -f "$mnt/.rwcheck"
 
 python3 "$repo/tools/sweet-root-tweaks.py" "$mnt"
+
+# The 1080x2220 display mode's bounding path.  The catalog only ships the modes
+# for the panels Apple built; the A8's own canvas is not one of them, so add it
+# to the list UIKitCore consults (see tools/jackpotlte/display-mode.py for how
+# the name is formed and where it is read).  car-mode.py writes atomically, is
+# idempotent, and re-reads the file it just wrote; the explicit --verify below
+# is a second read of the mounted volume, and the script stops if it fails.
+bpcatalog="$mnt/System/Library/PrivateFrameworks/UIKitCore.framework/BoundingPathData.bundle/Assets.car"
+if [ -f "$bpcatalog" ]; then
+	if python3 "$repo/tools/jackpotlte/car-mode.py" --catalog "$bpcatalog" \
+	    --add 1080x2220 --scale 3 --points 360x740 --verbose; then
+		python3 "$repo/tools/jackpotlte/car-mode.py" --catalog "$bpcatalog" \
+		    --verify 1080x2220 --scale 3
+	else
+		echo "error: failed to add the 1080x2220 bounding path to $bpcatalog" >&2
+		exit 1
+	fi
+else
+	echo "warning: no BoundingPathData Assets.car in $imgabs; UIKit will keep" >&2
+	echo "         its fallback status bar for the 1080x2220 mode" >&2
+fi
 
 # Present the apps iOS 16 leaves staged for the App cryptex (see the header).
 if [ -d "$mnt/private/var/staged_system_apps" ]; then

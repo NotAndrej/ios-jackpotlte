@@ -37,6 +37,19 @@ Assets.car, e.g. "BoundingPathBitmap-1125x2436-375x812-3.00x".  `--root` reads
 them from an extracted/mounted iOS root instead of this baked copy, so the
 answer comes from the phone and not from here.
 
+Two different lists decide the strip, and `--add`/--root only touch one:
+
+  * PROVIDERS below is the set of native (w, h) sizes UIKitCore has a
+    **compiled-in** status-bar visual provider for (the _UIStatusBarVisual
+    Provider_Split* classes and the (native width, native height) dispatch at
+    UIKitCore+0x283bfc).  This is what decides whether the rdar strip is drawn.
+  * the asset catalog decides only the **bounding path** UIKit loads for the
+    mode.  tools/jackpotlte/car-mode.py adds the 1080x2220 entry to a root's
+    catalog, so SpringBoard can load that path (jt46 crashed on the missing
+    one); it does not add a provider.  So `--check` passes only when the canvas
+    is a provider size, and it says "boot" when the catalog entry exists but the
+    provider does not.
+
 Points are canvas pixels / display-scale, which is what the phone showed when
 the canvas was 1125x2436: SpringBoard logged "375x812@3x".
 """
@@ -58,6 +71,20 @@ MODES = [
     (1284, 2778, [(375, 812, 3.0), (428, 926, 3.0)]),
     (1290, 2796, [(375, 812, 3.0), (430, 932, 3.0)]),
 ]
+
+# Native (width, height) sizes UIKitCore has a compiled-in status-bar visual
+# provider for, read by hand from the phone's iOS 16.7.16 UIKitCore: the
+# _UIStatusBarVisualProvider_Split* class names (828, 1080, 1080_Wide, 1125,
+# 1170, 1170_Wide, 1242, 1284, 1284_Wide) and the fixed sizes in the
+# (native w, h) dispatch at UIKitCore+0x283bfc (its doubles include 320x480,
+# 640x960, 750x1334, 1080x1920, 1080x2340, 1125x2436, 1170x2532, 1242x2688,
+# 1284x2778).  1080x2220 is deliberately not here, and no asset catalog can add
+# one.
+PROVIDERS = {
+    (320, 480), (640, 960), (750, 1334), (1080, 1920),
+    (828, 1792), (1080, 2340), (1125, 2436), (1170, 2532),
+    (1242, 2688), (1284, 2778),
+}
 
 ASSET_CAR = ("System/Library/PrivateFrameworks/UIKitCore.framework/"
              "BoundingPathData.bundle/Assets.car")
@@ -129,7 +156,7 @@ def fit(panel, canvas):
     return "scaled on both axes (%.3f x %.3f)" % (1.0 * pw / cw, 1.0 * ph / ch)
 
 
-def report(panel, canvas, scale, modes, source):
+def report(panel, canvas, scale, modes, source, providers):
     print("panel        %dx%d" % panel)
     print("canvas       %dx%d (what IOMobileFramebuffer/ADT report)"
           % canvas)
@@ -140,29 +167,72 @@ def report(panel, canvas, scale, modes, source):
     print()
 
     known = next((m for m in modes if (m[0], m[1]) == canvas), None)
-    same_w = [m for m in modes if m[0] == canvas[0]]
+    prov = canvas in providers
+
+    # The two facts the strip depends on, kept apart on purpose.
     if known:
         pairs = ", ".join("%dx%d @%g" % (p[0], p[1], p[2]) for p in known[2])
-        if any((p[0], p[1]) == (ptw, pth) for p in known[2]):
-            print("VERDICT  %dx%d is a notched iPhone mode, and %gx%g points "
-                  "is one of its point sizes (%s)." % (canvas + (ptw, pth, pairs)))
-            return 0
-        print("VERDICT  %dx%d is a notched iPhone mode, but %gx%g points is "
-              "not one of its point sizes (%s)." % (canvas + (ptw, pth, pairs)))
-        return 1
-    if same_w:
-        print("VERDICT  %dx%d is NOT an iPhone mode.  Width %d is supported "
-              "(native height %s), so it is the height that misses."
-              % (canvas[0], canvas[1], canvas[0],
-                 " or ".join(str(m[1]) for m in same_w)))
+        print("bounding path  present: the catalog has %dx%d (%s)"
+              % (canvas[0], canvas[1], pairs))
     else:
-        print("VERDICT  %dx%d is NOT an iPhone mode (no iPhone is %d px "
-              "wide)." % (canvas[0], canvas[1], canvas[0]))
-    print("         UIKitCore in this build has no status-bar visual provider "
-          "for it,")
-    print("         so the status bar falls back to the rdar strip.  The "
-          "panel's own")
-    print("         geometry is not a display mode; present a real one:")
+        print("bounding path  MISSING: the catalog has no %dx%d rendition, so "
+              "UIKit" % canvas)
+        print("               cannot load a bounding path for it")
+    if prov:
+        print("status bar     a provider size: UIKitCore has a compiled-in "
+              "status-bar")
+        print("               visual provider for %dx%d" % canvas)
+    else:
+        print("status bar     NOT a provider size: UIKitCore has no "
+              "compiled-in")
+        print("               status-bar visual provider for %dx%d" % canvas)
+    print()
+
+    if prov and known and (ptw, pth) in [(p[0], p[1]) for p in known[2]]:
+        print("VERDICT  %dx%d is a known iPhone mode: a status-bar provider and "
+              "a" % canvas)
+        print("         bounding path for %gx%g points, so no rdar strip is "
+              "expected." % (ptw, pth))
+        return 0
+    if prov and known:
+        print("VERDICT  %dx%d has a provider and a bounding path, but %gx%g "
+              "points is" % (canvas + (ptw, pth)))
+        print("         not one of its point sizes (%s)."
+              % ", ".join("%dx%d" % (p[0], p[1]) for p in known[2]))
+        return 1
+    if prov and not known:
+        print("VERDICT  %dx%d has a status-bar provider but no bounding path in "
+              "the" % canvas)
+        print("         root's catalog.  A mode needs both: loading a provider "
+              "size")
+        print("         whose path is missing is what crashed SpringBoard at "
+              "1125x2436")
+        print("         (jt46).  Run tools/jackpotlte/car-mode.py --add, or use "
+              "a root")
+        print("         that has it.")
+        return 1
+    if known and not prov:
+        print("VERDICT  %dx%d is in the root's BoundingPathData catalog, so "
+              "SpringBoard" % canvas)
+        print("         can load its bounding path (%gx%g points).  But it is "
+              "not one" % (ptw, pth))
+        print("         of the sizes UIKitCore has a compiled-in status-bar "
+              "provider")
+        print("         for, and an asset catalog cannot add one.  Whether the "
+              "rdar")
+        print("         strip is gone is a boot question, not an offline one.")
+        return 1
+    if any(m[0] == canvas[0] for m in modes):
+        print("VERDICT  %dx%d is NOT an iPhone mode.  Width %d is supported "
+              "(native " % (canvas[0], canvas[1], canvas[0])
+              + "height %s), so it is the height that misses."
+              % " or ".join(str(m[1]) for m in modes if m[0] == canvas[0]))
+    else:
+        print("VERDICT  %dx%d is NOT an iPhone mode (no iPhone is %d px wide)."
+              % (canvas[0], canvas[1], canvas[0]))
+    print("         UIKitCore has no status-bar visual provider for it, so the")
+    print("         status bar falls back to the rdar strip.  Present a real "
+          "mode:")
     print()
     cands = sorted(modes, key=lambda m: abs(m[0] - panel[0]) + abs(m[1] - panel[1]))
     shown = 0
@@ -220,10 +290,10 @@ def main(argv):
     if canvas is None:
         # the tree's canvas (the panel) and the donor's panel, for contrast
         for c in ((panel[0], panel[1]), (1080, 2400)):
-            rc |= report(panel, c, scale, modes, source)
+            rc |= report(panel, c, scale, modes, source, PROVIDERS)
             print()
         return rc if check else 0
-    rc = report(panel, canvas, scale, modes, source)
+    rc = report(panel, canvas, scale, modes, source, PROVIDERS)
     return rc if check else 0
 
 
