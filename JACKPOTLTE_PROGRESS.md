@@ -4388,3 +4388,100 @@ image): it is cache and root inspection plus arithmetic. What only a boot can
 answer: whether presenting a real mode removes the strip on *this* panel
 (donor-proven at `NOTES.md:34`, A8-unconfirmed), whether 1080x2340 is enough at
 360x780 points, and whether the bounding-path read succeeds once a mode is back.
+
+### The 1080x2220 mode is added to the root's asset catalog (2026-11-15)
+
+The owner overrode the "red herring" conclusion above: add **1080x2220
+(360x740 points at `display-scale 3`)** as a real mode rather than squeeze the
+panel into 1125x2436, and make a plain root rebuild bake it in. No xnu patch is
+involved — `xnu/patches/` stays `0001-0168`, `0169` stays free — because the
+change is a file inside the iOS root, not kernel code.
+
+What it edits is the one list the *bounding-path* lookup actually reads:
+`System/Library/PrivateFrameworks/UIKitCore.framework/BoundingPathData.bundle/
+Assets.car`, a BOMStore whose entries are keyed
+`(scale=1, idiom=phone, identifier, element=85, part=181)` and whose CSI name is
+`BoundingPathBitmap-<native w>x<h>-<points w>x<points h>-<scale>x` — exactly the
+name UIKitCore's `+0x119db13` format string builds and loads as
+`UIKit_BoundingPathData` (`+0x11e8fa6`/`+0x11e8fbd`). Three new tools/files:
+
+| file | what it does |
+| --- | --- |
+| `tools/jackpotlte/car-mode.py` (new) | BOMStore/CAR reader + `--list`/`--verify WxH`/`--add WxH --scale S --points WxH --root ROOT`. `--add` appends the CSI, the facet key+value, the rendition key and the bitmap descriptor; rebuilds the three single-leaf B+ trees; retargets their headers; fixes the CARHEADER `renditionCount`; rebuilds the vars table and the block index; writes atomically and re-reads the file from disk, refusing (non-zero) if any part did not land. Idempotent; refuses to rewrite a foreign entry. |
+| `tools/jackpotlte/apply-root-tweaks.sh` | after `tools/sweet-root-tweaks.py`, runs `car-mode.py --add 1080x2220 --scale 3 --points 360x740` against the mounted volume and then a second `--verify` read of that volume; the script stops if either fails. Added to the "What gets written:" header. |
+| `tools/jackpotlte/display-mode.py` | `--root` now reads 1080x2220 back as a catalog mode; the verdict was split into the two facts the strip depends on (see below). |
+
+It is in `apply-root-tweaks.sh`, not `install-userspace.sh`: the latter installs
+binaries that come from CI, and this is a set-style edit to an existing
+system file on the root volume, which is what that script is for.
+
+**Measured (offline, on a copy `/tmp/opencode/car-test/Assets.car`).** Before:
+23 renditions, 31 facets, 23 bitmapkeys. After `--add 1080x2220`: 24/32/24,
+`CARHEADER renditionCount` 23 -> **24**, the new key is `(1,1,8736,85,181)`, the
+new CSI name is `BoundingPathBitmap-1080x2220-360x740-3.00x.data` and its
+decoded `_UIBoundingPathBitmap` plist is `width=1080 height=2220`; a second
+`--add` is a no-op; `--verify` flips from rc 1 to rc 0; a separate BOM/CAR
+parser (`/tmp/opencode/gpu/car.py`) agrees on every number and confirms **only
+the CARHEADER block's bytes changed** and every existing rendition is
+byte-identical.
+
+A bug worth recording, because the first test *passed* and was wrong: the
+CARHEADER block payload is **little-endian** even though the BOMStore wrapper
+around it is big-endian (`RATC` then `25 03 00 00` = coreuiVersion 805,
+`11 00 00 00` = storageVersion 17, `17 00 00 00` = renditionCount 23). Writing
+the count with `>I` stored 24 as `18 00 00 00`, which an independent parser read
+back as `402653184`. The in-memory verify did not catch it because it did not
+check the header at all; `_check` now asserts
+`CARHEADER renditionCount == len(renditions)`, so a byte-swapped write fails
+before the file is written.
+
+**Assumed, not measured.** The new rendition's payload is a *plain rectangle*:
+`nodeCount=0`, `skipRegion` = the whole bitmap, empty `rows`. The real payload
+is the rounded-corner node list for the exact point size (`nodeCount = 10 *
+skipRegion.y`, `rows` = two `uint16` per node), and that geometry cannot be
+computed here — it needs the panel's corner radius and the node encoding, which
+are not in this tree. So a screen with no rounded corners is what this entry
+describes; it is structurally complete and self-consistent, nothing more.
+
+**Why this may not remove the strip, and `display-mode.py` says so.** The
+catalog fixes the *bounding path*. The strip is drawn when `_UIStatusBar` finds
+no **compiled-in** status-bar visual provider for the native `(width, height)`,
+and that provider table lives in UIKitCore, not in any catalog. The
+`(native w, h)` dispatch at `UIKitCore+0x283bfc` (doubles at
+`+0x1127a80..+0x1127af0`) pairs 320x480, 640x960, 750x1334, 828x1792, 1080x1920,
+1080x2340, 1125x2436, 1170x2532, 1242x2688, 1284x2778 with the
+`_UIStatusBarVisualProvider_Split*` classes, and **has no (1080, 2220)**; the
+`__TEXT` holds no `2220.0` double at all. Adding a catalog entry gives the mode
+a bounding path — which is what `jt46` crashed on, so it is worth having — but
+it does not add a provider. `display-mode.py --root <root> --canvas 1080x2220
+--check` therefore still exits 1, with this wording:
+
+    bounding path  present: the catalog has 1080x2220 (360x740 @3)
+    status bar     NOT a provider size: UIKitCore has no compiled-in
+                   status-bar visual provider for 1080x2220
+    VERDICT  1080x2220 is in the root's BoundingPathData catalog ... But it is
+             not one of the sizes UIKitCore has a compiled-in status-bar
+             provider for, and an asset catalog cannot add one.  Whether the
+             rdar strip is gone is a boot question, not an offline one.
+
+(`--check` passes only for a canvas that is both a provider size *and* present
+in the catalog; on the un-patched root the same command reports the path
+MISSING. Real modes like 1125x2436 still pass.)
+
+**What only a boot can confirm.**
+1. Whether UIKit instantiates 1080x2220 and accepts the rectangular path (it
+   needs a panel with the corner radius baked into a real `rows` list).
+2. Whether the strip disappears — the compiled-in provider table above is the
+   decisive risk, and no root file in this tree changes it. The only root-side
+   lever recorded is the `UIStatusBarVisualProviderClassName` debug key
+   (`UIKitCore+0x11d35c4`), whose preferences domain is not established.
+3. Whether CoreUI 805 resolves this rendition's identifier the way this entry
+   assumes; the catalog stores it in FACETKEYS, and whether CoreUI recomputes a
+   hash instead is unresolved (many candidate hashes were brute-forced without a
+   match; AssetKit's `CRC32(name) & 0xFFFF` does not match this catalog).
+
+Commit `3af7aac` on branch `jackpotlte-display` (files: `car-mode.py` new,
+`apply-root-tweaks.sh`, `display-mode.py`). Nothing was flashed, no root image
+was written (the write is authored in the script; the script writes), and no
+`fastboot`/`adb`/`img2simg` was run. `python3 tools/validate-repo.py` passes
+(168 patches, 39 Python tools, 28 shell scripts).
