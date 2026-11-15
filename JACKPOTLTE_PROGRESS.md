@@ -4933,3 +4933,35 @@ Commit `3af7aac` on branch `jackpotlte-display` (files: `car-mode.py` new,
 was written (the write is authored in the script; the script writes), and no
 `fastboot`/`adb`/`img2simg` was run. `python3 tools/validate-repo.py` passes
 (168 patches, 39 Python tools, 28 shell scripts).
+
+## jt64 on the panel: the GPU lock screen is real, and touch power stops being a switch (2026-11-15)
+
+`~/Downloads/IMG_20261115_120721377.jpg` (12:07, jt64 still running) is the
+first photo of the panel with **iOS UI drawn by the Mali path and not the
+console**: an orange banner reading `rdar:46025898` across the top, the white
+home-indicator pill on the bottom edge, and a small white square above it,
+over an otherwise black lock screen. The sibling photo
+`IMG_20261109_072022724.jpg` (Nov 9) is the **CPU** rendition of the same lock
+screen (`Wednesday, December 31` / `4:24` / camera button). Same banner, same
+home indicator: 12:07 is that same composed scene produced through
+EAGL/OSMesa → panfrost → `JackpotlteMali`, i.e. M4's userspace half drawing
+the window server's own frame. The console text has scrolled off except a
+last `exec fairplayd.H2`, so this is the GUI on the glass, not a log tail.
+
+This retires the "the console always owns the framebuffer" reading: the console
+still paints, but the composited surface is the lock screen now.
+
+**Touch power is no longer a boot switch (`0174`, branch
+`jackpotlte-touch-power`).** `jackpotlte_touch_power_up()` and the A8 contact
+path ran only with `a8touchpwr=1`/`a8touchlog=1`. Both are now the default:
+the rail is brought up (tsp_ldo_en gpg3-0, the I2C4 QCH gate, the gpp4 pads)
+on every boot, and the contact path starts unless `a8touchlog=0`. Numbering
+note: the unmerged `jackpotlte-charger-bus` branch also claims `0174`; whichever
+of the two merges second is renumbered.
+
+**Touch event logging is off by default.** Patch `0157` routes every
+`A8 TOUCH:` line through `jt_log()`, gated by `a8touchverbose=1`, so a boot with
+only `a8touchlog=1` shows nothing at all from the contact path — which is why
+"touch is dead" could not be read off the console. The next boot carries
+`a8touchverbose=1` (a boot-arg, no rebuild) so the IC identity, `sense-on`,
+per-event `read ... left=` and `moves=`/`lost_reads=` lines are visible.
