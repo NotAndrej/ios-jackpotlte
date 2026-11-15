@@ -5000,6 +5000,17 @@ then the allocation. The copy also never reads past the allocation, so a surface
 whose `bytesPerRow * height` is shorter than its own row count copies short
 instead of faulting.
 
+**Reading the surface is sound in this port.** The copy path needs the surface's
+CPU memory, which the old zero-copy path never touched. `sweet_surface_fill_result`
+(`0046`) answers a create/lookup with the address of the mapping it made in the
+calling task - `put64(out, 0x00, ref->data->getAddress())` - and with
+`allocSize`, `width`, `height`, `bytesPerRow`, `bytesPerElement` and
+`planeCount` beside it, and `kSweetSurfaceTrapLock` (2) is in the client's trap
+table, so `IOSurfaceGetBaseAddress`/`IOSurfaceLock` are the framework's real
+functions over this kernel's surfaces. The copy also runs GL on a CPU-side
+upload and so does not need the kernel's `0x7e` surface request at all, which is
+the path jt64's Mali work had to get right.
+
 Every copy and every refusal now prints the geometry -
 `row <used> of <reported> bytes, <n> B a pixel, <n> planes, <n> allocated,
 format <f> type <t>` - so the next boot settles which of these the clock and the
