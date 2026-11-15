@@ -16,7 +16,7 @@ diff --git a/iokit/Kernel/arm/SweetSurface.cpp b/iokit/Kernel/arm/SweetSurface.c
  static IOLock       *sweet_surface_lock;
  static SweetSurface *sweet_surface_table[SWEET_SURFACE_MAX_ID];
  static uint32_t      sweet_surface_users[SWEET_SURFACE_MAX_ID];
-@@ -443,6 +451,61 @@
+@@ -443,6 +451,95 @@
  	IOLog("SWEET SURF: %s %s %u\n", name, what, n);
  }
  
@@ -43,18 +43,52 @@ diff --git a/iokit/Kernel/arm/SweetSurface.cpp b/iokit/Kernel/arm/SweetSurface.c
 +	    (uint32_t)args->structureOutputSize;
 +}
 +
++/* The surface id a request names: the first scalar when it has one, otherwise
++ * the first u32 of its structure input.  IOSurface.framework's per-plane and
++ * per-buffer calls (JT 61 sel 6 and 9) pass no scalars at all and put the
++ * client id in the structure, so a fallback that only looks at scalars would
++ * refuse exactly the request that killed the display server. */
++static bool
++sweet_surf_in_id(IOExternalMethodArguments *args, uint32_t *idOut)
++{
++	uint32_t id;
++
++	if (args->scalarInputCount > 0) {
++		*idOut = (uint32_t)args->scalarInput[0];
++		return true;
++	}
++	if (args->structureInputDescriptor != NULL) {
++		if (args->structureInputDescriptor->getLength() < sizeof(id) ||
++		    args->structureInputDescriptor->readBytes(0, &id, sizeof(id)) !=
++		    sizeof(id)) {
++			return false;
++		}
++		*idOut = id;
++		return true;
++	}
++	if (args->structureInput != NULL && args->structureInputSize >= sizeof(id)) {
++		memcpy(&id, args->structureInput, sizeof(id));
++		*idOut = id;
++		return true;
++	}
++	return false;
++}
++
 +static void
 +sweet_surf_log_request(uint32_t selector, IOExternalMethodArguments *args, uint64_t arg0)
 +{
 +	char name[32];
++	uint32_t id = 0;
++	bool haveId = sweet_surf_in_id(args, &id);
 +
 +	if (sweet_surf_requests++ >= SWEET_SURFACE_REQ_LOG) {
 +		return;
 +	}
 +	proc_selfname(name, sizeof(name));
-+	IOLog("SWEET SURF REQ: %s sel %u arg0 %#llx scalarin %u struct %u/%u desc %u/%u\n",
-+	    name, selector, (unsigned long long)arg0, args->scalarInputCount,
-+	    sweet_surf_in_size(args), sweet_surf_out_size(args),
++	IOLog("SWEET SURF REQ: %s sel %u arg0 %#llx id %u%s scalarin %u struct %u/%u desc %u/%u\n",
++	    name, selector, (unsigned long long)arg0, id,
++	    haveId ? (args->scalarInputCount > 0 ? "" : " (from struct)") : " (none)",
++	    args->scalarInputCount, sweet_surf_in_size(args), sweet_surf_out_size(args),
 +	    args->structureInputDescriptor != NULL,
 +	    args->structureOutputDescriptor != NULL);
 +}
@@ -78,7 +112,7 @@ diff --git a/iokit/Kernel/arm/SweetSurface.cpp b/iokit/Kernel/arm/SweetSurface.c
  bool
  IOSurfaceRootUserClient::initWithTask(task_t owningTask, void *securityID, UInt32 type)
  {
-@@ -728,6 +791,9 @@
+@@ -728,6 +825,9 @@
  {
  	uint64_t arg0 = args->scalarInputCount > 0 ? args->scalarInput[0] : 0;
  
@@ -88,7 +122,7 @@ diff --git a/iokit/Kernel/arm/SweetSurface.cpp b/iokit/Kernel/arm/SweetSurface.c
  	switch (selector) {
  	case kSweetSurfaceLimits: {
  		uint8_t limits[0x18] = { 0 };
-@@ -772,8 +838,30 @@
+@@ -772,8 +872,32 @@
  		sweet_surf_log_once("sel", selector);
  		return kIOReturnSuccess;
  	}
@@ -104,9 +138,11 @@ diff --git a/iokit/Kernel/arm/SweetSurface.cpp b/iokit/Kernel/arm/SweetSurface.c
 +		 * surface when the first scalar names one, and refuse the rest
 +		 * rather than return a zeroed one. */
 +		uint32_t out = sweet_surf_out_size(args);
++		uint32_t id = 0;
 +
-+		if (out >= SWEET_SURFACE_CLIENT_MIN) {
-+			SweetSurface *s = sweet_surface_copy((uint32_t)arg0);
++		if (out >= SWEET_SURFACE_CLIENT_MIN &&
++		    sweet_surf_in_id(args, &id)) {
++			SweetSurface *s = sweet_surface_copy(id);
 +			if (s != NULL) {
 +				IOReturn ret = sweet_surface_get(s) ?
 +				    returnSurface(s, args) : kIOReturnNotFound;
@@ -114,14 +150,14 @@ diff --git a/iokit/Kernel/arm/SweetSurface.cpp b/iokit/Kernel/arm/SweetSurface.c
 +				return ret;
 +			}
 +			IOLog("SWEET SURF: sel %u wants a %u-byte structure; "
-+			    "id %u is no surface\n", selector, out, (uint32_t)arg0);
++			    "id %u is no surface\n", selector, out, id);
 +			sweet_surf_log_once("sel", selector);
 +			return kIOReturnUnsupported;
 +		}
  		for (uint32_t i = 0; i < args->scalarOutputCount; i++) {
  			args->scalarOutput[i] = 0;
  		}
-@@ -783,6 +871,7 @@
+@@ -783,6 +907,7 @@
  		sweet_surf_log_once("sel", selector);
  		return kIOReturnSuccess;
  	}
