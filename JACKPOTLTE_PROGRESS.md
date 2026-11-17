@@ -4993,3 +4993,32 @@ read-only inspection mount of the same image. The check resolves the loop
 device's backing file, since `/proc/mounts` names a loop mount's source as
 `/dev/loopN` and never the image.
 
+### jt67: both partitions flashed (2026-11-17)
+
+The phone came up in fastboot (`fastboot devices` = `52005b4aec8d15b1`,
+`18d1:4ee0`), and `fastboot getvar all` confirmed the partition names and that
+both fit: `USERDATA` is `0x5122FBE00` (20.3 GiB) against a 12.16 GB sparse and
+a 16 GiB raw, `BOOT` is `0x2000000` (32 MiB) against the 17,559,568-byte image.
+
+**The first USERDATA write failed, and it was the host, not the phone.**
+`fastboot flash USERDATA` stopped at piece 41 of 47 with
+`FAILED (Error reading sparse file)`. The sparse file was unchanged on disk
+(same size, same mtime) and `sha256sum` still answered
+`2383e4f6c0c732c174c31a65de610887d180846433940bedbcc5285fbd87298d`, so the
+failure was a transient read of the host file, not a bad image or a bad sector;
+the device was left partially written by that run.
+
+**The re-flash succeeded.** All 47 pieces sent and written `OKAY`,
+`Finished. Total time: 501.583s`. `fastboot flash BOOT
+/var/tmp/jt66/a8-xnu-jt66-boot.img` then wrote in 0.918s. `fastboot reboot` was
+issued, so the boot path loads the jt66 BOOT (0174 touch-power kernel with
+`a8touchverbose=1`) and the iOS root from the rewritten USERDATA, which carries
+`libjackpotlte-gl.dylib` `bb42dd3a...` (the surface-copy fix).
+
+**What is still a separate claim.** Both flashes report OK, which is a host- and
+bootloader-side result. Whether the phone draws the lock screen's clock and
+camera button - the whole reason for this write - needs a photo or console log
+from the device, and has not been confirmed. The shim's new geometry lines
+(`row <used> of <reported> bytes, <n> B a pixel, ... copied into the texture`)
+are the evidence to read in that photo.
+
