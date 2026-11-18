@@ -5419,3 +5419,87 @@ Two things this also settles:
 vendor's `current_soc` 664-669, because the vendor adds `diff_soc`
 compensation and switches to a voltage model below 300 centi. Ours lands on
 the same UI number (6 %), so it is good enough to publish.
+
+### The SCSC transport becomes real, and Bluetooth gets an endpoint (2026-11-18)
+
+Branch `jackpotlte-wifi-bt`, commit `d08efe3`.  Patches `0180`-`0183`; the
+`0140` BT draft on `origin/jackpotlte-bt` is superseded and not applied.
+
+**What changed.**  `0138` shipped a transport that could not work past reset: a
+zeroed 0x200 mxconf block, a 64-byte bump allocator, an interrupt-bit allocator
+nothing called, and "reset released" treated as "up".  The four patches replace
+that:
+
+- `0180` is header only: the mxconf and `mxstreamconf` offsets, the stream
+  geometry taken from the transports themselves, the BSMHCP/BHCS numbers, and
+  the notes that explain the interrupt decision.
+- `0181` builds the real block: seven streams (mxmgmt, gdb R4/M4, mxlog in both
+  directions) described in mxconf exactly as `mxconf.h` lays them out, a
+  32-byte-aligned MIF allocator, the interrupt-bit allocator and bit ops, the
+  mailbox/PMU reset sequence, a poll thread, and the exported transport API.
+  The mxlog ring is drained so a chatty firmware cannot stall.
+- `0182` registers an mxmgmt channel handler and waits for `MM_START_IND`
+  before declaring the transport up.  That is the first real evidence the R4 is
+  executing; a failure prints one line and leaves the transport marked up,
+  because retrying would leak bump-allocated MIF and re-release a live reset.
+- `0183` adds `bsd/dev/a5xelte_bt.{c,h}`: BHCS + BSMHCP in MIF, the three
+  interrupt bits in the vendor's order, `SM_MSG_START_REQ`/`CFM` on service id
+  2, an HCI Reset (`[03 0c 00]` in the ring; the H4 type byte is host-side
+  only) whose Command Complete is the boot-time proof, and a single-packet ACL
+  TX seam.  Details in `docs/research/jackpotlte-bt.md`.
+
+**The interrupt question, settled.**  The obvious next step after `0138` —
+`ml_install_interrupt_handler()` for SPI 57 (GIC ID 89) — would break the
+platform.  `sleh_irq()` has exactly one per-CPU handler pointer and
+`IOCPU.cpp:enableCPUInterrupt()` already installs `IOCPUInterruptController`
+there; `IOInterruptController` dispatches by `intid`, but its enable/disable are
+no-ops, so there is no supported way to unmask the line for a second client.
+The port therefore never unmasks SPI 57: the poll thread reads the R4 bank's
+`INTMSR0` (pending and unmasked, bits 31:16), dispatches each bit and clears it
+with `INTCR0`, sleeping 10 ms between polls.  A real `IOInterruptController` is
+the correct long-term fix and is recorded as follow-up work.
+
+**Verified here.**  All four patches apply in order on a copy of the tree with
+`0001-0177` (and `0178`/`0179`, which are on `main`) applied, and
+`python3 tools/validate-repo.py` reports 183 patches contiguous.  The three
+touched `.c` files were compiled syntax-only with the real flags from the
+`43696186295` build tree (`clang -fsyntax-only -target arm64-apple-macosx`,
+EXPORT_HDRS and the kernel SDK headers): `a5xelte_scsc.c`, `a5xelte_bt.c`,
+`a5xelte_wifi.c` all return 0 with `-Wall -Wextra`.
+
+**Build verified.**  CI run `44349211961` on `42e0888` is green: the kernel
+builds (`out/kernel.development.a5xelte`, 16 654 560 bytes), both
+`a5xelte_scsc.o` and `a5xelte_bt.o` are produced, the "Fail on a stub kernel"
+and "no ARMv8.1 LSE instructions" steps pass, and the `conf/files` /
+`IOKitBSDInit.cpp` wiring links.  Two earlier runs are not evidence: `44344040357`
+failed on three implicit declarations of `ml_io_map`/`ml_io_map_wcomb` (the 0181
+rewrite had dropped the local `extern` 0138 needed — `arm/machine_routines.h`
+only declares them under `PEXPERT_KERNEL_PRIVATE`), and `44346151254` was
+cancelled before any step ran for macOS runner capacity.
+
+**Not verified.**  No phone.  A green build says nothing about the transport,
+the firmware handshake or the BT rings.  Nothing here is a boot claim.
+
+**What only a boot can say.**
+
+1. Whether the PMU sequence reaches `CENTRAL_SEQ_WIFI_STATUS` `0x80` and the R4
+   answers `MM_START_IND` at all (stage 5).
+2. Whether `rf_hw_ver` from that message matches the plain `mx140.bin` staged
+   at `/private/var/wifi/mx140.bin` (the vendor picks file variants by it).
+3. Whether the firmware accepts `SM_MSG_START_REQ` for BT and the controller
+   answers HCI Reset — the only proof the BT rings and bits are wired right.
+4. Whether the 10 ms poll is fast enough for the firmware's own timeouts once
+   more than the boot handshake is happening.
+
+Boot-arg matrix for the first test boot: none (unchanged identity lines only),
+`a8wifi=1` (six `A5XELTE SCSC: stage n/6` lines), `a8bt=1` alone (the same six
+stages, because the BT thread is what calls `a5scsc_transport_up()` when
+nothing else does, then the BT lines; the WiFi interface stays absent because
+`a5xelte_wifi_probe()` is gated by `a8wifi`), and `a8wifi=1 a8bt=1` (stages,
+then BT `transport`/`config`/`service`/`hci`/`up`).
+
+**Open questions.**  The BT device address is left 0 because nothing on this
+side supplies it; the BSMHCP `.hcf` blob is not loaded (the vendor works
+without one); ACL RX, AVDTP, timing, IQ reports and the A-box window are
+allocated in the vendor layout but have no code; there is no HCI device node,
+so `a5scsc_bt_acl_send()` has no caller yet.

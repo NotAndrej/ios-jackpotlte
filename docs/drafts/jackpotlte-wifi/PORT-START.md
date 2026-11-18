@@ -1,10 +1,14 @@
 # jackpotlte WiFi (SCSC / Maxwell MX140) — port start
 
 Bringing up the Galaxy A8 2018 (`jackpotlte`, Exynos 7885) WiFi+BT block under
-XNU.  This is the first session: a working skeleton, breadth-first, not a
-finished driver.  Everything below is labelled **implemented**, **stubbed** or
-**unknown**.  No build has been run and nothing has been booted; see
-[Verification](#verification) and [Not verified](#not-verified).
+XNU.  This file started as the first session's skeleton (0138/0139) and now
+also records the transport session (0180-0183), which replaces the placeholder
+transport with the real one and adds the Bluetooth endpoint.  Everything below
+is labelled **implemented**, **stubbed** or **unknown**.  The 0138/0139
+sections are kept as history; read
+[0180-0183](#0180-0183--the-real-transport-and-a-bt-endpoint) for the current
+state.  Nothing has been booted; see [Verification](#verification) and
+[Not verified](#not-verified).
 
 The board's radio is Samsung's SCSC / Maxwell block (compatible
 `samsung,scsc_wifibt`), not an Apple/Broadcom part.  The AP talks to its Cortex-R4
@@ -38,11 +42,23 @@ donor tree; blobs stay out of git):
 2. `xnu/patches/0139-jackpotlte-apple80211-glue.patch` — an `en0` ifnet that
    answers `SIOCS/GA80211` so wifid finds an interface.  Adds
    `bsd/dev/a5xelte_wifi.c` and wires it in the same two files.
-3. This file.
+3. `xnu/patches/0180-jackpotlte-scsc-hw-facts.patch` — header only: the
+   hardware facts 0138 guessed at (interrupt model, mxconf layout, stream
+   geometry, BSMHCP/BHCS numbers, `a8bt` constants).
+4. `xnu/patches/0181-jackpotlte-scsc-transport.patch` — the real transport:
+   mxconf stream descriptors, MIF allocator and interrupt-bit allocator,
+   seven streams, mxlog drain, mailbox/PMU reset sequence, poll thread,
+   transport API, stages 1-4 plus a stubbed stage 5.
+5. `xnu/patches/0182-jackpotlte-scsc-handshake.patch` — mxmgmt channel
+   dispatch, `MM_START_IND` handshake, the real stage 5/6 lines.
+6. `xnu/patches/0183-jackpotlte-scsc-bt.patch` — Bluetooth service endpoint:
+   BHCS + BSMHCP in MIF, interrupt bits, `SM_MSG_START_REQ`/`CFM`, HCI Reset
+   proof, single-packet ACL TX seam.
+7. This file.
 
-Both patches are opt-in.  A default boot does not map the mailbox, does not
-release WLBT reset and does not create a WiFi interface.  Only `a8wifi=1`
-turns those on.
+All patches are opt-in.  A default boot does not map the mailbox, does not
+release WLBT reset and does not create a WiFi interface or a BT endpoint.
+Only `a8wifi=1` turns the transport on; only `a8bt=1` turns the BT service on.
 
 ## Hardware facts (quoted, not guessed)
 
@@ -112,6 +128,11 @@ port reserves 0x200 and zeroes it.  DRAM `0x400000`, firmware runtime region
 `0x100000` — MXMAN:49-50.
 
 ## What 0138 implements / stubs / leaves unknown
+
+> Superseded by [0180-0183](#0180-0183--the-real-transport-and-a-bt-endpoint)
+> for everything below except the firmware read, the PMU sequence and the
+> read-only identity report, which are unchanged.  Kept as the record of what
+> the first session believed.
 
 **Implemented** (`bsd/dev/a5xelte_scsc.c`)
 
@@ -185,6 +206,166 @@ wifid's intent.  The whole glue is off unless `a8wifi=1`.
 **Unknown**: which requests wifid actually needs on this OS version — the log in
 `a5wifi_if_ioctl` exists to answer that on the first hardware run.
 
+## 0180-0183 — the real transport and a BT endpoint
+
+### What each patch does, and what it corrects
+
+| patch | files | corrects from 0138 | new |
+| --- | --- | --- | --- |
+| 0180 | `a5xelte_scsc.h` | the guessed register/geometry comments | header-only facts: mxconf/mxstream offsets, stream geometry from the transports themselves, BSMHCP/BHCS numbers, `A5SCSC_POLL_INTERVAL_MS` |
+| 0181 | `a5xelte_scsc.{c,h}` | the 0x200 zeroed mxconf placeholder, the 64-byte bump allocator, the unused interrupt-bit allocator, "reset = up" | real mxconf with seven streams, a 32-byte-aligned MIF allocator, the interrupt-bit allocator plus bit ops, mxlog drain, the mailbox/PMU sequence, the poll thread, the exported transport API |
+| 0182 | `a5xelte_scsc.{c,h}` | stage 5 was a `STUBBED` print | mxmgmt channel dispatch, `MM_START_IND` decode, the real stage 5/6 lines |
+| 0183 | `a5xelte_bt.{c,h}`, `bsd/conf/files`, `IOKitBSDInit.cpp` | — (the `jackpotlte-bt` branch had a draft that assumed a GIC ISR) | the BT service: BHCS/BSMHCP, bits, service start, HCI Reset proof, ACL TX seam |
+
+The old `0140` draft from `origin/jackpotlte-bt` is not applied; 0183 carries
+its design forward against the now-real transport and is the version to keep.
+
+### The interrupt question: poll, don't hook
+
+0138 mapped the mailbox but never registered the GIC line.  The natural next
+step looks like `ml_install_interrupt_handler(89, ...)`, and it is wrong on
+this tree:
+
+- `osfmk/arm64/sleh.c:sleh_irq()` hands every non-timer IRQ to one function
+  pointer, `cdp->interrupt_handler`.
+- That pointer is already owned: `IOCPU.cpp:enableCPUInterrupt()` installs
+  `IOCPUInterruptController::handleInterrupt` with
+  `ml_install_interrupt_handler()`.  There is one handler per CPU, so a second
+  install would evict the platform's dispatcher.
+- `IOInterruptController` dispatches by `intid`, but
+  `IOCPUInterruptController::enableInterrupt`/`disableInterrupt` are no-ops, so
+  there is also no supported way to unmask SPI 57 through that object.
+
+So this port never unmasks the mailbox SPI.  The poll thread reads the R4
+bank's `INTMSR0` (pending **and** unmasked, bits `[31:16]`), dispatches each
+set bit, and clears it through `INTCR0`.  The thread sleeps on
+`assert_wait_timeout()` for `A5SCSC_POLL_INTERVAL_MS` (10 ms), so it is a
+wakeup, not a spin.  Cost: 100 wakeups/s while the transport is enabled, and
+up to 10 ms of added latency on a firmware message — irrelevant for boot-time
+handshakes measured in hundreds of ms.
+
+The alternative — enable GIC SPI 89 and register a real `IOInterruptController`
+from an `IOService`, letting the platform dispatcher route INTID 89 to it —
+is the correct long-term shape and is recorded here as future work, not done.
+
+### mxconf and the seven streams
+
+`mxconf` is 176 bytes, unpacked, laid out exactly as `mxconf.h`: magic
+`0x79828486`, version 0.1, then `mx_trans` at 8, `gdb_r4` at 56, `gdb_m4` at
+104, `mxlog` at 152.  A `mxtransconf` is two `mxstreamconf`s of 24 bytes; each
+`mxstreamconf` is five `u32` (`loc`, `num`, `size`, `read`, `write`) plus the
+read bit at 20 and the write bit at 21 (`mxconf.h:52-66`).
+
+The streams are allocated in the order `transports_init()` uses, in MIF DRAM:
+
+| stream | direction | buffer | packet | bits |
+| --- | --- | --- | --- | --- |
+| mxmgmt | IN | 512 B | 8 B | tohost + fromhost |
+| gdb_r4 | IN | 2 KiB | 4 B | tohost + fromhost |
+| gdb_m4 | IN | 2 KiB | 4 B | tohost + fromhost |
+| mxlog | IN | 16 KiB | 4 B | tohost + fromhost |
+
+For an IN stream `read_bit` is the from-host bit and `write_bit` the to-host
+bit; for an OUT stream the two swap (`mifstream.c:83-93`).  `stream_write()`
+raises the write bit, `peek_done()` raises the read bit — the same places the
+vendor raises them (`mifstream.c:132-155`).  gdb OUT streams reuse the reserved
+panic bit 0 instead of allocating (`mifintrbit.c:236-237`), as the vendor does.
+
+The mxlog IN ring is drained and discarded by the poll thread.  It is not a
+feature; it is back-pressure relief, because a firmware that fills its log ring
+stops.
+
+### Stage lines under `a8wifi=1`
+
+One `A5XELTE SCSC:` line per stage, in order:
+
+| stage | line |
+| --- | --- |
+| 1/6 | `firmware: N bytes, entry .. runtime .. hdr ..` |
+| 2/6 | `mxconf: at 0x.., bits tohost .. r4 .. m4 ..` |
+| 3/6 | `mailbox: mbox0 entry .. mbox1 conf .. mbox2 magic ..` |
+| 4/6 | `reset: released, PMU seq state 0x..` |
+| 5/6 | `handshake: MM_START_IND rf 0x.. after N ms` |
+| 6/6 | `up: WLBT running, RF 0x..` |
+
+Failure paths still print exactly one line and leave the port disabled: no
+firmware (`firmware absent or invalid at <path>; SCSC port disabled`), no PMU
+handshake, `transports_init failed`, `mxconf allocation failed`, or no
+`MM_START_IND` within 2000 ms (`mxman.c:106`).  The last one prints
+`stage 6/6 up: WLBT cannot be confirmed` and marks the transport up anyway:
+retrying the whole reset/mxconf sequence would leak bump-allocated MIF and
+re-release a live reset, and there is no recovery path in this port.  If the
+reset release itself fails, the poll thread is stopped (`a5scsc_poll_stop()`):
+there is no firmware to deliver anything to, and nothing will restart it.
+
+### The Bluetooth endpoint (0183)
+
+The BT controller is a service of the same R4.  0183 adds
+`bsd/dev/a5xelte_bt.c`, gated by `a8bt=1`, which:
+
+- waits for the transport (`a5scsc_transport_up()`), so it does not race
+  `a8wifi`;
+- allocates a 28-byte `BHCS` and a `BSMHCP_PROTOCOL` (0x165c0 bytes) in MIF
+  with 32-byte alignment and publishes `BHCS_VERSION` 2, the protocol offset
+  and length — the fields `setup_bhcs()` fills (`scsc_bt_module.c:556-575`);
+- allocates the three interrupt bits in the vendor's order — from-host
+  `bg_to_ap` first, then `ap_to_bg` and `ap_to_fg` — and writes them into the
+  BSMHCP header (`scsc_shm.c:95-131`);
+- asks the service manager to start service id 2, sending
+  `SM_MSG_START_REQ` with the BHCS offset and waiting up to 1000 ms for
+  `SM_MSG_START_CFM` (`scsc_service.c:26, 146-168`);
+- sends HCI Reset through the command ring — the packet is `[03 0c 00]`
+  (opcode `0x0c03`, parameter length 0), because the ring takes the HCI packet
+  without the H4 type byte — and waits for its Command Complete (event `0x0e`,
+  opcode `0x0c03`) in the event ring.  That answer is the boot-time proof that
+  the BT side of the firmware is running;
+- has `a5scsc_bt_acl_send()` for one ACL packet, with the transfer ring and
+  the 30 data buffers, and reaps freed buffers from `acl_tx_free`.  Nothing
+  calls it yet, because there is no HCI device node.
+
+Ring geometry is the vendor's (`bsmhcp.h`): command ring 8 × 260 B, event ring
+32 × 264 B, ACL 32 × 8 B descriptors over 30 × 1024 B buffers.  The rings carry
+the HCI packet **without** the H4 type byte: commands are
+`[opcode lo, opcode hi, plen, params...]` with `length = 3 + plen`, events are
+`[event code, plen, params...]` with `length = plen + 2`.  The H4 type byte
+exists only on the host-side H4 stream, which the vendor strips before the ring
+and re-adds when copying an event out (`scsc_shm.c:1482`, `579-600`).
+
+Not implemented, and listed so nobody assumes otherwise: no HCI character
+device and no Bluetooth stack interface (so no caller for ACL TX), no ACL RX,
+no AVDTP detection, timing packets, IQ reports or BT log rings, no A-box audio
+window (the DT's `btabox` node has no `reg`, and the vendor driver maps zero
+too), no configuration blob (`mx140 *.hcf`), device address left 0, no
+stop/restart.
+
+### Boot arguments and the test matrix
+
+| `a8wifi` | `a8bt` | expected observation |
+| --- | --- | --- |
+| 0 | 0 | `A5XELTE SCSC: probe only (a8wifi=0); mailbox not touched`; nothing else |
+| 1 | 0 | stages 1-6, one line each; no BT line |
+| 0 | 1 | the six `A5XELTE SCSC:` stage lines (the BT thread drives the transport), then `A5XELTE BT: transport: ...`, `config: ...`, `service: ...`, `hci: reset complete ...`, `up: ...`; no `en0` |
+| 1 | 1 | the same six stages, then the same BT lines |
+
+The BT thread waits up to 30 s (120 × 250 ms) for the transport, but it has no
+private bring-up path: it calls `a5scsc_transport_up()`, the same function the
+`a8wifi` thread calls.  Under `a8bt=1` alone the BT thread is therefore what
+maps the mailbox, loads `mx140.bin`, builds mxconf, releases reset and waits
+for `MM_START_IND` — the six SCSC stage lines appear.  `a8bt=1` is not
+WiFi-silent at the transport level; what stays absent is the interface, because
+`a5xelte_wifi_probe()` and its `en0` are gated by `a8wifi`.  The pairing that
+matters for the full picture is `a8wifi=1 a8bt=1`.
+
+### Alternatives kept on the shelf
+
+- GIC SPI 89 + a real `IOInterruptController` instead of polling (above).
+- A real mxconf `OUT` stream consumer (gdb) — allocated and described, unused.
+- `ml_arm_sleep`/`ml_set_interrupts_enabled` around the mailbox read, if the
+  poll ever proves to race the firmware's own `INTMSR0` writes; the register
+  is designed for read-and-clear-by-`INTCR0`, so this is not done now.
+- Loading the BSMHCP `.hcf` configuration blob instead of zeros: the vendor
+  BT driver works without it, and the file is not in the staged root.
+
 ## Verification
 
 Both patches were produced with `git diff` in a private copy of
@@ -210,30 +391,70 @@ Checking patch iokit/bsddev/IOKitBSDInit.cpp...
 exit=0
 ```
 
+### This branch (0180-0183), 2026-11-18
+
+Patch files were generated with `git diff` per commit in a copy of the xnu tree
+with `0001-0177` applied.  Against a fresh copy of that same tree:
+
+```
+git apply --check 0180-jackpotlte-scsc-hw-facts.patch   OK
+git apply --check 0181-jackpotlte-scsc-transport.patch  OK
+git apply --check 0182-jackpotlte-scsc-handshake.patch  OK
+git apply --check 0183-jackpotlte-scsc-bt.patch         OK
+```
+
+and applying all four in order succeeds, leaving `bsd/dev/a5xelte_scsc.{c,h}`,
+`bsd/dev/a5xelte_bt.{c,h}`, `bsd/conf/files` and
+
+`python3 tools/validate-repo.py`:
+
+```
+[✓] Validated 183 patches (0001-0183 contiguous, format OK)
+[✓] Validated 39 Python tools (syntax OK)
+[✓] Validated 28 Shell scripts (syntax OK)
+All repository integrity checks PASSED successfully!
+```
+
+The three touched `.c` files were also compiled locally, syntax-only, with the
+real flags from the `43696186295` build tree (`clang -fsyntax-only -target
+arm64-apple-macosx`, `-include meta_features.h`, EXPORT_HDRS and the kernel SDK
+headers): `a5xelte_scsc.c`, `a5xelte_bt.c` and `a5xelte_wifi.c` all return 0
+with `-Wall -Wextra`, no diagnostics.  That is a syntax and type check, not a
+link: it cannot prove that every symbol exists in the final kernel.
+
 ## Next step
 
-Build a CI kernel with `0138` + `0139` applied (the A5XELTE/JACKPOTLTE config)
-and boot it **without** `a8wifi`, to confirm the read-only SCSC probe prints the
-PMU and mailbox identity lines and that nothing else changed — the first
-observation that says the mapping is real.  Only after that should `a8wifi=1`
-bring-up be attempted.
+Build a CI kernel with the chain through `0183` and boot it **without**
+`a8wifi` and without `a8bt`, to confirm the read-only SCSC probe still prints
+its identity lines and that nothing else changed.  Then `a8wifi=1` alone for
+stages 1-6, then `a8wifi=1 a8bt=1` for the HCI Reset answer.  The boot-arg
+matrix and expected lines are in [Boot arguments](#boot-arguments-and-the-test-matrix).
 
 Ordered follow-ups (each its own patch):
 
-1. Register the GIC mailbox interrupt (SPI 57 → ID 89) and hook the ISR.
-2. Serialise the mxconf transport streams and match them to the streams the
-   driver expects.
-3. Add the firmware CRC32 checks (`fwimage.c`).
-4. Wait for the R4 "services ready" mailbox message before declaring the
-   transport up.
-5. Bring in the mx140 wlan service (scan/join/link) and drive 0139's `STATE`,
+1. Read `MM_START_IND`'s `rf_hw_ver` and choose the right `mx140.bin` variant
+   from it, instead of assuming the plain file matches (`mx140_file.c:57`).
+2. Add the firmware CRC32 checks (`fwimage.c`).
+3. A real GIC `IOInterruptController` for SPI 89, replacing the 10 ms poll.
+4. Bring in the mx140 wlan service (scan/join/link) and drive 0139's `STATE`,
    RSSI and the scan result layout from it.
+5. An HCI character device (or a Bluetooth host-controller interface) over
+   0183's rings, which is also what gives `a5scsc_bt_acl_send()` its caller.
 
 ## Not verified
 
-- Neither patch has been compiled: XNU needs macOS tooling, and no CI build has
-  been run.  Compile errors are possible; review them on the first CI run.
+- No CI build has been run on this branch, and nothing was linked.  The local
+  check is `clang -fsyntax-only` against the previous run's flags and headers;
+  a missing symbol or a build-system omission (e.g. `bsd/conf/files`) would
+  still only show up in CI.
 - Nothing has been booted.  No claim is made that the transport, the firmware
-  load or the Apple80211 glue works.
+  load, the BT service or the Apple80211 glue works.
 - The DT/register/IRQ values above are quoted from the donor vendor tree; they
   have not been checked against this unit's bootloader-supplied device tree.
+- Whether the R4 answers `MM_START_IND` at all under this PMU sequence, and
+  whether the BT service starts and answers HCI Reset, are exactly the two
+  things the first `a8wifi=1 a8bt=1` boot is for.
+
+(0138/0139's own "not verified" list was: neither patch compiled, nothing
+booted, DT values not checked against the unit — the first two are superseded
+by the local syntax check above; nothing has been booted.)
