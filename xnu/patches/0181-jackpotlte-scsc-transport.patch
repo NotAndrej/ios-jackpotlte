@@ -62,7 +62,7 @@ index 57eb7cb..3af5dc2 100644
   *
   * This file is compiled for the A5XELTE machine config and emits code only for
   * JACKPOTLTE, matching the other A8 device files (e.g. bsd/dev/a5xelte_usb.c).
-@@ -48,19 +59,45 @@
+@@ -48,19 +59,52 @@
  #include <sys/errno.h>
  #include <sys/uio.h>
  #include <sys/vnode.h>
@@ -77,6 +77,13 @@ index 57eb7cb..3af5dc2 100644
  
 -extern vm_offset_t ml_io_map(vm_offset_t, vm_size_t);
 -
++/* arm/machine_routines.h only declares these under PEXPERT_KERNEL_PRIVATE,
++ * which a BSD file does not define; 0138 declared ml_io_map by hand for the
++ * same reason.  0181 also needs ml_io_map_wcomb for the MIF window.
++ */
++extern vm_offset_t ml_io_map(vm_offset_t, vm_size_t);
++extern vm_offset_t ml_io_map_wcomb(vm_offset_t, vm_size_t);
++
  void a5xelte_scsc_probe(void);
  
  /* ---- device state --------------------------------------------------------- */
