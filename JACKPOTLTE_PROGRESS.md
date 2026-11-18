@@ -1965,11 +1965,11 @@ the digitizer and the fault is matching/open, not geometry.
 Note the persistent console log (`0047`) records **everything**, muted or not
 (`serial_console.c` calls `sweet_log_append()` before the mute check, and the
 A5XELTE guard is `SWEET || A5XELTE`), so the ring at the tail of `userdata`
-also has the late boot.  Reading it needs ADB in a recovery that can `dd` the
-userdata block device (`tools/sweet-log-pull.sh`).  The recovery on disk is a
-Lineage 22.2 build for `jackpotlte` (`ro.product.system.name=lineage_jackpotlte`,
-`ro.adb.secure=1` in its ramdisk); whether its `adbd` runs as root is untested
-here, so do not assume either way.
+also has the late boot.  Reading it back needs a channel this phone does not
+have: `fastboot boot` is not supported by this ABL, the recovery image that was
+on the host is not one to use, and heimdall 2.2.2 has no partition read-back —
+so `tools/sweet-log-pull.sh` cannot simply be run (2026-11-18; see the jt70
+section for the candidate replacements).
 
 ### How the other ports do sec_ts touch (research, 2026-11-09)
 
@@ -3028,14 +3028,6 @@ had left in `USERDATA`. What is left is the boot and a photo. The phone answers
 whether dyld honours the injected variable for `backboardd`, and only a frame on
 the panel is a draw claim. `docs/jackpotlte-mali.md` §9 has this with the
 citations.
-
-`fastboot reboot` was sent at 2026-11-14 06:46 UTC, so the flashed image has been
-booted; the phone left fastboot and does not enumerate on USB (as expected -- no
-gadget yet), so there is no observation to report. The screen needs a photo, and
-the 4 MiB persistent console ring at the end of `userdata` holds the kernel's log
-for later (`tools/sweet-log-pull.sh` reads it from a temporarily booted recovery;
-`/home/not_andrej/recovery-public-v1.img` is on the host). Reaching fastboot
-again takes the button combo.
 
 Touch logging is off as of `0157-jackpotlte-touch-quiet-log.patch` (2026-11-14,
 written at the owner's request for the next build). The touch driver printed on
@@ -5087,27 +5079,48 @@ the way the vendor's `dwc3_core_soft_reset()` does, by writing a magic to
 printed before and after bring-up, the sequence being skipped with a message if
 `CTRL_VER` is not the `03.0.0` map.
 
-**Not yet confirmed.** Nothing from 0177 has been flashed. Whether the PHY
-sequence lets endpoint 0 configure, whether the gadget then reports
-`configured, vendor 0x01/0x81 armed` and `connected, speed N`, and whether
-`lsusb` shows `05ac:12a8`, are all boot questions. `iTunes` is a separate matter
-again: it needs `usbmuxd`/lockdown (TLS plus pairing records), not descriptors
-or MTP.
+**jt70 (0177) built and flashed.** `5796231` + `0177`, CI run `44246638947`
+(green; `xnu-kernel` 16 637 176 B). Packed with
+`tools/jackpotlte/make-boot.sh` and the identical jt69 cmdline (read back out
+of the jt69 image): `/var/tmp/jt70/a8-xnu-jt70-usb.img`, 17 575 952 B, sha256
+`9c8bdd699d9502230080c55cde741e34351c94ff890162f10fe5b1c24744071e`, carrying
+`PHY after bringup`, `CSR check GEVNTADRLO`, `GHWPARAMS2` and `MTP 0x02`.
+`fastboot flash BOOT` wrote in 0.833 s at 13:16:07 UTC on 2026-11-18 and
+`fastboot reboot` followed at 13:16:22 (`/var/tmp/jt70/flash-jt70.log`);
+afterwards the host saw no `05ac`/Apple USB device for the next 90 s.
 
-### The 2026-11-18 boot recording: GL draws and presents, the next frames are black, and `sel 6` keeps refusing (2026-11-18)
+**Owner report, not yet photographed: jt70 never reached SpringBoard.** After
+40 minutes of boot the phone still had no SpringBoard up, the panel showed
+nothing, and the only thing the owner could point at in the logs was a
+`SpringBoard` line. No photo, no console text and no log file exist yet for this
+boot, so it is not known whether the kernel stopped inside the new `0177` PHY
+bring-up, booted on and presented black, or never got past the loader.
 
-`~/Downloads/VID_20261118_053825675.mp4` (151.96 s, 1920x1080 with rotation
--90, so frames are 1080x1920) was read frame by frame (`ffmpeg` + ImageMagick
-crops/upscales + `tesseract`, work under `/tmp/opencode`). The build on the
-panel predates `jt69`: the cmdline shows `a8usb=1` but there is no `A5XELTE
-USB:` line anywhere, and the Mali/GL bring-up args
-(`jtmaliprobe=1 jtmalipwr=1 jtmalijob=1 jtmalimetal=1`,
-`jtexecinject=/usr/local/lib/libjackpotlte-gl.dylib`) are the ones the
-recording exercises.
+**Reading the console back has no working route on this phone.** The plan of
+temporarily booting a recovery is dead: this ABL does not support
+`fastboot boot`, the recovery image on the host (`recovery-public-v1.img`) is
+not a file to use, and heimdall 2.2.2 offers only flash/print-pit/download-pit,
+no partition read-back. `tools/sweet-log-pull.sh` as written cannot be used
+here. The candidate replacements are (a) `fastboot fetch` on a small range of
+USERDATA, untested against this fastbootd, and (b) a kernel boot-arg that reads
+`0047`'s 4 MiB ring back once UFS is up and prints its tail to the console,
+so the *next* boot's photo shows the previous boot's log.
 
-**GL does not break where the console's own tail suggests.** The shim logs each
-entry point once, at first resolution, so the log is a call *order*, not a
-trace. This boot's order runs past `glLinkProgram` into the real draw:
+**Still unconfirmed.** Whether the `0177` PHY sequence lets endpoint 0
+configure, whether the gadget reports `configured, vendor 0x01/0x81 armed` and
+`connected, speed N`, and whether `lsusb` shows `05ac:12a8`. `iTunes` is a
+separate matter again: it needs `usbmuxd`/lockdown (TLS plus pairing records),
+not descriptors or MTP.
+
+### The 2026-11-18 boot recording, read frame by frame (2026-11-18)
+
+Everything below is marked **seen** (a console line or a panel state readable in
+the video) or **guess** (an interpretation of what was seen). The video is
+`~/Downloads/VID_20261118_053825675.mp4`, 151.96 s, 1920x1080 with rotation -90
+(frames 1080x1920), read with `ffmpeg`, ImageMagick crops and `tesseract`.
+
+**seen: the GL shim's own call-order log for this boot.** The shim prints each
+entry point once, at first resolution, so this is an order, not a trace:
 
     glGetString, an OpenGL ES 3 context for CoreAnimation by
         @loader_path/libOSMesa.8.dylib: OpenGL ES 3.1 Mesa 25.0.7; Mali-G71 (Panfrost)
@@ -5117,62 +5130,53 @@ trace. This boot's order runs past `glLinkProgram` into the real draw:
     glClearColor, glActiveTexture, glPixelStorei, glViewport, glCreateShader,
     glShaderSource, glCompileShader, glCreateProgram, glAttachShader,
     glBindAttribLocation, glLinkProgram,
-    glGetUniformLocation, glUniform1i, glUniformMatrix4fv, glUniform4fv,
+    glGetUniformLocation, glUniformMatrix4fv, glUniform1i, glUniform4fv,
     glVertexAttribPointer, glEnableVertexAttribArray, glDisableVertexAttribArray,
     glDrawElements, glFlush, glTexImage2D, glBlendFunc, glEnable
 
-with real GPU work under it: buffers 8-19 mapped (0x9990000 1848576 B, then
-65536 B at 0x9a90000/0x9aa0000/0x9ab0000, 204800 B at 0x9ac0000/0x9b80000),
-`job 1: chain 0x9a90380, 8 buffers, requirements 0, seq 1` through
-`job 6: chain 0x9a908c0, 9 buffers, requirements 0x1, seq 6`. There is **no
-`JACKPOTLTE MALI: fault` line in the GL segment (130-152 s) of this
-recording**, unlike the jt62 photos.
+**seen: GPU work submitted under those calls** (135.3-135.4 s). Buffers
+`8: 1848576 B at 0x9990000`, `9: 65536 B at 0x9a90000`, `10: 65536 B`,
+`11: 65536 B at 0x9ab0000`, `12: 204800 B at 0x9ac0000`, `13: 204800 B at
+0x9b80000`, all `map N: ok`; `job 1: chain 0x9a90380, 8 buffers, requirements
+0, seq 1`, `job 2: chain 0x9a908c0, 8 buffers, requirements 0x1, seq 2`, then
+`job 3`/`4` (`0x9a90340`/`0x9a905c0`, 9 buffers) and `job 5`/`6`. **No
+`JACKPOTLTE MALI: fault` line appears between 130 s and 152 s**, unlike the
+jt62 photos.
 
-**A frame reached the panel.** At 135.5 s the screen shows the Apple boot logo
-(iOS's own userspace boot UI, the same artwork/position the loader's `jtlogo`
-copy is measured against) with `SWEET FB: backboardd sel 3`/`sel 5` immediately
-before it - a swap set-layer plus swap end. The `fbcon` console (`0003`) is
-circular: it wraps to the top and clears each row it writes, so the logo stays
-visible only until the next lines of kernel log overwrite it from the top. What
-looked like "GL stopped at `glLinkProgram` and the screen went black" is the
-console drawing over the presented frame, not a GL failure.
+**seen: the panel showed an Apple logo at 135.5 s**, with
+`SWEET FB: backboardd sel 5 in 0/1132 out 0/0 -> 0x0` and `SWEET FB:
+backboardd sel 3 in 2/0 out 1/0 -> 0x0` as the two console lines above it
+(selector 5 is SwapEnd, selector 3 SwapSetLayer). **Guess:** the logo is the
+userspace boot UI's frame reaching the panel through that swap; it is equally
+consistent with the loader's `jtlogo` copy still being the panel's content, and
+nothing in the recording distinguishes the two. The `fbcon` console (`0003`)
+wraps to the top and clears each row it writes, which is why the panel ends up
+black under the last console rows.
 
-**What is actually wrong.** The only failing kernel call on the display path is
-`IOSurfaceRootUserClient` selector 6, the "here is a 2664-byte `IOSurfaceClient`
-structure" path `0170` added:
+**seen: the only failing kernel call on the display path** is
+`IOSurfaceRootUserClient` selector 6, the 2664-byte `IOSurfaceClient` path
+`0170` added, refused twice with different values:
 
     SWEET SURF REQ: backboardd sel 6 arg0 0 id 139706368 (from struct) scalarin 0 struct 32/2664 desc 0/0
-    SWEET SURF SHAPE: backboardd sel 6 scalarin 0 struct 32/2664
     SWEET SURF: sel 6 wants a 2664-byte structure; id 139706368 is no surface
+    ... later: id 141113392 is no surface
 
-and again after the display server restarts, with `id 141113392`. Both values
-are page-aligned low addresses (`0x853c000`, `0x8693830`), not the small ids
-`sweet_surface_next_id` hands out, so `0170`'s "the first word of the input
-structure is a surface id" reading is probably wrong for this selector: it is
-being refused, every cycle, on a field that never held an id.
+**Guess:** both are page-aligned low addresses (`0x853c000`, `0x8693830`), not
+the small ids `sweet_surface_next_id` hands out, so `0170`'s "the first word of
+the input structure is a surface id" reading may be wrong for this selector.
 
-**The end state is black, and the boot does not converge.** From about 147 s on,
-presents continue (`SWEET FB: swap 2 layer 0 surface 1 1080x2220 fmt 0x42475241
-bpr 4320 a 0,0 1080x2220 b 0,0 1080x2220`) while the panel is black under the
+**seen: the recording never shows the goal.** From ~147 s on, presents keep
+happening (`SWEET FB: swap 2 layer 0 surface 1 1080x2220 fmt 0x42475241 bpr
+4320 a 0,0 1080x2220 b 0,0 1080x2220`) while the panel is black under the
 console text, and launchd keeps spawning the boot's daemons
-(`exec xpcproxy`/`cfprefsd`/`triald`/`fafd`/`siriKnowledged`/`appleaccountd`/
-`transparencyd`, `Failed to open swap file 2` from the pager). No `CRASH
-backboardd[...]` line and no panic appear anywhere in the recording, so the
-display server is not being killed by a fault; the visible failure is that the
-frames being presented are empty.
+(`exec xpcproxy`/`triald`/`fafd`/`coreidvd`/`adprivacyd`/`siriKnowledged`/
+`appleaccountd`/`transparencyd`, `Failed to open swap file 2`,
+`JACKPOTLTE PMIC: I2C busy before message`). No `CRASH backboardd[...]` line and
+no panic appear anywhere in the recording. There is also no `A5XELTE USB:`
+line anywhere; **guess:** the panel was running a build that predates `0174`,
+not `jt69`, even though the cmdline carries `a8usb=1`.
 
-**Next diagnostic step (not run).** Hexdump the 32-byte input structure of every
-unknown surface selector (and the first words of the known ones) so `sel 6` can
-be answered instead of refused, and print a cheap checksum of the surface being
-presented in `SweetFramebuffer::SwapEnd` so "black frame" can be split into
-"CA drew nothing" and "the copy lost it". Both are one small patch and one CI
-run; neither has been written or flashed.
-
-**jt70 assembled, not flashed.** `5796231` + `0177`, built by CI run
-`44246638947` (green; artifacts `xnu-kernel` 16 637 176 B, `xnu-buildtree`).
-Packed with `tools/jackpotlte/make-boot.sh` and the *identical* jt69 cmdline
-(read back out of the jt69 image, `jtlogo=1 a8battery=1 a8usb=1` included):
-`/var/tmp/jt70/a8-xnu-jt70-usb.img`, 17 575 952 B, sha256
-`9c8bdd699d9502230080c55cde741e34351c94ff890162f10fe5b1c24744071e`; the image
-carries `PHY after bringup`, `CSR check GEVNTADRLO`, `GHWPARAMS2` and
-`MTP 0x02` strings. `fastboot flash BOOT` is the owner's call.
+**Not established by this recording:** whether any presented frame contained
+what CoreAnimation drew, why the panel stays black after the logo, whether the
+display server is alive at the end, and whether `sel 6` is the cause or only a
+symptom.
