@@ -5444,9 +5444,9 @@ that:
   because retrying would leak bump-allocated MIF and re-release a live reset.
 - `0183` adds `bsd/dev/a5xelte_bt.{c,h}`: BHCS + BSMHCP in MIF, the three
   interrupt bits in the vendor's order, `SM_MSG_START_REQ`/`CFM` on service id
-  2, an HCI Reset (`01 03 0c 00`) whose Command Complete is the boot-time
-  proof, and a single-packet ACL TX seam.  Details in
-  `docs/research/jackpotlte-bt.md`.
+  2, an HCI Reset (`[03 0c 00]` in the ring; the H4 type byte is host-side
+  only) whose Command Complete is the boot-time proof, and a single-packet ACL
+  TX seam.  Details in `docs/research/jackpotlte-bt.md`.
 
 **The interrupt question, settled.**  The obvious next step after `0138` —
 `ml_install_interrupt_handler()` for SPI 57 (GIC ID 89) — would break the

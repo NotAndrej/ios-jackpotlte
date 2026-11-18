@@ -314,17 +314,22 @@ The BT controller is a service of the same R4.  0183 adds
 - asks the service manager to start service id 2, sending
   `SM_MSG_START_REQ` with the BHCS offset and waiting up to 1000 ms for
   `SM_MSG_START_CFM` (`scsc_service.c:26, 146-168`);
-- sends HCI Reset (`01 03 0c 00`) through the command ring and waits for its
-  Command Complete (H4 `0x0e`, opcode `0x0c03`) in the event ring.  That
-  answer is the boot-time proof that the BT side of the firmware is running;
+- sends HCI Reset through the command ring — the packet is `[03 0c 00]`
+  (opcode `0x0c03`, parameter length 0), because the ring takes the HCI packet
+  without the H4 type byte — and waits for its Command Complete (event `0x0e`,
+  opcode `0x0c03`) in the event ring.  That answer is the boot-time proof that
+  the BT side of the firmware is running;
 - has `a5scsc_bt_acl_send()` for one ACL packet, with the transfer ring and
   the 30 data buffers, and reaps freed buffers from `acl_tx_free`.  Nothing
   calls it yet, because there is no HCI device node.
 
 Ring geometry is the vendor's (`bsmhcp.h`): command ring 8 × 260 B, event ring
-32 × 264 B, ACL 32 × 8 B descriptors over 30 × 1024 B buffers; buffers carry
-the H4 packet type as their first byte, exactly as `scsc_shm.c` writes and
-reads them.
+32 × 264 B, ACL 32 × 8 B descriptors over 30 × 1024 B buffers.  The rings carry
+the HCI packet **without** the H4 type byte: commands are
+`[opcode lo, opcode hi, plen, params...]` with `length = 3 + plen`, events are
+`[event code, plen, params...]` with `length = plen + 2`.  The H4 type byte
+exists only on the host-side H4 stream, which the vendor strips before the ring
+and re-adds when copying an event out (`scsc_shm.c:1482`, `579-600`).
 
 Not implemented, and listed so nobody assumes otherwise: no HCI character
 device and no Bluetooth stack interface (so no caller for ACL TX), no ACL RX,

@@ -122,10 +122,12 @@ Ring entry shapes:
 - ACL TX free: `struct BSMHCP_TD_ACL_TX_FREE { u8 buffer_index; u8 reserved;
   u16 handle; }`, 4 B.
 
-Every ring holds one free slot (`BSMHCP_HAS_ROOM`), and `data[0]` is the H4
-packet type (`0x01` command, `0x02` ACL, `0x04` event).  The AP copies its H4
-bytes in verbatim — that is what `scsc_shm.c:212-256` and `scsc_shm.c:914-985`
-do.
+Every ring holds one free slot (`BSMHCP_HAS_ROOM`).  The rings do **not** carry
+the H4 type byte: a command entry is `[opcode lo, opcode hi, plen, params...]`
+with `length = 3 + plen`, and an event entry is `[event code, plen, params...]`
+with `length = plen + 2`.  The vendor strips the H4 type on the way in
+(`scsc_shm.c:1482` passes `&h4_write_buffer[1]`) and re-adds it when copying an
+event to the host (`scsc_shm.c:579-600`).
 
 ## Interrupt bits
 
@@ -158,9 +160,11 @@ prints the three it got.
 4. fill BHCS;
 5. register the channel-1 handler, send `SM_MSG_START_REQ(BT, bhcs_ref)`,
    wait 1000 ms for `SM_MSG_START_CFM`;
-6. write `01 03 0c 00` (HCI Reset, opcode `0x0c03`) to the command ring,
-   raise `ap_to_bg`, and wait 1000 ms for an event whose H4 type is `0x0e`
-   (Command Complete) and whose opcode is `0x0c03`.
+6. write `[03 0c 00]` (HCI Reset, opcode `0x0c03`, parameter length 0; no H4
+   type byte, which is host-side only) to the command ring, raise `ap_to_bg`,
+   and wait 1000 ms for an event whose `data[0]` is the Command Complete event
+   code `0x0e`, whose `length` is at least 6, and whose opcode at `data[3..4]`
+   is `0x0c03`.
 
 Step 6 succeeding means: the R4 is running, the BT service started, the rings
 and interrupt bits are wired the way the firmware expects, and the controller
