@@ -12,10 +12,10 @@ index 4f42612..0ca919b 100644
  bsd/dev/a5xelte_flashlight.c		standard
 diff --git a/bsd/dev/a5xelte_bt.c b/bsd/dev/a5xelte_bt.c
 new file mode 100644
-index 0000000..356d521
+index 0000000..a595da6
 --- /dev/null
 +++ b/bsd/dev/a5xelte_bt.c
-@@ -0,0 +1,515 @@
+@@ -0,0 +1,528 @@
 +/*
 + * Galaxy A8 2018 (SM-A530F, jackpotlte, Exynos7885) Bluetooth endpoint over
 + * the Samsung SCSC / Maxwell (MX140) shared-memory protocol.
@@ -34,8 +34,11 @@ index 0000000..356d521
 + *     SM_MSG_START_REQ carrying the BHCS offset, and waits for
 + *     SM_MSG_START_CFM (servman_messages.h:14-33, scsc_service.c:146-168);
 + *   - writes one HCI command into the command transfer ring and reads the
-+ *     HCI event transfer ring.  The boot-time proof is an HCI Reset
-+ *     (01 03 0c 00) followed by its Command Complete (0x0e, opcode 0x0c03);
++ *     HCI event transfer ring.  The packet inside the rings is the HCI packet
++ *     without the H4 type byte: commands are [opcode lo, opcode hi, plen,
++ *     params...] and events are [event code, plen, params...].  The boot-time
++ *     proof is an HCI Reset (opcode 0x0c03, no parameters) followed by its
++ *     Command Complete (event 0x0e);
 + *   - has a single-packet ACL TX path (one buffer, no fragmentation) that no
 + *     caller uses yet, because there is no HCI device node.
 + *
@@ -142,6 +145,9 @@ index 0000000..356d521
 +/* ---- HCI command transfer ring -------------------------------------------
 + * struct BSMHCP_TD_CONTROL { u16 length; u8 data[258]; }, eight entries, one
 + * slot always free (bsmhcp.h:107-111, 278-281; scsc_shm.c:212-256).
++ * `data` is the HCI command packet without the H4 type byte, and `length` is
++ * 3 + parameter length: the vendor strips the type before the ring
++ * (scsc_shm.c:1482, 213-215).
 + */
 +static bool
 +a5bt_hci_cmd(const uint8_t *cmd, uint32_t len)
@@ -259,14 +265,18 @@ index 0000000..356d521
 +	a5bt_wr32(a5bt.proto, A5BT_H_ACL_TX_WRITE,
 +	    (w + 1) % A5BT_ACL_TX_SLOTS);
 +	a5bt_mb();
-+	a5scsc_irq_bit_set(a5bt.bit_from_bg, A5SCSC_MIF_TARGET_R4);
++	/* ACL data wakes the foreground bit; commands use ap_to_bg
++	 * (scsc_shm.c:258 vs scsc_shm.c:429). */
++	a5scsc_irq_bit_set(a5bt.bit_from_fg, A5SCSC_MIF_TARGET_R4);
 +	return 0;
 +}
 +
 +/* ---- HCI event transfer ring ---------------------------------------------
 + * struct BSMHCP_TD_HCI_EVT { u16 length; u16 hci_connection_handle;
 + * u16 event_type; u8 data[258]; } (bsmhcp.h:112-117).  `data` starts with the
-+ * H4 packet type, so data[0] == 0x0e is a Command Complete.
++ * HCI event code (the firmware strips the H4 type, scsc_shm.c:579-600), so
++ * data[0] == 0x0e is a Command Complete, data[1] is the parameter length and
++ * `length` is that parameter length + 2.
 + * The vendor consumer advances read index without waking the firmware
 + * (scsc_shm.c:914-985), which is what this does.
 + */
@@ -290,11 +300,12 @@ index 0000000..356d521
 +			const volatile uint8_t *d = td + A5BT_HCI_EVT_DATA_OFF;
 +
 +			a5bt.events++;
-+			if (len >= 4 && d[0] == 0x0e) {
-+				/* Command Complete: 0x0e, num_cmds, then the
-+				 * opcode as two little-endian bytes. */
++			if (len >= 6 && d[0] == 0x0e) {
++				/* Command Complete: event 0x0e, plen in d[1],
++				 * num_cmds in d[2], opcode in d[3..4] (LE),
++				 * status in d[5]. */
 +				a5bt.last_cc_opcode =
-+				    (uint32_t)d[2] | ((uint32_t)d[3] << 8);
++				    (uint32_t)d[3] | ((uint32_t)d[4] << 8);
 +				if (a5bt.last_cc_opcode == A5BT_HCI_OP_RESET) {
 +					a5bt.reset_cc = true;
 +				}
@@ -418,11 +429,13 @@ index 0000000..356d521
 +}
 +
 +/* Boot-time proof that the controller is alive: HCI Reset and its Command
-+ * Complete.  The command is the four H4 bytes the vendor stack sends. */
++ * Complete.  The command is [opcode lo, opcode hi, plen, params...]; the H4
++ * type byte exists only on the host-side H4 stream and must not be written
++ * into the ring (scsc_shm.c:1482 passes &buf[1]). */
 +static bool
 +a5bt_hci_reset(uint32_t *waited_ms)
 +{
-+	static const uint8_t reset[] = { 0x01, A5BT_HCI_OP_RESET & 0xff,
++	static const uint8_t reset[] = { A5BT_HCI_OP_RESET & 0xff,
 +	    (A5BT_HCI_OP_RESET >> 8) & 0xff, 0x00 };
 +	uint32_t waited;
 +
@@ -534,10 +547,10 @@ index 0000000..356d521
 \ No newline at end of file
 diff --git a/bsd/dev/a5xelte_bt.h b/bsd/dev/a5xelte_bt.h
 new file mode 100644
-index 0000000..88225cf
+index 0000000..dc09331
 --- /dev/null
 +++ b/bsd/dev/a5xelte_bt.h
-@@ -0,0 +1,110 @@
+@@ -0,0 +1,113 @@
 +/*
 + * Layout constants for the Galaxy A8 2018 (jackpotlte) Bluetooth endpoint:
 + * the BHCS structure and the BSMHCP shared-memory protocol, as defined by the
@@ -640,10 +653,13 @@ index 0000000..88225cf
 +/* HCI opcode sent as the boot-time proof (HCI Reset). */
 +#define A5BT_HCI_OP_RESET       0x0c03u
 +
-+/* ACL TX seam.  `payload` is the L2CAP payload (no H4 header), `flags` carries
-+ * the HCI PB/BC bits, both from the caller's packet header.  Single packet
-+ * only: no fragmentation, so PB = continuation is not handled.  No caller yet
-+ * (no HCI device node); see the file comment in a5xelte_bt.c. */
++/* ACL TX seam.  `payload` is the ACL data after the 4-byte HCI ACL header and
++ * `len` is its length, which is what the descriptor's `length` field wants
++ * (scsc_shm.c:314, 419).  `flags` carries the PB/BC bits from the
++ * caller's HCI header (0x30/0xC0 masks) and BSMHCP_ACL_L2CAP_FLAG_END (0x01)
++ * when the payload completes an L2CAP frame.  Single packet only: no
++ * fragmentation, so PB = continuation is not handled.  No caller yet (no HCI
++ * device node); see the file comment in a5xelte_bt.c. */
 +int a5scsc_bt_acl_send(uint16_t handle, uint8_t flags, uint16_t l2cap_cid,
 +    const void *payload, uint32_t len);
 +
