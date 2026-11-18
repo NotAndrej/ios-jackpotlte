@@ -5179,6 +5179,7 @@ not `jt69`, even though the cmdline carries `a8usb=1`.
 what CoreAnimation drew, why the panel stays black after the logo, whether the
 display server is alive at the end, and whether `sel 6` is the cause or only a
 symptom.
+
 ### jt64's 12:05 log names the missing UI: two surfaces refused as textures (2026-11-15)
 
 `~/Downloads/IMG_20261115_120537625.jpg` (12:05, the same jt64 boot as the
@@ -5267,6 +5268,7 @@ installed into the root image (`tools/jackpotlte/apply-root-tweaks.sh`) and the
 sparse rebuilt - a destructive USERDATA flash that needs the owner's go-ahead,
 and ~12.2 GB of free disk, which means deleting `/var/tmp/IOSRoot.sparse.img`
 first.
+
 ## jt64 on the panel: the GPU lock screen is real, and touch power stops being a switch (2026-11-15)
 
 `~/Downloads/IMG_20261115_120721377.jpg` (12:07, jt64 still running) is the
@@ -5298,6 +5300,7 @@ only `a8touchlog=1` shows nothing at all from the contact path — which is why
 "touch is dead" could not be read off the console. The next boot carries
 `a8touchverbose=1` (a boot-arg, no rebuild) so the IC identity, `sense-on`,
 per-event `read ... left=` and `moves=`/`lost_reads=` lines are visible.
+
 ## `0179`: the charger bus is not contended, it is latched (2026-11-15, not on the phone)
 
 `jt62`'s only PMIC line was `JACKPOTLTE PMIC: I2C busy before message`, so no
