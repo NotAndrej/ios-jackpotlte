@@ -5471,7 +5471,9 @@ EXPORT_HDRS and the kernel SDK headers): `a5xelte_scsc.c`, `a5xelte_bt.c`,
 builds (`out/kernel.development.a5xelte`, 16 654 560 bytes), both
 `a5xelte_scsc.o` and `a5xelte_bt.o` are produced, the "Fail on a stub kernel"
 and "no ARMv8.1 LSE instructions" steps pass, and the `conf/files` /
-`IOKitBSDInit.cpp` wiring links.  Two earlier runs are not evidence: `44344040357`
+`IOKitBSDInit.cpp` wiring links.  The merge into `main` (`d86c9bb`) rebuilds the
+same kernel in CI `44357836926` with all 183 patches applied.  Two earlier runs
+are not evidence: `44344040357`
 failed on three implicit declarations of `ml_io_map`/`ml_io_map_wcomb` (the 0181
 rewrite had dropped the local `extern` 0138 needed — `arm/machine_routines.h`
 only declares them under `PEXPERT_KERNEL_PRIVATE`), and `44346151254` was
