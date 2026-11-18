@@ -209,8 +209,14 @@ executes HCI commands.  Nothing short of that proves the endpoint.
 | --- | --- | --- |
 | 0 | 0 | no SCSC and no BT lines |
 | 1 | 0 | six `A5XELTE SCSC: stage n/6` lines |
-| 0 | 1 | `A5XELTE BT: shared SCSC transport not up; BT port disabled` after ~30 s |
+| 0 | 1 | the six SCSC stage lines, then the BT `transport`, `config`, `service`, `hci`, `up` lines; no `en0` |
 | 1 | 1 | stages, then BT `transport`, `config`, `service`, `hci`, `up` lines |
+
+`a8bt=1` alone is not a WiFi-silent mode at the transport level: the BT thread
+calls `a5scsc_transport_up()`, which is the function that maps the mailbox,
+loads the firmware, builds mxconf and releases reset, so the R4 comes up and
+the six `A5XELTE SCSC:` stage lines appear.  Only the interface stays absent,
+because `a5xelte_wifi_probe()` is gated by `a8wifi`.
 
 If `service:` prints but `hci:` does not, the rings or bits are wrong — compare
 the published bit numbers with the `stage 2/6 mxconf` line's allocation and

@@ -5483,9 +5483,11 @@ only shows in CI.  Nothing here is a boot claim.
    more than the boot handshake is happening.
 
 Boot-arg matrix for the first test boot: none (unchanged identity lines only),
-`a8wifi=1` (six `A5XELTE SCSC: stage n/6` lines), `a8bt=1` alone (one
-`A5XELTE BT: shared SCSC transport not up` line after ~30 s), and
-`a8wifi=1 a8bt=1` (stages, then BT `transport`/`config`/`service`/`hci`/`up`).
+`a8wifi=1` (six `A5XELTE SCSC: stage n/6` lines), `a8bt=1` alone (the same six
+stages, because the BT thread is what calls `a5scsc_transport_up()` when
+nothing else does, then the BT lines; the WiFi interface stays absent because
+`a5xelte_wifi_probe()` is gated by `a8wifi`), and `a8wifi=1 a8bt=1` (stages,
+then BT `transport`/`config`/`service`/`hci`/`up`).
 
 **Open questions.**  The BT device address is left 0 because nothing on this
 side supplies it; the BSMHCP `.hcf` blob is not loaded (the vendor works

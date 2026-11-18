@@ -294,7 +294,9 @@ handshake, `transports_init failed`, `mxconf allocation failed`, or no
 `MM_START_IND` within 2000 ms (`mxman.c:106`).  The last one prints
 `stage 6/6 up: WLBT cannot be confirmed` and marks the transport up anyway:
 retrying the whole reset/mxconf sequence would leak bump-allocated MIF and
-re-release a live reset, and there is no recovery path in this port.
+re-release a live reset, and there is no recovery path in this port.  If the
+reset release itself fails, the poll thread is stopped (`a5scsc_poll_stop()`):
+there is no firmware to deliver anything to, and nothing will restart it.
 
 ### The Bluetooth endpoint (0183)
 
@@ -337,12 +339,17 @@ stop/restart.
 | --- | --- | --- |
 | 0 | 0 | `A5XELTE SCSC: probe only (a8wifi=0); mailbox not touched`; nothing else |
 | 1 | 0 | stages 1-6, one line each; no BT line |
-| 0 | 1 | `A5XELTE BT: shared SCSC transport not up; BT port disabled` after ~30 s |
-| 1 | 1 | stages 1-6, then `A5XELTE BT: transport: ...`, `config: ...`, `service: ...`, `hci: reset complete ...`, `up: ...` |
+| 0 | 1 | the six `A5XELTE SCSC:` stage lines (the BT thread drives the transport), then `A5XELTE BT: transport: ...`, `config: ...`, `service: ...`, `hci: reset complete ...`, `up: ...`; no `en0` |
+| 1 | 1 | the same six stages, then the same BT lines |
 
-The BT thread waits up to 30 s (120 × 250 ms) for the transport, because under
-`a8bt=1` alone nothing else drives it.  That is deliberate: enabling BT should
-not silently enable WiFi, and the pairing that matters is `a8wifi=1 a8bt=1`.
+The BT thread waits up to 30 s (120 × 250 ms) for the transport, but it has no
+private bring-up path: it calls `a5scsc_transport_up()`, the same function the
+`a8wifi` thread calls.  Under `a8bt=1` alone the BT thread is therefore what
+maps the mailbox, loads `mx140.bin`, builds mxconf, releases reset and waits
+for `MM_START_IND` — the six SCSC stage lines appear.  `a8bt=1` is not
+WiFi-silent at the transport level; what stays absent is the interface, because
+`a5xelte_wifi_probe()` and its `en0` are gated by `a8wifi`.  The pairing that
+matters for the full picture is `a8wifi=1 a8bt=1`.
 
 ### Alternatives kept on the shelf
 
