@@ -5022,3 +5022,157 @@ from the device, and has not been confirmed. The shim's new geometry lines
 (`row <used> of <reported> bytes, <n> B a pixel, ... copied into the texture`)
 are the evidence to read in that photo.
 
+### jt68-jt69: the USB gadget reaches the controller, and stops at endpoint 0 (2026-11-17/18)
+
+**The port so far.** `0174-jackpotlte-usb-gadget.patch` committed (`272974b`)
+adds a polled DWC3 gadget to `bsd/dev/a5xelte_usb.c` (on top of the 0128
+probe): soft reset, an event buffer in kernel DMA memory, endpoint 0, a kernel
+thread polling `GEVNTCOUNT`, and a control-transfer state machine modelled on
+Linux `dwc3 ep0.c`. The descriptors are Apple's - VID `0x05ac`, PID `0x12a8`,
+strings `Apple Inc.` / `iPhone` / `D22AP0000001`, and the `0xff/0xfe/0x02`
+vendor interface an iPhone exposes in normal mode - so `lsusb -v` is the target.
+`0175-jackpotlte-usb-mtp.patch` (`003927a`) adds a second, PTP-class interface
+with an MTP responder, and `0176-jackpotlte-usb-qch-clock.patch` (`02f0b20`)
+fixes how the FSYS Q-channel is read. All three are on branch
+`jackpotlte-usb-gadget`; CI `44159955955` and `44165685624` are green.
+
+**jt68: the gadget refused to touch the controller at all.**
+`a8-xnu-jt68-usb.img` (sha256 `8d5ad72a...d5812b0a`, flashed to BOOT p10)
+printed `A5XELTE USB: controller unpowered or unclocked; DWC3 not read`. The
+read was `0x0b3f0002`: Q-channel bit 0 is the *skip-the-handshake* control, and
+bit 0 = 0 with bit 1 (`CLOCK_REQ`) set is the normal "clock granted" state
+(vendor `cal-if/ra.c:477-491`), so the guard's `bit0 == 1` test was backwards.
+That is a failed-read-style bug in our guard, not a device observation.
+
+**0176 fixes that, and jt69 reaches the controller.** `a8-xnu-jt69-usb.img`
+(17,575,952 B, sha256 `393054026a...b01dbfcf`, flashed to BOOT p10, boot args
+verified `a8usb=1`, `a8touchverbose=1` dropped) prints the Q-channel as clocked
+and then reads the core:
+
+    A5XELTE USB: FSYS QCH hsdrd 0x003f0002 usb20 0x003f0002 usb30_0 0x003f0002 usb30_1 0x003f0002
+    A5XELTE USB: DWC3 GSNPSID 0x5533310a GCTL 0x30c12004 GSTS 0x7e800000 GHWPARAMS0 0x4020400a
+    A5XELTE USB: DWC3 DCFG 0x00000004 DCTL 0x00000000 DEVTEN 0x00000000 DSTS 0x0053b864 DALEPENA 0x00000000
+    A5XELTE USB: soft reset done after 6 ms, GCTL 0x30c12004 DCFG 0x00000004
+    A5XELTE USB: ep0 cmd 0x1 timeout
+    A5XELTE USB: endpoint 0 setup failed
+
+So the DWC3 register block is readable and `DCTL.CSFTRST` self-clears in 6 ms,
+but `SETEPCONFIG` on endpoint 0 never completes. The poll budget is 1000
+`delay(1)` iterations, ~2000x Linux's 500 us, so this is a stall rather than
+impatience: the core takes writes and never finishes a command.
+
+**Why, and what 0177 changes.** The 7885 is served by `phy-exynos-usbdrd3.c`,
+whose PHY half is `phy-exynos-usb3p1.c` using the USB3.1 register map of
+`phy-exynos-usb3p1-reg.h`. Its `phy_exynos_usb_v3p1_enable()` for version
+`03.0.0` (what this board's `phy_version = <0x300>` selects) had never been run,
+and the port's earlier "PHY" diagnostics read the different
+`phy-exynos5-usbdrd.h` map, where offset `0x10` is LINK_DEBUG_H rather than a
+clock/reset register - so the `PHYCLKRST 0` in the jt69 console was never
+evidence about this PHY at all. With no live PHY the DWC3's endpoint command
+handler has no PHY-side clock and no command can finish.
+`0177-jackpotlte-usb-phy-bringup.patch` adds the vendor sequence verbatim for
+this board's properties (`not_used_vbus_pad = 1`, `common_block_disable = 1`,
+`use_io_for_ovc = 0`, version `03.0.0`): q-channel workaround, link reset,
+assert PHY reset, clear `HSP_TEST.SIDDQ`, clear the 2.0 pulls, set HSP
+common/suspend, wait, release PHY reset, then the VBUS-force bits - and it reads
+the correct register map in the probe.
+
+It also makes the next console self-diagnosing: `a8g_epcmd` reads `DEPCMD` back
+right after the write (did `CMDACT` latch at all?), prints the full command and
+its three params on timeout, and dumps
+`DCTL`/`DCFG`/`DSTS`/`DEVTEN`/`DALEPENA`/`GCTL`/`GSTS`/`GUSB2PHYCFG`/`GEVNTCOUNT`
+plus the PARs, four times; after the soft reset the register interface is proved
+the way the vendor's `dwc3_core_soft_reset()` does, by writing a magic to
+`GEVNTADRLO` and reading it back while reporting GSTS CSR-TIMEOUT; and the PHY is
+printed before and after bring-up, the sequence being skipped with a message if
+`CTRL_VER` is not the `03.0.0` map.
+
+**Not yet confirmed.** Nothing from 0177 has been flashed. Whether the PHY
+sequence lets endpoint 0 configure, whether the gadget then reports
+`configured, vendor 0x01/0x81 armed` and `connected, speed N`, and whether
+`lsusb` shows `05ac:12a8`, are all boot questions. `iTunes` is a separate matter
+again: it needs `usbmuxd`/lockdown (TLS plus pairing records), not descriptors
+or MTP.
+
+### The 2026-11-18 boot recording: GL draws and presents, the next frames are black, and `sel 6` keeps refusing (2026-11-18)
+
+`~/Downloads/VID_20261118_053825675.mp4` (151.96 s, 1920x1080 with rotation
+-90, so frames are 1080x1920) was read frame by frame (`ffmpeg` + ImageMagick
+crops/upscales + `tesseract`, work under `/tmp/opencode`). The build on the
+panel predates `jt69`: the cmdline shows `a8usb=1` but there is no `A5XELTE
+USB:` line anywhere, and the Mali/GL bring-up args
+(`jtmaliprobe=1 jtmalipwr=1 jtmalijob=1 jtmalimetal=1`,
+`jtexecinject=/usr/local/lib/libjackpotlte-gl.dylib`) are the ones the
+recording exercises.
+
+**GL does not break where the console's own tail suggests.** The shim logs each
+entry point once, at first resolution, so the log is a call *order*, not a
+trace. This boot's order runs past `glLinkProgram` into the real draw:
+
+    glGetString, an OpenGL ES 3 context for CoreAnimation by
+        @loader_path/libOSMesa.8.dylib: OpenGL ES 3.1 Mesa 25.0.7; Mali-G71 (Panfrost)
+    glGenTextures, glBindTexture, glTexParameteri, glEGLImageTargetTexture2DOES,
+    glGetError, -attachImage:: texture 1 is surface 2, 1080 x 2220, memory shared,
+    glGenFramebuffers, glBindFramebuffer, glFramebufferTexture2D, glDisable,
+    glClearColor, glActiveTexture, glPixelStorei, glViewport, glCreateShader,
+    glShaderSource, glCompileShader, glCreateProgram, glAttachShader,
+    glBindAttribLocation, glLinkProgram,
+    glGetUniformLocation, glUniform1i, glUniformMatrix4fv, glUniform4fv,
+    glVertexAttribPointer, glEnableVertexAttribArray, glDisableVertexAttribArray,
+    glDrawElements, glFlush, glTexImage2D, glBlendFunc, glEnable
+
+with real GPU work under it: buffers 8-19 mapped (0x9990000 1848576 B, then
+65536 B at 0x9a90000/0x9aa0000/0x9ab0000, 204800 B at 0x9ac0000/0x9b80000),
+`job 1: chain 0x9a90380, 8 buffers, requirements 0, seq 1` through
+`job 6: chain 0x9a908c0, 9 buffers, requirements 0x1, seq 6`. There is **no
+`JACKPOTLTE MALI: fault` line in the GL segment (130-152 s) of this
+recording**, unlike the jt62 photos.
+
+**A frame reached the panel.** At 135.5 s the screen shows the Apple boot logo
+(iOS's own userspace boot UI, the same artwork/position the loader's `jtlogo`
+copy is measured against) with `SWEET FB: backboardd sel 3`/`sel 5` immediately
+before it - a swap set-layer plus swap end. The `fbcon` console (`0003`) is
+circular: it wraps to the top and clears each row it writes, so the logo stays
+visible only until the next lines of kernel log overwrite it from the top. What
+looked like "GL stopped at `glLinkProgram` and the screen went black" is the
+console drawing over the presented frame, not a GL failure.
+
+**What is actually wrong.** The only failing kernel call on the display path is
+`IOSurfaceRootUserClient` selector 6, the "here is a 2664-byte `IOSurfaceClient`
+structure" path `0170` added:
+
+    SWEET SURF REQ: backboardd sel 6 arg0 0 id 139706368 (from struct) scalarin 0 struct 32/2664 desc 0/0
+    SWEET SURF SHAPE: backboardd sel 6 scalarin 0 struct 32/2664
+    SWEET SURF: sel 6 wants a 2664-byte structure; id 139706368 is no surface
+
+and again after the display server restarts, with `id 141113392`. Both values
+are page-aligned low addresses (`0x853c000`, `0x8693830`), not the small ids
+`sweet_surface_next_id` hands out, so `0170`'s "the first word of the input
+structure is a surface id" reading is probably wrong for this selector: it is
+being refused, every cycle, on a field that never held an id.
+
+**The end state is black, and the boot does not converge.** From about 147 s on,
+presents continue (`SWEET FB: swap 2 layer 0 surface 1 1080x2220 fmt 0x42475241
+bpr 4320 a 0,0 1080x2220 b 0,0 1080x2220`) while the panel is black under the
+console text, and launchd keeps spawning the boot's daemons
+(`exec xpcproxy`/`cfprefsd`/`triald`/`fafd`/`siriKnowledged`/`appleaccountd`/
+`transparencyd`, `Failed to open swap file 2` from the pager). No `CRASH
+backboardd[...]` line and no panic appear anywhere in the recording, so the
+display server is not being killed by a fault; the visible failure is that the
+frames being presented are empty.
+
+**Next diagnostic step (not run).** Hexdump the 32-byte input structure of every
+unknown surface selector (and the first words of the known ones) so `sel 6` can
+be answered instead of refused, and print a cheap checksum of the surface being
+presented in `SweetFramebuffer::SwapEnd` so "black frame" can be split into
+"CA drew nothing" and "the copy lost it". Both are one small patch and one CI
+run; neither has been written or flashed.
+
+**jt70 assembled, not flashed.** `5796231` + `0177`, built by CI run
+`44246638947` (green; artifacts `xnu-kernel` 16 637 176 B, `xnu-buildtree`).
+Packed with `tools/jackpotlte/make-boot.sh` and the *identical* jt69 cmdline
+(read back out of the jt69 image, `jtlogo=1 a8battery=1 a8usb=1` included):
+`/var/tmp/jt70/a8-xnu-jt70-usb.img`, 17 575 952 B, sha256
+`9c8bdd699d9502230080c55cde741e34351c94ff890162f10fe5b1c24744071e`; the image
+carries `PHY after bringup`, `CSR check GEVNTADRLO`, `GHWPARAMS2` and
+`MTP 0x02` strings. `fastboot flash BOOT` is the owner's call.
