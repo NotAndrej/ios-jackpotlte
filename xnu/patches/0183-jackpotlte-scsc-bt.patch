@@ -650,7 +650,7 @@ index 0000000..88225cf
 +#endif /* _A5XELTE_BT_H_ */
 \ No newline at end of file
 diff --git a/bsd/dev/a5xelte_scsc.c b/bsd/dev/a5xelte_scsc.c
-index 7484bd4..02df583 100644
+index cbdd94a..fd127c3 100644
 --- a/bsd/dev/a5xelte_scsc.c
 +++ b/bsd/dev/a5xelte_scsc.c
 @@ -95,9 +95,6 @@ struct a5scsc_stream {

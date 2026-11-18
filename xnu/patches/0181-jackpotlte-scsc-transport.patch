@@ -1,5 +1,5 @@
 diff --git a/bsd/dev/a5xelte_scsc.c b/bsd/dev/a5xelte_scsc.c
-index 57eb7cb..cfba3b1 100644
+index 57eb7cb..3af5dc2 100644
 --- a/bsd/dev/a5xelte_scsc.c
 +++ b/bsd/dev/a5xelte_scsc.c
 @@ -1,7 +1,6 @@
@@ -851,7 +851,7 @@ index 57eb7cb..cfba3b1 100644
 +		drained++;
 +		a5scsc_stream_peek_done(s, packet);
 +		packet = a5scsc_stream_peek(s, packet);
-+	}
+ 	}
 +	a5scsc.mxlog_dropped += drained;
 +}
 +
@@ -885,7 +885,7 @@ index 57eb7cb..cfba3b1 100644
 +	for (i = 0; i < A5SCSC_NUM_MBOX; i++) {
 +		a5scsc_wr(r4, A5SCSC_ISSR(i), 0);
 +		a5scsc_wr(m4, A5SCSC_ISSR(i), 0);
- 	}
++	}
 +	/* INTMR0 covers interrupts FROM R4/M4 in bits [31:16]: mask all. */
 +	a5scsc_wr(r4, A5SCSC_INTMR0, 0xffff0000u);
 +	a5scsc_wr(r4, A5SCSC_INTMR1, 0x0000ffffu);       /* to-R4 bank */
@@ -927,7 +927,7 @@ index 57eb7cb..cfba3b1 100644
  	int n;
  
  	/* Take the WIFI domain out of low-power first (MIF:449-512). */
-@@ -380,14 +911,153 @@ a5scsc_pmu_reset_release(void)
+@@ -380,14 +911,169 @@ a5scsc_pmu_reset_release(void)
  		v = a5scsc_rd(a5scsc.pmu, A5SCSC_CENTRAL_SEQ_WIFI_STATUS);
  		state = (v & A5SCSC_CENTRAL_SEQ_STATES) >> 16;
  		if (state == A5SCSC_CENTRAL_SEQ_UP) {
@@ -959,7 +959,7 @@ index 57eb7cb..cfba3b1 100644
 +static void
 +a5scsc_poll_thread(void *param __unused, wait_result_t wr __unused)
 +{
-+	for (;;) {
++	while (a5scsc.poll_running) {
 +		a5scsc_intr_dispatch();
 +		a5scsc_mxlog_drain(0, NULL);
 +		a5scsc_sleep_ms(A5SCSC_POLL_INTERVAL_MS);
@@ -983,6 +983,21 @@ index 57eb7cb..cfba3b1 100644
 +		a5scsc.poll_running = false;
 +		printf("A5XELTE SCSC: poll thread failed to start; no interrupt service\n");
 +	}
++}
++
++/* The poll thread only reads INTMSR0/INTCR0.  It is stopped when the reset
++ * sequence fails, because there is then no firmware to deliver anything and
++ * nothing will start it again: the transport stays down and every caller sees
++ * a dead port without another reset attempt behind its back. */
++static void
++a5scsc_poll_stop(void)
++{
++	if (!a5scsc.poll_running) {
++		return;
++	}
++	a5scsc.poll_running = false;
++	a5scsc_mb();
++	thread_wakeup((event_t)&a5scsc.poll_running);
 +}
 +
 +/* ---- shared transport bring-up (a8wifi and a8bt) --------------------------
@@ -1066,6 +1081,7 @@ index 57eb7cb..cfba3b1 100644
 +	err = a5scsc_pmu_reset_release();
 +	if (err != 0) {
 +		printf("A5XELTE SCSC: reset release failed (%d)\n", err);
++		a5scsc_poll_stop();
 +		a5scsc_transport_state = 0;
 +		return 0;
 +	}
@@ -1082,7 +1098,7 @@ index 57eb7cb..cfba3b1 100644
  /* ---- read-only identity report -------------------------------------------- */
  
  static void
-@@ -419,46 +1089,30 @@ a5scsc_print_identity(void)
+@@ -419,46 +1105,30 @@ a5scsc_print_identity(void)
  static void
  a5scsc_bringup_thread(void *param __unused, wait_result_t wr __unused)
  {
@@ -1145,7 +1161,7 @@ index 57eb7cb..cfba3b1 100644
  }
  
  /* ---- public entry points -------------------------------------------------- */
-@@ -467,13 +1121,16 @@ void
+@@ -467,13 +1137,16 @@ void
  a5xelte_scsc_probe(void)
  {
  	int enabled = 0;
@@ -1163,7 +1179,7 @@ index 57eb7cb..cfba3b1 100644
  	if (a5scsc.pmu == 0 || a5scsc.mif == 0) {
  		printf("A5XELTE SCSC: PMU/MIF map failed (pmu %d mif %d); skipping\n",
  		    a5scsc.pmu != 0, a5scsc.mif != 0);
-@@ -489,23 +1146,18 @@ a5xelte_scsc_probe(void)
+@@ -489,23 +1162,18 @@ a5xelte_scsc_probe(void)
  		return;
  	}
  
@@ -1193,7 +1209,7 @@ index 57eb7cb..cfba3b1 100644
  	}
  }
  
-@@ -516,4 +1168,4 @@ a5xelte_scsc_probe(void)
+@@ -516,4 +1184,4 @@ a5xelte_scsc_probe(void)
  {
  }
  

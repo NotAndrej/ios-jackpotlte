@@ -1,5 +1,5 @@
 diff --git a/bsd/dev/a5xelte_scsc.c b/bsd/dev/a5xelte_scsc.c
-index cfba3b1..7484bd4 100644
+index 3af5dc2..cbdd94a 100644
 --- a/bsd/dev/a5xelte_scsc.c
 +++ b/bsd/dev/a5xelte_scsc.c
 @@ -122,6 +122,16 @@ struct a5scsc_softc {
@@ -104,7 +104,7 @@ index cfba3b1..7484bd4 100644
  	if (err != 0) {
  		return err;
  	}
-@@ -997,6 +1076,7 @@ int
+@@ -1012,6 +1091,7 @@ int
  a5scsc_transport_up(void)
  {
  	int err;
@@ -112,7 +112,7 @@ index cfba3b1..7484bd4 100644
  
  	if (a5scsc_transport_state == 2) {
  		return 1;
-@@ -1040,6 +1120,10 @@ a5scsc_transport_up(void)
+@@ -1055,6 +1135,10 @@ a5scsc_transport_up(void)
  	    a5scsc.intr_fromhost_r4, a5scsc.intr_fromhost_m4);
  
  	a5scsc_mbox_init(a5scsc.fw_entry, a5scsc.mxconf_ref);
@@ -123,7 +123,7 @@ index cfba3b1..7484bd4 100644
  	a5scsc_poll_start();
  
  	err = a5scsc_pmu_reset_release();
-@@ -1049,12 +1133,28 @@ a5scsc_transport_up(void)
+@@ -1065,12 +1149,28 @@ a5scsc_transport_up(void)
  		return 0;
  	}
  
