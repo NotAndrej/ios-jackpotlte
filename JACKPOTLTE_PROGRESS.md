@@ -5467,9 +5467,18 @@ touched `.c` files were compiled syntax-only with the real flags from the
 EXPORT_HDRS and the kernel SDK headers): `a5xelte_scsc.c`, `a5xelte_bt.c`,
 `a5xelte_wifi.c` all return 0 with `-Wall -Wextra`.
 
-**Not verified.**  No CI build and no phone.  The syntax check proves types and
-declarations, not linkage; a missing symbol or a `bsd/conf/files` omission still
-only shows in CI.  Nothing here is a boot claim.
+**Build verified.**  CI run `44349211961` on `42e0888` is green: the kernel
+builds (`out/kernel.development.a5xelte`, 16 654 560 bytes), both
+`a5xelte_scsc.o` and `a5xelte_bt.o` are produced, the "Fail on a stub kernel"
+and "no ARMv8.1 LSE instructions" steps pass, and the `conf/files` /
+`IOKitBSDInit.cpp` wiring links.  Two earlier runs are not evidence: `44344040357`
+failed on three implicit declarations of `ml_io_map`/`ml_io_map_wcomb` (the 0181
+rewrite had dropped the local `extern` 0138 needed — `arm/machine_routines.h`
+only declares them under `PEXPERT_KERNEL_PRIVATE`), and `44346151254` was
+cancelled before any step ran for macOS runner capacity.
+
+**Not verified.**  No phone.  A green build says nothing about the transport,
+the firmware handshake or the BT rings.  Nothing here is a boot claim.
 
 **What only a boot can say.**
 
