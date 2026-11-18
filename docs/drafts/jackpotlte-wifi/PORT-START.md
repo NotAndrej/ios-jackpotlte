@@ -443,10 +443,13 @@ Ordered follow-ups (each its own patch):
 
 ## Not verified
 
-- No CI build has been run on this branch, and nothing was linked.  The local
-  check is `clang -fsyntax-only` against the previous run's flags and headers;
-  a missing symbol or a build-system omission (e.g. `bsd/conf/files`) would
-  still only show up in CI.
+- The build is verified: CI `44349211961` on `42e0888` compiles and links the
+  whole kernel with `a5xelte_scsc.o` and `a5xelte_bt.o` in it
+  (`out/kernel.development.a5xelte`, 16 654 560 bytes), and `main` at `d86c9bb`
+  carries the four patches.  Two earlier runs are not evidence: `44344040357`
+  failed on implicit declarations of `ml_io_map`/`ml_io_map_wcomb` (0181 had
+  dropped the local `extern` 0138 added), and `44346151254` was cancelled with
+  zero steps for macOS runner capacity.
 - Nothing has been booted.  No claim is made that the transport, the firmware
   load, the BT service or the Apple80211 glue works.
 - The DT/register/IRQ values above are quoted from the donor vendor tree; they
