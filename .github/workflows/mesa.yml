@@ -10,14 +10,6 @@ name: mesa
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - "tools/mesa-jackpotlte/**"
-      # The drm face is staged from here, so a change to it has to build.
-      - "userspace/libjackpotlte/**"
-      - "xnu/patches/0154-*.patch"
-      - ".github/workflows/mesa.yml"
 
 concurrency:
   group: mesa-${{ github.ref }}

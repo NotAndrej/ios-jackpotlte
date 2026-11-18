@@ -14,14 +14,6 @@ name: userspace
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main, s8-dreamlte]
-    paths:
-      - "userspace/**"
-      # The ABI check reads these, so a change to them has to run it.
-      - "xnu/patches/015*.patch"
-      - "tools/jackpotlte/check-mali-abi.py"
-      - ".github/workflows/userspace.yml"
 
 concurrency:
   group: userspace-${{ github.ref }}

@@ -18,11 +18,6 @@ on:
       extra_cflags:
         description: Extra MACHINE_FLAGS (e.g. -DJACKPOTLTE=1 for the A8 donor build)
         default: ""
-  push:
-    branches: [main, s8-dreamlte]
-    paths:
-      - "xnu/patches/**"
-      - ".github/workflows/xnu.yml"
 
 concurrency:
   group: xnu-${{ github.ref }}
